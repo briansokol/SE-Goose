@@ -1,0 +1,18 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Claude
+.claude/*local*
+.claude/plans/
+
+# Visual Studio Code
+.vscode/
+
+# Serena
+.serena/
+
+# Research
+.research/
