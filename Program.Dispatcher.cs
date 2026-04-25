@@ -39,6 +39,7 @@ namespace IngameScript {
 
         IEnumerator<YieldReason> StepRoot() {
             while (true) {
+                ResetOneShotWarnings();
                 for (int i = 0; i < 6; i++) {
                     _stepIndex = i;
                     _subStep = 0;
