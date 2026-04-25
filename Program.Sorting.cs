@@ -20,6 +20,12 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
-        // ...
+        IEnumerator<YieldReason> StepFulfillStockQuotas() {
+            yield break;
+        }
+
+        IEnumerator<YieldReason> StepSortGenericCargo() {
+            yield break;
+        }
     }
 }

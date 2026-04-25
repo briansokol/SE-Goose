@@ -20,6 +20,8 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
-        // ...
+        IEnumerator<YieldReason> StepParseConfigIfDirty() {
+            yield break;
+        }
     }
 }

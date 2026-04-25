@@ -20,6 +20,12 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
-        // ...
+        IEnumerator<YieldReason> StepCategorizeContainers() {
+            yield break;
+        }
+
+        IEnumerator<YieldReason> StepScanInventories() {
+            yield break;
+        }
     }
 }
