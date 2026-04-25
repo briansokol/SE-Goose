@@ -24,6 +24,7 @@ namespace IngameScript {
         List<string> _warningOrder = new List<string>();
         Dictionary<string, int> _warnings = new Dictionary<string, int>();
         HashSet<string> _oneShotWarnedKeys = new HashSet<string>();
+        List<string> _oneShotWarnedMessages = new List<string>();
 
         void LogAction(string msg) {
             _actionLog.Enqueue(msg);
@@ -47,10 +48,22 @@ namespace IngameScript {
         }
 
         void LogWarningOnce(string key, string msg) {
-            if (_oneShotWarnedKeys.Add(key)) LogWarning(msg);
+            if (_oneShotWarnedKeys.Add(key)) {
+                _oneShotWarnedMessages.Add(msg);
+                LogWarning(msg);
+            }
         }
 
-        void ResetOneShotWarnings() { _oneShotWarnedKeys.Clear(); }
+        // Clears once-per-cycle warnings AND their messages from the warning list,
+        // so resolved conditions stop appearing once their LogWarningOnce call site no longer fires.
+        void ResetOneShotWarnings() {
+            for (int i = 0; i < _oneShotWarnedMessages.Count; i++) {
+                string msg = _oneShotWarnedMessages[i];
+                if (_warnings.Remove(msg)) _warningOrder.Remove(msg);
+            }
+            _oneShotWarnedMessages.Clear();
+            _oneShotWarnedKeys.Clear();
+        }
 
         void LogError(string context, Exception ex) {
             LogWarning("[" + context + "] " + ex.GetType().Name + ": " + ex.Message);

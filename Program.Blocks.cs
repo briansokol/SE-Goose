@@ -26,8 +26,8 @@ namespace IngameScript {
         }
 
         static readonly string[] CategoryTags = {
-            "[Ingots]", "[Ores]", "[Components]", "[Prototech]", "[Tools]", "[Weapons]",
-            "[Ammo]", "[Consumables]", "[Ingredients]", "[Meals]", "[Misc]"
+            "Ingots", "Ores", "Components", "Prototech", "Tools", "Weapons",
+            "Ammo", "Consumables", "Ingredients", "Meals", "Misc"
         };
 
         public class ContainerEntry {
