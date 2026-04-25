@@ -140,8 +140,90 @@ namespace IngameScript {
             }
         }
 
+        static readonly HashSet<string> PrototechSubtypes = new HashSet<string> {
+            "PrototechCapacitor", "PrototechCircuitry", "PrototechCoolingUnit",
+            "PrototechFrame", "PrototechMachinery", "PrototechPanel",
+            "PrototechPropulsionUnit", "PrototechScanner"
+        };
+
+        ItemCategory Classify(MyItemType type) {
+            string fullId = type.TypeId + "/" + type.SubtypeId;
+            ItemCategory ovr;
+            if (_categoryOverrides.TryGetValue(fullId, out ovr)) return ovr;
+
+            string typeId = type.TypeId;
+            string subId = type.SubtypeId ?? "";
+
+            if (typeId == "MyObjectBuilder_Ore") return ItemCategory.Ores;
+            if (typeId == "MyObjectBuilder_Ingot") return ItemCategory.Ingots;
+            if (typeId == "MyObjectBuilder_AmmoMagazine") return ItemCategory.Ammo;
+            if (typeId == "MyObjectBuilder_Datapad") return ItemCategory.Misc;
+
+            if (typeId == "MyObjectBuilder_Component") {
+                if (PrototechSubtypes.Contains(subId)) return ItemCategory.Prototech;
+                if (subId.StartsWith("Prototech", StringComparison.Ordinal)) return ItemCategory.Prototech;
+                return ItemCategory.Components;
+            }
+
+            if (typeId == "MyObjectBuilder_PhysicalGunObject") {
+                if (subId.IndexOf("Welder", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Tools;
+                if (subId.IndexOf("Grinder", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Tools;
+                if (subId.IndexOf("Drill", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Tools;
+                if (subId.IndexOf("HandDrill", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Tools;
+                if (subId.IndexOf("Pistol", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
+                if (subId.IndexOf("Rifle", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
+                if (subId.IndexOf("Launcher", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
+                if (subId.IndexOf("FireArm", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
+                if (subId.IndexOf("Goggles", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
+                return ItemCategory.Weapons;     // safer default; user can override
+            }
+
+            if (typeId == "MyObjectBuilder_OxygenContainerObject") return ItemCategory.Tools;
+            if (typeId == "MyObjectBuilder_GasContainerObject") return ItemCategory.Tools;
+
+            if (typeId == "MyObjectBuilder_ConsumableItem") {
+                if (subId.StartsWith("Ingredient_", StringComparison.OrdinalIgnoreCase)
+                    || subId.EndsWith("Ingredient", StringComparison.OrdinalIgnoreCase))
+                    return ItemCategory.Ingredients;
+                if (subId.StartsWith("Meal_", StringComparison.OrdinalIgnoreCase)
+                    || subId.EndsWith("Meal", StringComparison.OrdinalIgnoreCase))
+                    return ItemCategory.Meals;
+                return ItemCategory.Consumables;
+            }
+
+            if (typeId == "MyObjectBuilder_PhysicalObject") return ItemCategory.Misc;
+
+            LogWarningOnce("unkType:" + typeId, "[Goose] Unknown TypeId '" + typeId + "' classified as Misc");
+            return ItemCategory.Misc;
+        }
+
         IEnumerator<YieldReason> StepScanInventories() {
-            yield break;
+            _itemTotals.Clear();
+            int counter = 0;
+            for (int b = 0; b < _allInventoryBlocks.Count; b++) {
+                IMyTerminalBlock block = _allInventoryBlocks[b];
+                if (!ValidateBlock(block)) continue;
+                for (int invIdx = 0; invIdx < block.InventoryCount; invIdx++) {
+                    IMyInventory inv = block.GetInventory(invIdx);
+                    if (inv == null) continue;
+                    _itemBuffer.Clear();
+                    inv.GetItems(_itemBuffer);
+                    for (int i = 0; i < _itemBuffer.Count; i++) {
+                        MyInventoryItem item = _itemBuffer[i];
+                        long current;
+                        _itemTotals.TryGetValue(item.Type, out current);
+                        _itemTotals[item.Type] = current + (long)item.Amount;
+                        // Track subtype for stock-quota reverse lookup.
+                        if (!string.IsNullOrEmpty(item.Type.SubtypeId)
+                            && !_knownSubtypes.ContainsKey(item.Type.SubtypeId)) {
+                            _knownSubtypes[item.Type.SubtypeId] = item.Type;
+                        }
+                    }
+                }
+                counter++;
+                if (counter % 10 == 0) yield return YieldReason.ChunkBoundary;
+                if (BudgetExceeded()) yield return YieldReason.BudgetHit;
+            }
         }
     }
 }
