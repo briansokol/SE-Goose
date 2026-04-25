@@ -8,6 +8,19 @@ This is a **Space Engineers Programmable Block Script** for **inventory manageme
 
 The project uses the Malware Development Kit (MDK2) framework to develop, build, and deploy the script into Space Engineers.
 
+## Design Documentation
+
+Authoritative design documentation for this project lives in the GitHub wiki. **Consult these documents before making architectural or feature-level decisions.** They represent the intended design of the script and its features.
+
+Current design documents:
+
+- **Technical Architecture** — overall technical architecture of the script — https://github.com/briansokol/SE-Goose/wiki/Technical-Architecture-Design
+- **Inventory Sorter (Functional Design)** — functional design of the inventory sorting feature — https://github.com/briansokol/SE-Goose/wiki/Inventory-Sorter-%E2%80%90-Functional-Design
+
+This list will grow as additional features are planned; more documents will be added here over time.
+
+**Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
+
 ## Technology Stack
 
 - **Framework**: .NET Framework 4.8 (C# 6.0)
