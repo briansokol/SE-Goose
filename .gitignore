@@ -17,4 +17,7 @@
 # Research
 .research/
 
+# Specs
+.specs/
+
 .fake
