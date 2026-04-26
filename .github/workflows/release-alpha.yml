@@ -1,0 +1,53 @@
+name: Release alpha build
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Goose.csproj
+
+      - name: Build (Release)
+        run: dotnet build Goose.csproj -c Release --no-restore
+
+      - name: Compute UTC timestamp
+        id: ts
+        shell: pwsh
+        run: |
+          $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd_HH-mm-ss")
+          "stamp=$stamp"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=alpha-$stamp" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Locate built script.cs
+        id: script
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:APPDATA 'SpaceEngineers\IngameScripts\local\Goose\script.cs'
+          if (-not (Test-Path $src)) {
+            throw "Expected packaged script not found at: $src"
+          }
+          "path=$src" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ts.outputs.tag }}
+          name: ${{ steps.ts.outputs.tag }}
+          prerelease: true
+          files: ${{ steps.script.outputs.path }}
+          fail_on_unmatched_files: true
