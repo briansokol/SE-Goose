@@ -1,0 +1,11 @@
+# GitHub CODEOWNERS for SE-Goose
+#
+# Each line is a file pattern followed by one or more owners.
+# Owners are requested for review when someone opens a PR that
+# modifies matching files. Later patterns take precedence over
+# earlier ones, so put more specific rules at the bottom.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+*                       @briansokol

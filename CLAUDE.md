@@ -8,6 +8,19 @@ This is a **Space Engineers Programmable Block Script** for **inventory manageme
 
 The project uses the Malware Development Kit (MDK2) framework to develop, build, and deploy the script into Space Engineers.
 
+## Design Documentation
+
+Authoritative design documentation for this project lives in the GitHub wiki. **Consult these documents before making architectural or feature-level decisions.** They represent the intended design of the script and its features.
+
+Current design documents:
+
+- **Technical Architecture** — overall technical architecture of the script — https://github.com/briansokol/SE-Goose/wiki/Technical-Architecture-Design
+- **Inventory Sorter (Functional Design)** — functional design of the inventory sorting feature — https://github.com/briansokol/SE-Goose/wiki/Inventory-Sorter-%E2%80%90-Functional-Design
+
+This list will grow as additional features are planned; more documents will be added here over time.
+
+**Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
+
 ## Technology Stack
 
 - **Framework**: .NET Framework 4.8 (C# 6.0)
@@ -49,6 +62,27 @@ The project uses the Malware Development Kit (MDK2) framework to develop, build,
 2. **Clarify Before Acting**: If a user's request is ambiguous or lacks necessary details, ask clarifying questions before proceeding with implementation. It's better to understand the requirements fully than to make incorrect assumptions.
 
 3. **Present Options**: When multiple valid approaches exist (different algorithms, architectures, or trade-offs), present the options to the user with pros and cons, and let them choose the direction. Don't arbitrarily pick one approach when the ideal solution isn't clear.
+
+## Code Documentation
+
+**Always add C#/.NET-style XML documentation comments (docblocks) above every function, method, class, struct, enum, property, and class field.** Use the standard `/// <summary>`, `/// <param>`, and `/// <returns>` tags. Keep summaries concise — one short sentence is usually enough. Use `<param>` and `<returns>` only when they add information that isn't obvious from the parameter or return type.
+
+Example:
+
+```csharp
+/// <summary>Classifies an item into one of the configured categories.</summary>
+/// <param name="type">Item type to classify.</param>
+/// <returns>The matched category, or <c>Misc</c> if unrecognized.</returns>
+ItemCategory Classify(MyItemType type) { ... }
+```
+
+**Keep inline comments minimal.** Only add an inline comment when the _why_ is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, or behavior that would surprise a reader. Avoid comments that:
+
+- Describe _what_ the code does when the code is already self-explanatory.
+- Reference the version, change, or task that introduced a method (e.g., `// v1: ...`, `// NEW: shared helper introduced by the plan refactor`). That history belongs in the commit log, not the code.
+- Restate the docblock.
+
+If a comment would be useful as documentation rather than as a margin note, fold it into the XML docblock instead.
 
 ## Custom Data System
 
@@ -105,8 +139,8 @@ Configured in `mdk.ini`:
 
 Files matching these patterns are excluded from the packaged script:
 
-- `obj/**/*`
-- `MDK/**/*`
+- `Goose/obj/**/*`
+- `Goose/MDK/**/*`
 - `**/*.debug.cs`
 
 ## Communication

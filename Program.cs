@@ -1,4 +1,4 @@
-﻿using Sandbox.Game.EntityComponents;
+using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI.Ingame;
 using Sandbox.ModAPI.Interfaces;
 using SpaceEngineers.Game.ModAPI.Ingame;
@@ -18,55 +18,77 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 
-namespace IngameScript
-{
-    public partial class Program : MyGridProgram
-    {
-        // This file contains your actual script.
-        //
-        // You can either keep all your code here, or you can create separate
-        // code files to make your program easier to navigate while coding.
-        //
-        // Go to:
-        // https://github.com/malware-dev/MDK-SE/wiki/Quick-Introduction-to-Space-Engineers-Ingame-Scripts
-        //
-        // to learn more about ingame scripts.
+namespace IngameScript {
+    public partial class Program : MyGridProgram {
+        /// <summary>True while the script is paused via the <c>pause</c> command.</summary>
+        bool _paused;
 
-        public Program()
-        {
-            // The constructor, called only once every session and
-            // always before any other method is called. Use it to
-            // initialize your script. 
-            //     
-            // The constructor is optional and can be removed if not
-            // needed.
-            // 
-            // It's recommended to set Runtime.UpdateFrequency 
-            // here, which will allow your script to run itself without a 
-            // timer block.
+        /// <summary>Reusable parser for arguments passed to <see cref="Main"/>.</summary>
+        MyCommandLine _cmd = new MyCommandLine();
+
+        /// <summary>Map of command verb to handler, populated by <see cref="InitCommands"/>.</summary>
+        Dictionary<string, Action<MyCommandLine>> _commands;
+
+        /// <summary>Sets the update cadence, wires up commands, and primes the work iterator.</summary>
+        public Program() {
+            Runtime.UpdateFrequency = UpdateFrequency.Update10;
+            InitCommands();
+            _workIterator = StepRoot();
+            LogAction("Goose v1 initialized");
         }
 
-        public void Save()
-        {
-            // Called when the program needs to save its state. Use
-            // this method to save your state to the Storage field
-            // or some other means. 
-            // 
-            // This method is optional and can be removed if not
-            // needed.
+        /// <summary>Persists state across world saves. No learned state is currently kept.</summary>
+        public void Save() {
         }
 
-        public void Main(string argument, UpdateType updateSource)
-        {
-            // The main entry point of the script, invoked every time
-            // one of the programmable block's Run actions are invoked,
-            // or the script updates itself. The updateSource argument
-            // describes where the update came from. Be aware that the
-            // updateSource is a  bitfield  and might contain more than 
-            // one update type.
-            // 
-            // The method itself is required, but the arguments above
-            // can be removed if not needed.
+        /// <summary>Entry point invoked by the programmable block on every update tick.</summary>
+        /// <param name="argument">Optional command argument from a terminal action or trigger.</param>
+        /// <param name="updateSource">Flags describing why this tick fired.</param>
+        public void Main(string argument, UpdateType updateSource) {
+            try {
+                if (!string.IsNullOrEmpty(argument)) {
+                    DispatchCommand(argument);
+                }
+                if ((updateSource & UpdateType.Update10) != 0 && !_paused) {
+                    RunOneTick();
+                }
+            } catch (Exception ex) {
+                LogError("Main", ex);
+            }
+            RenderEchoStatus();
+        }
+
+        /// <summary>Builds the command verb dispatch table.</summary>
+        void InitCommands() {
+            _commands = new Dictionary<string, Action<MyCommandLine>>(StringComparer.OrdinalIgnoreCase) {
+                { "rescan", c => { _rescanRequested = true; _configDirty = true; LogAction("cmd: rescan"); } },
+                { "pause",  c => { _paused = true;  LogAction("cmd: pause"); } },
+                { "resume", c => { _paused = false; LogAction("cmd: resume"); } },
+                { "debug",  c => {
+                    if (c.ArgumentCount > 1) {
+                        bool on = string.Equals(c.Argument(1), "on", StringComparison.OrdinalIgnoreCase);
+                        _config.DebugLogging = on;
+                        LogAction("cmd: debug " + (on ? "on" : "off"));
+                    }
+                } }
+            };
+        }
+
+        /// <summary>Parses <paramref name="argument"/> and routes its verb to the matching handler.</summary>
+        /// <param name="argument">Raw argument string (e.g. <c>"debug on"</c>).</param>
+        void DispatchCommand(string argument) {
+            if (!_cmd.TryParse(argument)) {
+                LogWarning("Unparseable argument: " + argument);
+                return;
+            }
+            if (_cmd.ArgumentCount == 0) return;
+            string verb = _cmd.Argument(0);
+            Action<MyCommandLine> handler;
+            if (_commands.TryGetValue(verb, out handler)) {
+                handler(_cmd);
+            } else {
+                LogWarning("Unknown command: " + verb);
+            }
         }
     }
 }

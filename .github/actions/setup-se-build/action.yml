@@ -1,0 +1,89 @@
+name: Setup SE build environment
+description: >-
+  Installs the Space Engineers Dedicated Server (Steam app 298740) onto a
+  windows-latest runner via SteamCMD and writes a CI-only mdk.local.ini that
+  points the MDK2 SpaceEngineersFinder at the resulting DedicatedServer64
+  directory. Caches the SE install across runs.
+
+outputs:
+  binary-path:
+    description: Absolute path to the DedicatedServer64 directory.
+    value: ${{ steps.config.outputs.binary-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Space Engineers Dedicated Server
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/se
+        key: se-ds-298740-${{ runner.os }}-v1
+
+    - name: Setup SteamCMD
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: CyberAndrii/setup-steamcmd@v1.1.5
+
+    - name: Install Space Engineers Dedicated Server
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $installDir = Join-Path $env:GITHUB_WORKSPACE 'se'
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+
+        # SteamCMD occasionally exits non-zero on transient errors; retry with
+        # progressively simpler argument sets (mirrors malforge/mdk2-packages).
+        $attempts = @(
+          "+@sSteamCmdForcePlatformType windows +force_install_dir `"$installDir`" +login anonymous +app_update 298740 validate +quit",
+          "+force_install_dir `"$installDir`" +login anonymous +app_update 298740 validate +quit",
+          "+@NoPromptForPassword 1 +force_install_dir `"$installDir`" +login anonymous +app_update 298740 +quit"
+        )
+
+        $success = $false
+        foreach ($attempt in $attempts) {
+          Write-Host "Trying: steamcmd $attempt"
+          Invoke-Expression "steamcmd $attempt"
+          if ($LASTEXITCODE -eq 0) {
+            $success = $true
+            break
+          }
+          Write-Host "Attempt failed with exit code $LASTEXITCODE; retrying."
+          Start-Sleep -Seconds 5
+        }
+
+        if (-not $success) {
+          Write-Error 'All SteamCMD installation attempts failed'
+          exit 1
+        }
+
+    - name: Verify Space Engineers binaries and configure MDK2
+      id: config
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $sePath = Join-Path $env:GITHUB_WORKSPACE 'se'
+        $binPath = Join-Path $sePath 'DedicatedServer64'
+
+        if (-not (Test-Path $binPath)) {
+          $found = Get-ChildItem -Path $sePath -Recurse -Directory -Filter 'DedicatedServer64' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $found) {
+            Write-Error "Could not find DedicatedServer64 anywhere under $sePath"
+            exit 1
+          }
+          $binPath = $found.FullName
+        }
+
+        $dllCount = (Get-ChildItem -Path $binPath -Filter '*.dll' -ErrorAction SilentlyContinue | Measure-Object).Count
+        Write-Host "Found $dllCount DLLs at $binPath"
+        if ($dllCount -lt 10) {
+          Write-Error "SE installation appears incomplete ($dllCount DLLs)"
+          exit 1
+        }
+
+        $mdkLocal = Join-Path $env:GITHUB_WORKSPACE 'mdk.local.ini'
+        $content = "[mdk]`noutput=auto`nbinarypath=$binPath`ninteractive=ShowNotification`n"
+        Set-Content -Path $mdkLocal -Value $content -Encoding utf8
+        Write-Host "Wrote CI mdk.local.ini -> $mdkLocal"
+
+        "binary-path=$binPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
