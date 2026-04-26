@@ -20,35 +20,64 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
+        /// <summary>High-level item buckets used to route inventory between containers.</summary>
         public enum ItemCategory {
             Ingots, Ores, Components, Prototech, Tools, Weapons,
             Ammo, Consumables, Ingredients, Meals, Misc
         }
 
+        /// <summary>Bare tag tokens (no brackets) recognized in container names; index aligns with <see cref="ItemCategory"/>.</summary>
         static readonly string[] CategoryTags = {
             "Ingots", "Ores", "Components", "Prototech", "Tools", "Weapons",
             "Ammo", "Consumables", "Ingredients", "Meals", "Misc"
         };
 
+        /// <summary>Cached metadata for a single managed inventory block.</summary>
         public class ContainerEntry {
+            /// <summary>The terminal block this entry describes.</summary>
             public IMyTerminalBlock Block;
+
+            /// <summary>Primary (index 0) inventory of <see cref="Block"/>.</summary>
             public IMyInventory Inventory;
+
+            /// <summary>Routing priority; lower numbers win ties (default 100).</summary>
             public int Priority = 100;
+
+            /// <summary>Categories this container accepts, parsed from its name tags.</summary>
             public List<ItemCategory> Categories = new List<ItemCategory>();
+
+            /// <summary>True when the container is tagged <c>[Stock]</c>.</summary>
             public bool IsStock;
-            public Dictionary<MyItemType, StockQuota> Quotas;       // null unless IsStock
+
+            /// <summary>Per-item stock quotas parsed from CustomData; <c>null</c> unless <see cref="IsStock"/> is true.</summary>
+            public Dictionary<MyItemType, StockQuota> Quotas;
         }
 
+        /// <summary>Routing buckets keyed by category, sorted by ascending priority.</summary>
         Dictionary<ItemCategory, List<ContainerEntry>> _containersByCategory =
             new Dictionary<ItemCategory, List<ContainerEntry>>();
+
+        /// <summary>All <c>[Stock]</c>-tagged containers, sorted by ascending priority.</summary>
         List<ContainerEntry> _stockContainers = new List<ContainerEntry>();
+
+        /// <summary>Reverse lookup from a block to its cached <see cref="ContainerEntry"/>.</summary>
         Dictionary<IMyTerminalBlock, ContainerEntry> _entryByBlock =
             new Dictionary<IMyTerminalBlock, ContainerEntry>();
+
+        /// <summary>Manual classification overrides keyed by <c>TypeId/SubtypeId</c>.</summary>
         Dictionary<string, ItemCategory> _categoryOverrides = new Dictionary<string, ItemCategory>();
+
+        /// <summary>Subtype-to-<see cref="MyItemType"/> lookup populated as items are observed.</summary>
         Dictionary<string, MyItemType> _knownSubtypes = new Dictionary<string, MyItemType>();
+
+        /// <summary>Total quantity of each item type observed during the most recent scan.</summary>
         Dictionary<MyItemType, long> _itemTotals = new Dictionary<MyItemType, long>();
+
+        /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
         List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
 
+        /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
+        /// <returns>The parsed priority, or 100 when no tag is present.</returns>
         int ParsePriorityFromName(string name) {
             if (string.IsNullOrEmpty(name)) return 100;
             int idx = name.IndexOf("[P:", StringComparison.Ordinal);
@@ -61,10 +90,15 @@ namespace IngameScript {
             return 100;
         }
 
+        /// <summary>Returns true when <paramref name="name"/> contains <paramref name="tag"/> as a substring.</summary>
         bool NameHasTag(string name, string tag) {
             return !string.IsNullOrEmpty(name) && name.IndexOf(tag, StringComparison.Ordinal) >= 0;
         }
 
+        /// <summary>
+        /// Rebuilds <see cref="_containersByCategory"/>, <see cref="_stockContainers"/>, and
+        /// <see cref="_entryByBlock"/> from name tags and CustomData on every managed block.
+        /// </summary>
         IEnumerator<YieldReason> StepCategorizeContainers() {
             foreach (var kv in _containersByCategory) kv.Value.Clear();
             _stockContainers.Clear();
@@ -82,7 +116,6 @@ namespace IngameScript {
                     IsStock = NameHasTag(block.CustomName, "[Stock]")
                 };
 
-                // Category tags
                 for (int c = 0; c < CategoryTags.Length; c++) {
                     if (NameHasTag(block.CustomName, CategoryTags[c])) {
                         ItemCategory cat = (ItemCategory)c;
@@ -96,7 +129,6 @@ namespace IngameScript {
                     }
                 }
 
-                // Stock parsing
                 if (entry.IsStock) {
                     entry.Quotas = new Dictionary<MyItemType, StockQuota>();
                     ParseStockQuotas(block, entry);
@@ -110,13 +142,15 @@ namespace IngameScript {
                 if (BudgetExceeded()) yield return YieldReason.BudgetHit;
             }
 
-            // Sort each category bucket by priority ascending (lower = higher priority)
             foreach (var kv in _containersByCategory) {
                 kv.Value.Sort((a, b) => a.Priority.CompareTo(b.Priority));
             }
             _stockContainers.Sort((a, b) => a.Priority.CompareTo(b.Priority));
         }
 
+        /// <summary>Reads <c>[Goose]</c> CustomData entries on a stock container into <paramref name="entry"/>.Quotas.</summary>
+        /// <param name="block">The stock-tagged block whose CustomData to parse.</param>
+        /// <param name="entry">Container entry whose <see cref="ContainerEntry.Quotas"/> map is populated.</param>
         void ParseStockQuotas(IMyTerminalBlock block, ContainerEntry entry) {
             MyIniParseResult res;
             if (!_ini.TryParse(block.CustomData, out res)) {
@@ -133,19 +167,22 @@ namespace IngameScript {
                 if (TryReadStockQuota(key, raw, out type, out quota)) {
                     entry.Quotas[type] = quota;
                 } else {
-                    // Defer: item not yet seen, or malformed.
                     LogWarningOnce("stockq:" + block.EntityId + ":" + key,
                         "[Goose] Stock quota '" + key + "' on '" + block.CustomName + "' deferred (item unknown or malformed)");
                 }
             }
         }
 
+        /// <summary>Known component subtype IDs that route to <see cref="ItemCategory.Prototech"/>.</summary>
         static readonly HashSet<string> PrototechSubtypes = new HashSet<string> {
             "PrototechCapacitor", "PrototechCircuitry", "PrototechCoolingUnit",
             "PrototechFrame", "PrototechMachinery", "PrototechPanel",
             "PrototechPropulsionUnit", "PrototechScanner"
         };
 
+        /// <summary>Maps an item type to its routing category, honoring user overrides first.</summary>
+        /// <param name="type">Item type to classify.</param>
+        /// <returns>Best-fit category; falls back to <see cref="ItemCategory.Misc"/> for unknown TypeIds.</returns>
         ItemCategory Classify(MyItemType type) {
             string fullId = type.TypeId + "/" + type.SubtypeId;
             ItemCategory ovr;
@@ -175,7 +212,7 @@ namespace IngameScript {
                 if (subId.IndexOf("Launcher", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
                 if (subId.IndexOf("FireArm", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
                 if (subId.IndexOf("Goggles", StringComparison.OrdinalIgnoreCase) >= 0) return ItemCategory.Weapons;
-                return ItemCategory.Weapons;     // safer default; user can override
+                return ItemCategory.Weapons;
             }
 
             if (typeId == "MyObjectBuilder_OxygenContainerObject") return ItemCategory.Tools;
@@ -197,6 +234,10 @@ namespace IngameScript {
             return ItemCategory.Misc;
         }
 
+        /// <summary>
+        /// Walks every managed inventory and refreshes <see cref="_itemTotals"/> and
+        /// <see cref="_knownSubtypes"/>; the latter feeds stock-quota subtype resolution.
+        /// </summary>
         IEnumerator<YieldReason> StepScanInventories() {
             _itemTotals.Clear();
             int counter = 0;
@@ -213,7 +254,6 @@ namespace IngameScript {
                         long current;
                         _itemTotals.TryGetValue(item.Type, out current);
                         _itemTotals[item.Type] = current + (long)item.Amount;
-                        // Track subtype for stock-quota reverse lookup.
                         if (!string.IsNullOrEmpty(item.Type.SubtypeId)
                             && !_knownSubtypes.ContainsKey(item.Type.SubtypeId)) {
                             _knownSubtypes[item.Type.SubtypeId] = item.Type;

@@ -20,18 +20,28 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
+        /// <summary>Returns true when <paramref name="b"/>'s name carries the <c>[Stock]</c> tag.</summary>
         bool IsStockTagged(IMyTerminalBlock b) {
             return NameHasTag(b.CustomName, "[Stock]");
         }
 
+        /// <summary>
+        /// Resolves the inventory Goose may drain on a managed block. For production blocks
+        /// this is the output inventory; only finished goods are sorted, never the input feed.
+        /// </summary>
         IMyInventory GetSortableInventory(IMyTerminalBlock block) {
-            // For production blocks, only the OUTPUT is drainable in v1.
-            // GetInventory(1) is OutputInventory on refineries/assemblers.
             IMyProductionBlock prod = block as IMyProductionBlock;
             if (prod != null) return prod.OutputInventory;
             return block.GetInventory(0);
         }
 
+        /// <summary>Transfers up to <paramref name="maxTotal"/> units of <paramref name="type"/> from <paramref name="src"/> to <paramref name="dst"/>.</summary>
+        /// <param name="src">Source inventory.</param>
+        /// <param name="dst">Destination inventory.</param>
+        /// <param name="type">Item type to move.</param>
+        /// <param name="maxTotal">Upper bound on units moved across all matching item stacks.</param>
+        /// <param name="label">Tag emitted to the action log when debug logging is on.</param>
+        /// <returns>True when at least one unit was moved.</returns>
         bool MoveAllOfType(IMyInventory src, IMyInventory dst, MyItemType type, long maxTotal, string label) {
             if (src == null || dst == null) return false;
             if (src == dst) return false;
@@ -56,6 +66,7 @@ namespace IngameScript {
             return moved > 0;
         }
 
+        /// <summary>Returns the total quantity of <paramref name="type"/> currently held in <paramref name="inv"/>.</summary>
         long GetCurrentAmount(IMyInventory inv, MyItemType type) {
             _itemBuffer.Clear();
             inv.GetItems(_itemBuffer);
@@ -66,9 +77,12 @@ namespace IngameScript {
             return total;
         }
 
-        // NEW: shared helper introduced by the plan refactor.
-        // Returns the amount actually moved (>= 0). Measures dst delta so we don't
-        // trust MoveAllOfType's bool return — partial moves are common.
+        /// <summary>
+        /// Wrapper around <see cref="MoveAllOfType"/> that returns the actual delta on the destination.
+        /// Measuring the delta is necessary because partial transfers are common and the underlying
+        /// boolean return is not a reliable indicator of how much moved.
+        /// </summary>
+        /// <returns>The number of units actually transferred (zero or positive).</returns>
         long TryMove(IMyInventory src, IMyInventory dst, MyItemType type, long maxAmount, string label) {
             if (src == null || dst == null || src == dst || maxAmount <= 0) return 0;
             long before = GetCurrentAmount(dst, type);
@@ -77,6 +91,10 @@ namespace IngameScript {
             return after - before;
         }
 
+        /// <summary>
+        /// Walks every <c>[Stock]</c> container and reconciles each item's actual quantity
+        /// against its <see cref="StockQuota"/>, pulling in shortfalls and pushing out excess.
+        /// </summary>
         IEnumerator<YieldReason> StepFulfillStockQuotas() {
             for (int s = 0; s < _stockContainers.Count; s++) {
                 ContainerEntry dst = _stockContainers[s];
@@ -101,7 +119,8 @@ namespace IngameScript {
                             if (current > q.Amount) excess = current - q.Amount;
                             break;
                         case QuotaMode.All:
-                            need = long.MaxValue;        // capped by CanItemsBeAdded
+                            // Effectively uncapped; CanItemsBeAdded enforces the real ceiling.
+                            need = long.MaxValue;
                             break;
                     }
 
@@ -114,10 +133,14 @@ namespace IngameScript {
             }
         }
 
+        /// <summary>
+        /// Sources up to <paramref name="need"/> units of <paramref name="type"/> for <paramref name="dst"/>,
+        /// preferring other stock containers' excess, then category-routed containers, then
+        /// generic uncategorized inventories.
+        /// </summary>
         void PullItemFromSources(ContainerEntry dst, MyItemType type, long need) {
             long remaining = need;
 
-            // Layer 1: other stock containers' Limiter/Exact excess of same type
             for (int i = 0; i < _stockContainers.Count && remaining > 0; i++) {
                 ContainerEntry src = _stockContainers[i];
                 if (src == dst) continue;
@@ -132,7 +155,6 @@ namespace IngameScript {
                 if (BudgetExceeded()) return;
             }
 
-            // Layer 2: category-route containers (non-stock)
             ItemCategory cat = Classify(type);
             List<ContainerEntry> routes;
             if (remaining > 0 && _containersByCategory.TryGetValue(cat, out routes)) {
@@ -145,7 +167,6 @@ namespace IngameScript {
                 }
             }
 
-            // Layer 3: generic untagged inventories (production OUTPUTs included via GetSortableInventory)
             for (int b = 0; b < _allInventoryBlocks.Count && remaining > 0; b++) {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
                 if (block == dst.Block) continue;
@@ -153,7 +174,8 @@ namespace IngameScript {
                 ContainerEntry srcEntry;
                 if (_entryByBlock.TryGetValue(block, out srcEntry)) {
                     if (srcEntry.IsStock) continue;
-                    if (srcEntry.Categories.Count > 0) continue;     // already covered in layer 2
+                    // Already covered by the category-routes pass above.
+                    if (srcEntry.Categories.Count > 0) continue;
                 }
                 IMyInventory srcInv = GetSortableInventory(block);
                 if (srcInv == null) continue;
@@ -162,6 +184,10 @@ namespace IngameScript {
             }
         }
 
+        /// <summary>
+        /// Pushes <paramref name="excess"/> units out of <paramref name="src"/> into a category-routed
+        /// container; warns once per category when no route exists.
+        /// </summary>
         void PushExcessToCategory(ContainerEntry src, MyItemType type, long excess) {
             ItemCategory cat = Classify(type);
             List<ContainerEntry> routes;
@@ -179,6 +205,10 @@ namespace IngameScript {
             }
         }
 
+        /// <summary>
+        /// Routes items from non-stock inventories into the first category-tagged container
+        /// that can accept them; stock containers are handled by <see cref="StepFulfillStockQuotas"/>.
+        /// </summary>
         IEnumerator<YieldReason> StepSortGenericCargo() {
             int counter = 0;
             for (int b = 0; b < _allInventoryBlocks.Count; b++) {
@@ -203,7 +233,6 @@ namespace IngameScript {
                         LogWarningOnce("nocat:" + cat, "[Goose] No container tagged for category " + cat);
                         continue;
                     }
-                    // Already home? (block is a route for this category)
                     bool atHome = false;
                     if (srcEntry != null) {
                         for (int c = 0; c < srcEntry.Categories.Count; c++) {
@@ -212,18 +241,16 @@ namespace IngameScript {
                     }
                     if (atHome) continue;
 
-                    // Find first route with capacity, transfer.
                     for (int r = 0; r < routes.Count; r++) {
                         ContainerEntry dst = routes[r];
                         if (dst.Block == block) continue;
-                        if (dst.IsStock) continue;     // step 4 owns stock fulfillment
+                        if (dst.IsStock) continue;
                         if (!ValidateBlock(dst.Block) || dst.Inventory == null) continue;
                         if (!src.CanTransferItemTo(dst.Inventory, item.Type)) continue;
                         MyFixedPoint amount = item.Amount;
+                        // Skip when the route is full; SE has no direct "max addable" API, and
+                        // partial-fit retries are deferred until they prove necessary.
                         if (!dst.Inventory.CanItemsBeAdded(amount, item.Type)) {
-                            // Try partial: largest amount that fits.
-                            // Simplest approach: skip when full. SE doesn't expose a direct "max addable" API
-                            // without trial — implementer can iterate halving if needed; v1 just skips.
                             continue;
                         }
                         if (src.TransferItemTo(dst.Inventory, i, null, true, amount)) {

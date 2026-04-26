@@ -63,6 +63,27 @@ This list will grow as additional features are planned; more documents will be a
 
 3. **Present Options**: When multiple valid approaches exist (different algorithms, architectures, or trade-offs), present the options to the user with pros and cons, and let them choose the direction. Don't arbitrarily pick one approach when the ideal solution isn't clear.
 
+## Code Documentation
+
+**Always add C#/.NET-style XML documentation comments (docblocks) above every function, method, class, struct, enum, property, and class field.** Use the standard `/// <summary>`, `/// <param>`, and `/// <returns>` tags. Keep summaries concise — one short sentence is usually enough. Use `<param>` and `<returns>` only when they add information that isn't obvious from the parameter or return type.
+
+Example:
+
+```csharp
+/// <summary>Classifies an item into one of the configured categories.</summary>
+/// <param name="type">Item type to classify.</param>
+/// <returns>The matched category, or <c>Misc</c> if unrecognized.</returns>
+ItemCategory Classify(MyItemType type) { ... }
+```
+
+**Keep inline comments minimal.** Only add an inline comment when the _why_ is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, or behavior that would surprise a reader. Avoid comments that:
+
+- Describe _what_ the code does when the code is already self-explanatory.
+- Reference the version, change, or task that introduced a method (e.g., `// v1: ...`, `// NEW: shared helper introduced by the plan refactor`). That history belongs in the commit log, not the code.
+- Restate the docblock.
+
+If a comment would be useful as documentation rather than as a margin note, fold it into the XML docblock instead.
+
 ## Custom Data System
 
 Space Engineers blocks expose a per-block custom data string. Use it for configuration:
@@ -118,8 +139,8 @@ Configured in `mdk.ini`:
 
 Files matching these patterns are excluded from the packaged script:
 
-- `obj/**/*`
-- `MDK/**/*`
+- `Goose/obj/**/*`
+- `Goose/MDK/**/*`
 - `**/*.debug.cs`
 
 ## Communication

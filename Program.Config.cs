@@ -20,26 +20,58 @@ using VRageMath;
 
 namespace IngameScript {
     public partial class Program : MyGridProgram {
-        public enum QuotaMode { Exact, Minimum, Limiter, All }
+        /// <summary>How an item's <see cref="StockQuota.Amount"/> should be interpreted.</summary>
+        public enum QuotaMode {
+            /// <summary>Pull up to, and push excess above, the target amount.</summary>
+            Exact,
+            /// <summary>Pull up to the target amount; never push.</summary>
+            Minimum,
+            /// <summary>Push excess above the target amount; never pull.</summary>
+            Limiter,
+            /// <summary>Pull all available stock without an upper bound.</summary>
+            All
+        }
 
+        /// <summary>A single stock-quota rule parsed from a <c>[Stock]</c> container's CustomData.</summary>
         public class StockQuota {
+            /// <summary>Target item count (ignored when <see cref="Mode"/> is <see cref="QuotaMode.All"/>).</summary>
             public long Amount;
+
+            /// <summary>How <see cref="Amount"/> is enforced.</summary>
             public QuotaMode Mode;
         }
 
+        /// <summary>Tunable runtime configuration parsed from the PB's CustomData.</summary>
         public class GooseConfig {
+            /// <summary>Ticks between automatic rescans of managed blocks.</summary>
             public int RescanIntervalTicks = 600;
+
+            /// <summary>Fraction of the per-tick instruction budget the script may consume before yielding.</summary>
             public float BudgetFraction = 0.5f;
+
+            /// <summary>When true, every transfer is added to the action log.</summary>
             public bool DebugLogging = false;
+
+            /// <summary>Maximum number of recent actions retained for the Echo display.</summary>
             public int MaxActionLogEntries = 48;
+
+            /// <summary>Maximum number of distinct warnings retained before eviction.</summary>
             public int MaxWarningEntries = 32;
         }
 
+        /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
         MyIni _ini = new MyIni();
+
+        /// <summary>Active configuration; replaced on each successful parse.</summary>
         GooseConfig _config = new GooseConfig();
+
+        /// <summary>Set when configuration must be reparsed on the next config step.</summary>
         bool _configDirty = true;
+
+        /// <summary>CustomData string seen on the previous parse; used for change detection.</summary>
         string _lastSeenCustomData = null;
 
+        /// <summary>Reparses PB CustomData into <see cref="_config"/> when it has changed or a rescan was requested.</summary>
         IEnumerator<YieldReason> StepParseConfigIfDirty() {
             if (Me.CustomData != _lastSeenCustomData) _configDirty = true;
             if (!_configDirty) {
@@ -59,7 +91,6 @@ namespace IngameScript {
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
 
-            // Override.* keys (full ID -> category enum).
             _categoryOverrides.Clear();
             List<MyIniKey> keys = new List<MyIniKey>();
             _ini.GetKeys("Goose", keys);
@@ -79,6 +110,16 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
         }
 
+        /// <summary>
+        /// Resolves an <c>Override.&lt;subtype&gt; = &lt;value&gt;</c> entry into a typed quota.
+        /// Numeric values may end with <c>M</c> for <see cref="QuotaMode.Minimum"/> or
+        /// <c>L</c> for <see cref="QuotaMode.Limiter"/>; the literal <c>All</c> selects <see cref="QuotaMode.All"/>.
+        /// </summary>
+        /// <param name="key">Subtype id used to look up the matching <see cref="MyItemType"/>.</param>
+        /// <param name="raw">Raw value string from CustomData.</param>
+        /// <param name="type">Resolved item type.</param>
+        /// <param name="quota">Parsed quota; <c>null</c> on failure.</param>
+        /// <returns>True if both the type and the quota parse successfully.</returns>
         bool TryReadStockQuota(string key, string raw, out MyItemType type, out StockQuota quota) {
             type = default(MyItemType);
             quota = null;
