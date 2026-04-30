@@ -16,7 +16,7 @@ namespace IngameScript {
         int _catalogVersion;
 
         /// <summary>Strips the <c>MyObjectBuilder_</c> prefix from a TypeId, if present.</summary>
-        string Catalog_StripObjectBuilderPrefix(string typeId) {
+        internal static string Catalog_StripObjectBuilderPrefix(string typeId) {
             const string prefix = "MyObjectBuilder_";
             if (!string.IsNullOrEmpty(typeId) && typeId.StartsWith(prefix, StringComparison.Ordinal)) {
                 return typeId.Substring(prefix.Length);
@@ -25,7 +25,7 @@ namespace IngameScript {
         }
 
         /// <summary>Builds the un-prefixed <c>Type/Subtype</c> key used as the catalog dictionary key.</summary>
-        string Catalog_BuildKey(MyItemType type) {
+        internal static string Catalog_BuildKey(MyItemType type) {
             return Catalog_StripObjectBuilderPrefix(type.TypeId) + "/" + (type.SubtypeId ?? string.Empty);
         }
 
