@@ -10,6 +10,11 @@ namespace IngameScript {
         /// (e.g. <c>Component/SteelPlate</c>). Persisted to PB Storage between recompiles.</summary>
         Dictionary<string, MyItemType> _knownItems = new Dictionary<string, MyItemType>();
 
+        /// <summary>Monotonic counter bumped whenever a new key is added to <see cref="_knownItems"/>.
+        /// Consumers (e.g. stock-template renderer) compare against a stored snapshot to skip work
+        /// when the catalog hasn't changed.</summary>
+        int _catalogVersion;
+
         /// <summary>Strips the <c>MyObjectBuilder_</c> prefix from a TypeId, if present.</summary>
         string Catalog_StripObjectBuilderPrefix(string typeId) {
             const string prefix = "MyObjectBuilder_";
@@ -31,6 +36,7 @@ namespace IngameScript {
             string key = Catalog_BuildKey(type);
             if (!_knownItems.ContainsKey(key)) {
                 _knownItems[key] = type;
+                _catalogVersion++;
             }
         }
 
@@ -54,6 +60,7 @@ namespace IngameScript {
                 }
                 if (!_knownItems.ContainsKey(line)) {
                     _knownItems[line] = type;
+                    _catalogVersion++;
                 }
             }
         }

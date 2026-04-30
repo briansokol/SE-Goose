@@ -67,6 +67,11 @@ namespace IngameScript {
         /// <summary>Manual classification overrides keyed by <c>TypeId/SubtypeId</c>.</summary>
         Dictionary<string, ItemCategory> _categoryOverrides = new Dictionary<string, ItemCategory>();
 
+        /// <summary>Last <see cref="_catalogVersion"/> at which each stock container's CustomData
+        /// template was rendered. Survives <see cref="StepCategorizeContainers"/> rebuilds so we
+        /// only re-render when the catalog has actually grown since the previous render.</summary>
+        Dictionary<IMyTerminalBlock, int> _stockTemplateVersion = new Dictionary<IMyTerminalBlock, int>();
+
         /// <summary>Total quantity of each item type observed during the most recent scan.</summary>
         Dictionary<MyItemType, long> _itemTotals = new Dictionary<MyItemType, long>();
 
@@ -127,10 +132,16 @@ namespace IngameScript {
                 }
 
                 if (entry.IsStock) {
-                    SyncStockTemplate(block);
+                    int lastRenderedVersion;
+                    if (!_stockTemplateVersion.TryGetValue(block, out lastRenderedVersion) || lastRenderedVersion != _catalogVersion) {
+                        SyncStockTemplate(block);
+                        _stockTemplateVersion[block] = _catalogVersion;
+                    }
                     entry.Quotas = new Dictionary<MyItemType, StockQuota>();
                     ParseStockQuotas(block, entry);
                     _stockContainers.Add(entry);
+                } else {
+                    _stockTemplateVersion.Remove(block);
                 }
 
                 _entryByBlock[block] = entry;
@@ -177,7 +188,7 @@ namespace IngameScript {
         void SyncStockTemplate(IMyTerminalBlock block) {
             string current = block.CustomData ?? string.Empty;
 
-            List<string> userQuotas = new List<string>();
+            Dictionary<string, string> activeQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
             string[] lines = current.Split('\n');
             bool inGooseSection = false;
             for (int i = 0; i < lines.Length; i++) {
@@ -195,36 +206,48 @@ namespace IngameScript {
                 string val = trimmed.Substring(eq + 1).Trim();
                 if (key.Length == 0 || val.Length == 0) continue;
                 if (!IsValidQuotaKey(key)) continue;
-                userQuotas.Add(key + "=" + val);
+                activeQuotas[key] = key + "=" + val;
             }
 
             StringBuilder sb = new StringBuilder();
             sb.Append("[Goose]\n");
-            sb.Append("; Stock container quotas. Format: <Type>/<Subtype>=<value>\n");
-            sb.Append(";   Suffixes: M=minimum (pull-only), L=limiter (push-only), no suffix=exact (pull/push), All=uncapped pull\n");
-            sb.Append("; Examples:\n");
-            sb.Append(";   Component/SteelPlate=100\n");
-            sb.Append(";   Ingot/Iron=500M\n");
-            sb.Append(";   Ore/Stone=1000L\n");
-            sb.Append(";   Component/Construction=All\n");
+            sb.Append(";Stock container quotas.\n");
+            sb.Append(";Uncomment a line to enable management of an item (remove the ; at the start of the line)\n");
+            sb.Append(";Format: <Type>/<Subtype>=<value>\n");
+            sb.Append(";Suffixes:\n");
+            sb.Append(";  M=minimum (pull-only)\n");
+            sb.Append(";  L=limiter (push-only)\n");
+            sb.Append(";  no suffix=exact (pull/push)\n");
+            sb.Append(";  All=uncapped pull\n\n");
+            sb.Append(";Examples:\n");
+            sb.Append(";  Component/SteelPlate=100\n");
+            sb.Append(";  Ingot/Iron=500M\n");
+            sb.Append(";  Ore/Stone=1000L\n");
+            sb.Append(";  Component/Construction=All\n");
 
-            if (userQuotas.Count > 0) {
-                sb.Append("\n");
-                for (int i = 0; i < userQuotas.Count; i++) {
-                    sb.Append(userQuotas[i]);
-                    sb.Append("\n");
-                }
+            sb.Append("\n; --- Manage Items Below ---\n");
+
+            HashSet<string> mergedKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string k in _knownItems.Keys) {
+                mergedKeys.Add(k);
             }
-
-            sb.Append("\n; --- Observed items ---\n");
-
-            if (_knownItems.Count > 0) {
-                List<string> sortedKeys = new List<string>(_knownItems.Keys);
+            foreach (string k in activeQuotas.Keys) {
+                mergedKeys.Add(k);
+            }
+            if (mergedKeys.Count > 0) {
+                List<string> sortedKeys = new List<string>(mergedKeys);
                 sortedKeys.Sort(StringComparer.Ordinal);
                 for (int i = 0; i < sortedKeys.Count; i++) {
-                    sb.Append("; ");
-                    sb.Append(sortedKeys[i]);
-                    sb.Append("=100\n");
+                    string mergedKey = sortedKeys[i];
+                    string activeLine;
+                    if (activeQuotas.TryGetValue(mergedKey, out activeLine)) {
+                        sb.Append(activeLine);
+                        sb.Append("\n");
+                    } else {
+                        sb.Append("; ");
+                        sb.Append(mergedKey);
+                        sb.Append("=0\n");
+                    }
                 }
             }
 
