@@ -80,7 +80,7 @@ namespace IngameScript {
 
         /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
         /// <returns>The parsed priority, or 100 when no tag is present.</returns>
-        int ParsePriorityFromName(string name) {
+        internal static int ParsePriorityFromName(string name) {
             if (string.IsNullOrEmpty(name)) return 100;
             int idx = name.IndexOf("[P:", StringComparison.Ordinal);
             if (idx < 0) return 100;
@@ -268,7 +268,7 @@ namespace IngameScript {
         }
 
         /// <summary>Returns true when <paramref name="s"/> is a non-empty C-style identifier.</summary>
-        bool IsIdentifier(string s) {
+        internal static bool IsIdentifier(string s) {
             if (string.IsNullOrEmpty(s)) return false;
             char c = s[0];
             if (!(char.IsLetter(c) || c == '_')) return false;
@@ -289,14 +289,27 @@ namespace IngameScript {
         /// <summary>Maps an item type to its routing category, honoring user overrides first.</summary>
         /// <param name="type">Item type to classify.</param>
         /// <returns>Best-fit category; falls back to <see cref="ItemCategory.Misc"/> for unknown TypeIds.</returns>
-        ItemCategory Classify(MyItemType type) {
-            string fullId = type.TypeId + "/" + type.SubtypeId;
+        internal ItemCategory Classify(MyItemType type) {
+            string typeId = type.TypeId;
+            string subId = type.SubtypeId ?? "";
+            string fullId = typeId + "/" + subId;
             ItemCategory ovr;
             if (_categoryOverrides.TryGetValue(fullId, out ovr)) return ovr;
 
-            string typeId = type.TypeId;
-            string subId = type.SubtypeId ?? "";
+            ItemCategory result = ClassifyByTypeId(typeId, subId);
+            if (result == ItemCategory.Misc
+                && typeId != "MyObjectBuilder_Datapad"
+                && typeId != "MyObjectBuilder_PhysicalObject") {
+                LogWarningOnce("unkType:" + typeId, "[Goose] Unknown TypeId '" + typeId + "' classified as Misc");
+            }
+            return result;
+        }
 
+        /// <summary>Pure rule-table lookup for an item's routing category, ignoring user overrides.</summary>
+        /// <param name="typeId">Item TypeId (e.g., <c>MyObjectBuilder_Ore</c>).</param>
+        /// <param name="subId">Item SubtypeId (may be empty but not null).</param>
+        /// <returns>Category derived from the built-in rules; <see cref="ItemCategory.Misc"/> for unknown TypeIds.</returns>
+        internal static ItemCategory ClassifyByTypeId(string typeId, string subId) {
             if (typeId == "MyObjectBuilder_Ore") return ItemCategory.Ores;
             if (typeId == "MyObjectBuilder_Ingot") return ItemCategory.Ingots;
             if (typeId == "MyObjectBuilder_AmmoMagazine") return ItemCategory.Ammo;
@@ -336,7 +349,6 @@ namespace IngameScript {
 
             if (typeId == "MyObjectBuilder_PhysicalObject") return ItemCategory.Misc;
 
-            LogWarningOnce("unkType:" + typeId, "[Goose] Unknown TypeId '" + typeId + "' classified as Misc");
             return ItemCategory.Misc;
         }
 
