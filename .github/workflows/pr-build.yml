@@ -20,7 +20,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore Goose.csproj
+        run: dotnet restore Goose/Goose.csproj
 
       - name: Build (Release)
-        run: dotnet build Goose.csproj -c Release --no-restore
+        run: dotnet build Goose/Goose.csproj -c Release --no-restore

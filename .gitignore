@@ -4,6 +4,9 @@
 [Ll]og/
 [Ll]ogs/
 
+# MDK2 local overrides (machine-specific)
+mdk.local.ini
+
 # Claude
 .claude/*local*
 .claude/plans/
