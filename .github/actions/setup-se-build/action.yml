@@ -81,7 +81,7 @@ runs:
           exit 1
         }
 
-        $mdkLocal = Join-Path $env:GITHUB_WORKSPACE 'mdk.local.ini'
+        $mdkLocal = Join-Path $env:GITHUB_WORKSPACE 'Goose\mdk.local.ini'
         $content = "[mdk]`noutput=auto`nbinarypath=$binPath`ninteractive=ShowNotification`n"
         Set-Content -Path $mdkLocal -Value $content -Encoding utf8
         Write-Host "Wrote CI mdk.local.ini -> $mdkLocal"
