@@ -3,6 +3,7 @@
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+[Tt]est[Rr]esults/
 
 # MDK2 local overrides (machine-specific)
 mdk.local.ini
