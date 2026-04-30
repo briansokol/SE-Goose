@@ -20,7 +20,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore Goose/Goose.csproj
+        run: dotnet restore SE-Goose.sln
 
       - name: Build (Release)
-        run: dotnet build Goose/Goose.csproj -c Release --no-restore
+        run: dotnet build SE-Goose.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Goose.Tests/Goose.Tests.csproj -c Release --no-build --verbosity normal --logger "console;verbosity=detailed"
