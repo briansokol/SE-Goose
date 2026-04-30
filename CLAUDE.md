@@ -143,6 +143,51 @@ Files matching these patterns are excluded from the packaged script:
 - `Goose/MDK/**/*`
 - `**/*.debug.cs`
 
+## Git Commits
+
+**All commits must use the [Conventional Commits](https://www.conventionalcommits.org/) format:**
+
+```
+<type>[optional scope]: <short description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:**
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation changes only |
+| `style` | Formatting, whitespace — no logic change |
+| `refactor` | Code restructuring without behavior change |
+| `test` | Adding or updating tests |
+| `chore` | Build process, tooling, config, dependencies |
+| `perf` | Performance improvements |
+
+**Examples:**
+
+```
+feat(sorting): add category-based item priority sorting
+
+fix(discovery): handle null inventory on newly placed blocks
+
+docs: update wiki links in CLAUDE.md
+
+refactor(dispatcher): extract shared block-scan helper method
+
+chore: update MDK2 to latest version
+```
+
+**Rules:**
+- Use lowercase for type and description.
+- Keep the subject line under 72 characters.
+- Use an imperative, present-tense verb ("add", "fix", "update" — not "added", "fixes").
+- Add a body when the "why" needs explanation; leave it out when the subject line is sufficient.
+
 ## Communication
 
 - Be clear about what you're doing and why.
