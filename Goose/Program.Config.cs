@@ -120,11 +120,35 @@ namespace IngameScript {
         /// <param name="type">Resolved item type.</param>
         /// <param name="quota">Parsed quota; <c>null</c> on failure.</param>
         /// <returns>True if both the type and the quota parse successfully.</returns>
+        /// <summary>Parses a fully-qualified <c>Type/Subtype=value</c> entry into a quota.</summary>
+        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c> or <c>MyObjectBuilder_Ingot/Iron</c>).</param>
+        /// <param name="raw">Raw value (e.g. <c>100</c>, <c>500M</c>, <c>250L</c>, or <c>All</c>).</param>
+        /// <param name="type">Resolved <see cref="MyItemType"/>.</param>
+        /// <param name="quota">Resolved quota when parsing succeeds.</param>
+        /// <returns><c>true</c> when both key and value parse cleanly; <c>false</c> otherwise.</returns>
         bool TryReadStockQuota(string key, string raw, out MyItemType type, out StockQuota quota) {
             type = default(MyItemType);
             quota = null;
-            if (string.IsNullOrEmpty(raw)) return false;
-            if (!_knownSubtypes.TryGetValue(key, out type)) return false;
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(raw)) return false;
+
+            int slash = key.IndexOf('/');
+            if (slash <= 0 || slash >= key.Length - 1) {
+                LogWarningOnce("stockq:legacy:" + key,
+                    "[Goose] Stock quota key '" + key + "' must be fully qualified as Type/Subtype (e.g. Component/SteelPlate). Skipped.");
+                return false;
+            }
+
+            string typeHalf = key.Substring(0, slash);
+            string fullyQualified = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
+                ? key
+                : "MyObjectBuilder_" + key;
+            try {
+                type = MyItemType.Parse(fullyQualified);
+            } catch (Exception ex) {
+                LogWarningOnce("stockq:parse:" + key,
+                    "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type: " + ex.Message);
+                return false;
+            }
 
             if (raw.Equals("All", StringComparison.OrdinalIgnoreCase)) {
                 quota = new StockQuota { Amount = 0, Mode = QuotaMode.All };

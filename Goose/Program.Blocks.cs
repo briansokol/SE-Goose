@@ -67,9 +67,6 @@ namespace IngameScript {
         /// <summary>Manual classification overrides keyed by <c>TypeId/SubtypeId</c>.</summary>
         Dictionary<string, ItemCategory> _categoryOverrides = new Dictionary<string, ItemCategory>();
 
-        /// <summary>Subtype-to-<see cref="MyItemType"/> lookup populated as items are observed.</summary>
-        Dictionary<string, MyItemType> _knownSubtypes = new Dictionary<string, MyItemType>();
-
         /// <summary>Total quantity of each item type observed during the most recent scan.</summary>
         Dictionary<MyItemType, long> _itemTotals = new Dictionary<MyItemType, long>();
 
@@ -130,6 +127,7 @@ namespace IngameScript {
                 }
 
                 if (entry.IsStock) {
+                    SyncStockTemplate(block);
                     entry.Quotas = new Dictionary<MyItemType, StockQuota>();
                     ParseStockQuotas(block, entry);
                     _stockContainers.Add(entry);
@@ -148,9 +146,10 @@ namespace IngameScript {
             _stockContainers.Sort((a, b) => a.Priority.CompareTo(b.Priority));
         }
 
-        /// <summary>Reads <c>[Goose]</c> CustomData entries on a stock container into <paramref name="entry"/>.Quotas.</summary>
-        /// <param name="block">The stock-tagged block whose CustomData to parse.</param>
-        /// <param name="entry">Container entry whose <see cref="ContainerEntry.Quotas"/> map is populated.</param>
+        /// <summary>Reads <c>[Goose]</c> CustomData entries on a stock container and populates
+        /// <see cref="ContainerEntry.Quotas"/> with the parsed quotas.</summary>
+        /// <param name="block">Stock-tagged terminal block whose CustomData holds the quotas.</param>
+        /// <param name="entry">Owning entry to receive the parsed quota dictionary.</param>
         void ParseStockQuotas(IMyTerminalBlock block, ContainerEntry entry) {
             MyIniParseResult res;
             if (!_ini.TryParse(block.CustomData, out res)) {
@@ -166,11 +165,95 @@ namespace IngameScript {
                 StockQuota quota;
                 if (TryReadStockQuota(key, raw, out type, out quota)) {
                     entry.Quotas[type] = quota;
-                } else {
-                    LogWarningOnce("stockq:" + block.EntityId + ":" + key,
-                        "[Goose] Stock quota '" + key + "' on '" + block.CustomName + "' deferred (item unknown or malformed)");
                 }
             }
+        }
+
+
+        /// <summary>Refreshes the canonical Goose CustomData document on a stock container,
+        /// preserving user-active quota lines and merging the live observed-item catalog.
+        /// Writes only when the rendered document differs from the current CustomData.</summary>
+        /// <param name="block">Stock-tagged terminal block whose CustomData to sync.</param>
+        void SyncStockTemplate(IMyTerminalBlock block) {
+            string current = block.CustomData ?? string.Empty;
+
+            List<string> userQuotas = new List<string>();
+            string[] lines = current.Split('\n');
+            bool inGooseSection = false;
+            for (int i = 0; i < lines.Length; i++) {
+                string trimmed = lines[i].TrimEnd('\r').Trim();
+                if (trimmed.Length == 0) continue;
+                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal)) {
+                    inGooseSection = trimmed.Equals("[Goose]", StringComparison.Ordinal);
+                    continue;
+                }
+                if (!inGooseSection) continue;
+                if (trimmed.StartsWith(";", StringComparison.Ordinal)) continue;
+                int eq = trimmed.IndexOf('=');
+                if (eq <= 0) continue;
+                string key = trimmed.Substring(0, eq).Trim();
+                string val = trimmed.Substring(eq + 1).Trim();
+                if (key.Length == 0 || val.Length == 0) continue;
+                if (!IsValidQuotaKey(key)) continue;
+                userQuotas.Add(key + "=" + val);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("[Goose]\n");
+            sb.Append("; Stock container quotas. Format: <Type>/<Subtype>=<value>\n");
+            sb.Append(";   Suffixes: M=minimum (pull-only), L=limiter (push-only), no suffix=exact (pull/push), All=uncapped pull\n");
+            sb.Append("; Examples:\n");
+            sb.Append(";   Component/SteelPlate=100\n");
+            sb.Append(";   Ingot/Iron=500M\n");
+            sb.Append(";   Ore/Stone=1000L\n");
+            sb.Append(";   Component/Construction=All\n");
+
+            if (userQuotas.Count > 0) {
+                sb.Append("\n");
+                for (int i = 0; i < userQuotas.Count; i++) {
+                    sb.Append(userQuotas[i]);
+                    sb.Append("\n");
+                }
+            }
+
+            sb.Append("\n; --- Observed items ---\n");
+
+            if (_knownItems.Count > 0) {
+                List<string> sortedKeys = new List<string>(_knownItems.Keys);
+                sortedKeys.Sort(StringComparer.Ordinal);
+                for (int i = 0; i < sortedKeys.Count; i++) {
+                    sb.Append("; ");
+                    sb.Append(sortedKeys[i]);
+                    sb.Append("=100\n");
+                }
+            }
+
+            string desired = sb.ToString();
+            if (!string.Equals(current, desired, StringComparison.Ordinal)) {
+                block.CustomData = desired;
+            }
+        }
+
+        /// <summary>Returns true when <paramref name="key"/> matches the
+        /// <c>[MyObjectBuilder_]Type/Subtype</c> shape used by stock quota entries.</summary>
+        bool IsValidQuotaKey(string key) {
+            int slash = key.IndexOf('/');
+            if (slash <= 0 || slash >= key.Length - 1) return false;
+            string typeHalf = key.Substring(0, slash);
+            string subHalf = key.Substring(slash + 1);
+            return IsIdentifier(typeHalf) && IsIdentifier(subHalf);
+        }
+
+        /// <summary>Returns true when <paramref name="s"/> is a non-empty C-style identifier.</summary>
+        bool IsIdentifier(string s) {
+            if (string.IsNullOrEmpty(s)) return false;
+            char c = s[0];
+            if (!(char.IsLetter(c) || c == '_')) return false;
+            for (int i = 1; i < s.Length; i++) {
+                c = s[i];
+                if (!(char.IsLetterOrDigit(c) || c == '_')) return false;
+            }
+            return true;
         }
 
         /// <summary>Known component subtype IDs that route to <see cref="ItemCategory.Prototech"/>.</summary>
@@ -235,8 +318,8 @@ namespace IngameScript {
         }
 
         /// <summary>
-        /// Walks every managed inventory and refreshes <see cref="_itemTotals"/> and
-        /// <see cref="_knownSubtypes"/>; the latter feeds stock-quota subtype resolution.
+        /// Walks every managed inventory and refreshes <see cref="_itemTotals"/> and the
+        /// observed-item catalog (via <see cref="Catalog_RecordItem"/>) used by stock templating.
         /// </summary>
         IEnumerator<YieldReason> StepScanInventories() {
             _itemTotals.Clear();
@@ -254,10 +337,7 @@ namespace IngameScript {
                         long current;
                         _itemTotals.TryGetValue(item.Type, out current);
                         _itemTotals[item.Type] = current + (long)item.Amount;
-                        if (!string.IsNullOrEmpty(item.Type.SubtypeId)
-                            && !_knownSubtypes.ContainsKey(item.Type.SubtypeId)) {
-                            _knownSubtypes[item.Type.SubtypeId] = item.Type;
-                        }
+                        Catalog_RecordItem(item.Type);
                     }
                 }
                 counter++;

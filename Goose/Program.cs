@@ -31,14 +31,16 @@ namespace IngameScript {
 
         /// <summary>Sets the update cadence, wires up commands, and primes the work iterator.</summary>
         public Program() {
+            Catalog_LoadFromStorage();
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             InitCommands();
             _workIterator = StepRoot();
             LogAction("Goose v1 initialized");
         }
 
-        /// <summary>Persists state across world saves. No learned state is currently kept.</summary>
+        /// <summary>Persists the observed-item catalog so quota templates survive recompile.</summary>
         public void Save() {
+            Storage = Catalog_BuildStorageBlob();
         }
 
         /// <summary>Entry point invoked by the programmable block on every update tick.</summary>

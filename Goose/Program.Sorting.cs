@@ -127,6 +127,20 @@ namespace IngameScript {
                     if (need > 0) PullItemFromSources(dst, type, need);
                     if (excess > 0) PushExcessToCategory(dst, type, excess);
 
+                    if (q.Mode == QuotaMode.Exact || q.Mode == QuotaMode.Minimum) {
+                        long after = GetCurrentAmount(dst.Inventory, type);
+                        if (after < q.Amount) {
+                            string typeShort = type.TypeId != null
+                                ? type.TypeId.Replace("MyObjectBuilder_", "")
+                                : "";
+                            LogWarningOnce(
+                                "quota:" + dst.Block.EntityId + ":" + typeShort + "/" + type.SubtypeId,
+                                "[Goose] " + dst.Block.CustomName + " short on "
+                                    + typeShort + "/" + type.SubtypeId
+                                    + " (" + after + "/" + q.Amount + ")");
+                        }
+                    }
+
                     if (BudgetExceeded()) yield return YieldReason.BudgetHit;
                 }
                 yield return YieldReason.ChunkBoundary;
@@ -151,6 +165,7 @@ namespace IngameScript {
                 if (srcQ.Mode != QuotaMode.Limiter && srcQ.Mode != QuotaMode.Exact) continue;
                 long srcExcess = GetCurrentAmount(src.Inventory, type) - srcQ.Amount;
                 if (srcExcess <= 0) continue;
+                if (!src.Inventory.CanTransferItemTo(dst.Inventory, type)) continue;
                 remaining -= TryMove(src.Inventory, dst.Inventory, type, Math.Min(srcExcess, remaining), "stock<-stock");
                 if (BudgetExceeded()) return;
             }
@@ -162,6 +177,7 @@ namespace IngameScript {
                     ContainerEntry src = routes[i];
                     if (src == dst || src.IsStock) continue;
                     if (!ValidateBlock(src.Block) || src.Inventory == null) continue;
+                    if (!src.Inventory.CanTransferItemTo(dst.Inventory, type)) continue;
                     remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock<-cat");
                     if (BudgetExceeded()) return;
                 }
@@ -179,6 +195,7 @@ namespace IngameScript {
                 }
                 IMyInventory srcInv = GetSortableInventory(block);
                 if (srcInv == null) continue;
+                if (!srcInv.CanTransferItemTo(dst.Inventory, type)) continue;
                 remaining -= TryMove(srcInv, dst.Inventory, type, remaining, "stock<-gen");
                 if (BudgetExceeded()) return;
             }
@@ -200,6 +217,7 @@ namespace IngameScript {
                 ContainerEntry dst = routes[i];
                 if (dst == src || dst.IsStock) continue;
                 if (!ValidateBlock(dst.Block) || dst.Inventory == null) continue;
+                if (!src.Inventory.CanTransferItemTo(dst.Inventory, type)) continue;
                 remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock->cat");
                 if (BudgetExceeded()) return;
             }
