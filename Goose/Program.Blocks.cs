@@ -168,40 +168,45 @@ namespace IngameScript {
         }
 
         /// <summary>Parses a single bracketed token shaped like <c>Type/Subtype:Value</c> into
-        /// a typed quota. Whitespace around the colon and inside the token is tolerated.
-        /// Pure helper: no logging, no exceptions escape.</summary>
+        /// its constituent shape strings and quota value. Whitespace around the colon and
+        /// inside the token is tolerated. Pure helper: no logging, no
+        /// <see cref="MyItemType.Parse"/> calls, no exceptions escape.</summary>
         /// <param name="token">Token contents without the surrounding brackets.</param>
-        /// <param name="type">Resolved item type when parsing succeeds.</param>
-        /// <param name="quota">Resolved quota when parsing succeeds.</param>
-        /// <returns><c>true</c> when both the key and value parse cleanly.</returns>
-        internal static bool TryParseNameTagQuota(string token, out MyItemType type, out StockQuota quota) {
-            type = default(MyItemType);
-            quota = null;
+        /// <param name="typeIdWithPrefix">Resolved type id (with <c>MyObjectBuilder_</c> prefix) on success.</param>
+        /// <param name="subtypeId">Resolved subtype on success.</param>
+        /// <param name="amount">Parsed amount (0 when <paramref name="mode"/> is <see cref="QuotaMode.All"/>).</param>
+        /// <param name="mode">Parsed quota mode.</param>
+        /// <returns><c>true</c> when the token is a syntactically valid quota override.</returns>
+        internal static bool TryParseNameTagQuotaShape(string token, out string typeIdWithPrefix, out string subtypeId, out long amount, out QuotaMode mode) {
+            typeIdWithPrefix = null;
+            subtypeId = null;
+            amount = 0;
+            mode = QuotaMode.Exact;
             if (string.IsNullOrEmpty(token)) return false;
             int colon = token.IndexOf(':');
             if (colon <= 0 || colon >= token.Length - 1) return false;
             string keyPart = token.Substring(0, colon).Trim();
             string valuePart = token.Substring(colon + 1).Trim();
             if (keyPart.Length == 0 || valuePart.Length == 0) return false;
-            MyItemType parsedType;
-            if (!TryParseQuotaKey(keyPart, out parsedType)) return false;
-            long amount;
-            QuotaMode mode;
-            if (!TryParseQuotaValue(valuePart, out amount, out mode)) return false;
-            type = parsedType;
-            quota = new StockQuota { Amount = amount, Mode = mode };
-            return true;
+            if (!TryParseQuotaKeyShape(keyPart, out typeIdWithPrefix, out subtypeId)) return false;
+            return TryParseQuotaValue(valuePart, out amount, out mode);
         }
 
         /// <summary>Walks <paramref name="name"/> and merges every parseable name-tag quota
         /// into <paramref name="destination"/>, overwriting on duplicate keys (last-write-wins).
         /// Returns the list of quota-shaped tokens that failed to parse, or <c>null</c> when
-        /// none were malformed. Pure helper — caller handles logging.</summary>
+        /// none were malformed. Caller supplies <paramref name="typeResolver"/> so production
+        /// can use <see cref="MyItemType.Parse"/> while tests substitute factory methods.</summary>
         /// <param name="name">Block display name to scan for <c>[Type/Subtype:Value]</c> tokens.</param>
         /// <param name="destination">Quota dictionary that receives parsed entries.</param>
-        /// <returns>List of malformed token strings, or <c>null</c> when all tokens parsed cleanly.</returns>
-        internal static List<string> ExtractNameTagQuotas(string name, Dictionary<MyItemType, StockQuota> destination) {
-            if (string.IsNullOrEmpty(name) || destination == null) return null;
+        /// <param name="typeResolver">Maps a fully-qualified <c>Type/Subtype</c> string to a
+        /// <see cref="MyItemType"/>, returning <c>null</c> on resolution failure.</param>
+        /// <returns>List of malformed or unresolvable token strings, or <c>null</c> when all tokens parsed cleanly.</returns>
+        internal static List<string> ExtractNameTagQuotas(
+            string name,
+            Dictionary<MyItemType, StockQuota> destination,
+            Func<string, MyItemType?> typeResolver) {
+            if (string.IsNullOrEmpty(name) || destination == null || typeResolver == null) return null;
             List<string> malformed = null;
             int pos = 0;
             while (pos < name.Length) {
@@ -212,14 +217,21 @@ namespace IngameScript {
                 string token = name.Substring(open + 1, close - open - 1);
                 pos = close + 1;
                 if (!LooksLikeNameTagQuota(token)) continue;
-                MyItemType type;
-                StockQuota quota;
-                if (TryParseNameTagQuota(token, out type, out quota)) {
-                    destination[type] = quota;
-                } else {
+                string typeIdWithPrefix, subtypeId;
+                long amount;
+                QuotaMode mode;
+                if (!TryParseNameTagQuotaShape(token, out typeIdWithPrefix, out subtypeId, out amount, out mode)) {
                     if (malformed == null) malformed = new List<string>();
                     malformed.Add(token);
+                    continue;
                 }
+                MyItemType? resolved = typeResolver(typeIdWithPrefix + "/" + subtypeId);
+                if (!resolved.HasValue) {
+                    if (malformed == null) malformed = new List<string>();
+                    malformed.Add(token);
+                    continue;
+                }
+                destination[resolved.Value] = new StockQuota { Amount = amount, Mode = mode };
             }
             return malformed;
         }
@@ -230,7 +242,7 @@ namespace IngameScript {
         /// <param name="entry">Stock-tagged container entry whose name should be scanned.</param>
         void ParseNameTagQuotas(ContainerEntry entry) {
             if (entry == null || entry.Block == null || entry.Quotas == null) return;
-            List<string> malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas);
+            List<string> malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
             if (malformed == null) return;
             for (int i = 0; i < malformed.Count; i++) {
                 string token = malformed[i];

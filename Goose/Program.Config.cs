@@ -110,26 +110,35 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
         }
 
-        /// <summary>Parses a quota key shaped like <c>Type/Subtype</c> (with an optional
-        /// <c>MyObjectBuilder_</c> prefix) into a <see cref="MyItemType"/>. Pure: no logging,
-        /// no exceptions escape.</summary>
-        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c>).</param>
-        /// <param name="type">Resolved type when parsing succeeds.</param>
-        /// <returns><c>true</c> when the key has a valid <c>Type/Subtype</c> shape and resolves to a known item type.</returns>
-        internal static bool TryParseQuotaKey(string key, out MyItemType type) {
-            type = default(MyItemType);
+        /// <summary>Splits a quota key shaped like <c>Type/Subtype</c> into its prefixed
+        /// type id and subtype id. Pure: validates only the textual shape; does not call
+        /// <see cref="MyItemType.Parse"/>.</summary>
+        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c> or <c>MyObjectBuilder_Ingot/Iron</c>).</param>
+        /// <param name="typeIdWithPrefix">Full type id including the <c>MyObjectBuilder_</c> prefix.</param>
+        /// <param name="subtypeId">Subtype portion of the key.</param>
+        /// <returns><c>true</c> when the key has a valid <c>Type/Subtype</c> shape.</returns>
+        internal static bool TryParseQuotaKeyShape(string key, out string typeIdWithPrefix, out string subtypeId) {
+            typeIdWithPrefix = null;
+            subtypeId = null;
             if (string.IsNullOrEmpty(key)) return false;
             int slash = key.IndexOf('/');
             if (slash <= 0 || slash >= key.Length - 1) return false;
             string typeHalf = key.Substring(0, slash);
-            string fullyQualified = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
-                ? key
-                : "MyObjectBuilder_" + key;
+            string subHalf = key.Substring(slash + 1);
+            typeIdWithPrefix = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
+                ? typeHalf
+                : "MyObjectBuilder_" + typeHalf;
+            subtypeId = subHalf;
+            return true;
+        }
+
+        /// <summary>Wraps <see cref="MyItemType.Parse"/> to return a nullable on failure
+        /// instead of throwing. Used as the default type resolver in production paths.</summary>
+        internal static MyItemType? ResolveItemTypeViaParse(string fullyQualified) {
             try {
-                type = MyItemType.Parse(fullyQualified);
-                return true;
+                return MyItemType.Parse(fullyQualified);
             } catch {
-                return false;
+                return null;
             }
         }
 
@@ -167,18 +176,20 @@ namespace IngameScript {
             quota = null;
             if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(raw)) return false;
 
-            int slash = key.IndexOf('/');
-            if (slash <= 0 || slash >= key.Length - 1) {
+            string typeIdWithPrefix, subtypeId;
+            if (!TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId)) {
                 LogWarningOnce("stockq:legacy:" + key,
                     "[Goose] Stock quota key '" + key + "' must be fully qualified as Type/Subtype (e.g. Component/SteelPlate). Skipped.");
                 return false;
             }
 
-            if (!TryParseQuotaKey(key, out type)) {
+            MyItemType? resolved = ResolveItemTypeViaParse(typeIdWithPrefix + "/" + subtypeId);
+            if (!resolved.HasValue) {
                 LogWarningOnce("stockq:parse:" + key,
                     "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type.");
                 return false;
             }
+            type = resolved.Value;
 
             long amount;
             QuotaMode mode;
