@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using FluentAssertions;
 using IngameScript;
+using VRage.Game.ModAPI.Ingame;
 using Xunit;
 
 namespace Goose.Tests {
@@ -130,6 +132,225 @@ namespace Goose.Tests {
             [InlineData("", "")]
             public void Falls_back_to_misc_for_unknown_types(string typeId, string subId) {
                 Program.ClassifyByTypeId(typeId, subId).Should().Be(Program.ItemCategory.Misc);
+            }
+        }
+
+        public class LooksLikeNameTagQuota_Tests {
+            [Theory]
+            [InlineData("Ingot/Iron:100")]
+            [InlineData("Component/SteelPlate:50M")]
+            [InlineData("MyObjectBuilder_Ingot/Iron:100")]
+            [InlineData(" Ingot/Iron : 100 ")]
+            [InlineData("a/b:c")]
+            public void Returns_true_when_token_contains_slash_and_colon(string token) {
+                Program.LooksLikeNameTagQuota(token).Should().BeTrue();
+            }
+
+            [Theory]
+            [InlineData(null)]
+            [InlineData("")]
+            [InlineData("Stock")]
+            [InlineData("P:01")]
+            [InlineData("Ignore")]
+            [InlineData("Ingots")]
+            [InlineData("Ingot/Iron")]
+            [InlineData("Stuff:more")]
+            public void Returns_false_when_token_lacks_slash_or_colon(string token) {
+                Program.LooksLikeNameTagQuota(token).Should().BeFalse();
+            }
+        }
+
+        public class TryParseNameTagQuotaShape_Tests {
+            [Fact]
+            public void Parses_exact_quota() {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape("Ingot/Iron:100", out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                typeId.Should().Be("MyObjectBuilder_Ingot");
+                subtypeId.Should().Be("Iron");
+                amount.Should().Be(100);
+                mode.Should().Be(Program.QuotaMode.Exact);
+            }
+
+            [Fact]
+            public void Parses_minimum_suffix() {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape("Ingot/Iron:500M", out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                amount.Should().Be(500);
+                mode.Should().Be(Program.QuotaMode.Minimum);
+            }
+
+            [Fact]
+            public void Parses_limiter_suffix() {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape("Ore/Stone:1000L", out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                typeId.Should().Be("MyObjectBuilder_Ore");
+                subtypeId.Should().Be("Stone");
+                amount.Should().Be(1000);
+                mode.Should().Be(Program.QuotaMode.Limiter);
+            }
+
+            [Theory]
+            [InlineData("Component/Construction:All")]
+            [InlineData("Component/Construction:all")]
+            public void Parses_All_mode_case_insensitive(string token) {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape(token, out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                typeId.Should().Be("MyObjectBuilder_Component");
+                subtypeId.Should().Be("Construction");
+                mode.Should().Be(Program.QuotaMode.All);
+            }
+
+            [Fact]
+            public void Tolerates_whitespace_around_colon() {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape(" Ingot/Iron : 100M ", out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                typeId.Should().Be("MyObjectBuilder_Ingot");
+                subtypeId.Should().Be("Iron");
+                amount.Should().Be(100);
+                mode.Should().Be(Program.QuotaMode.Minimum);
+            }
+
+            [Fact]
+            public void Accepts_long_form_object_builder_prefix() {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape("MyObjectBuilder_Ingot/Iron:100", out typeId, out subtypeId, out amount, out mode).Should().BeTrue();
+                typeId.Should().Be("MyObjectBuilder_Ingot");
+                subtypeId.Should().Be("Iron");
+            }
+
+            [Theory]
+            [InlineData("")]
+            [InlineData(":100")]
+            [InlineData("Ingot/Iron:")]
+            [InlineData("Ingot/Iron:abc")]
+            [InlineData("Ingot/Iron::100")]
+            [InlineData("Ingot/Iron:1.5")]
+            [InlineData("/Iron:100")]
+            [InlineData("Ingot/:100")]
+            public void Returns_false_for_malformed_tokens(string token) {
+                string typeId, subtypeId;
+                long amount;
+                Program.QuotaMode mode;
+                Program.TryParseNameTagQuotaShape(token, out typeId, out subtypeId, out amount, out mode).Should().BeFalse();
+            }
+        }
+
+        public class ExtractNameTagQuotas_Tests {
+            /// <summary>Test resolver covering the SE item types accessible via <c>Make*</c>
+            /// factories. Returns <c>null</c> for unrecognized type ids so we can also exercise
+            /// the unresolvable-type path.</summary>
+            static MyItemType? MakeBasedResolver(string fullyQualified) {
+                int slash = fullyQualified.IndexOf('/');
+                if (slash <= 0 || slash >= fullyQualified.Length - 1) return null;
+                string typeId = fullyQualified.Substring(0, slash);
+                string subId = fullyQualified.Substring(slash + 1);
+                switch (typeId) {
+                    case "MyObjectBuilder_Ingot": return MyItemType.MakeIngot(subId);
+                    case "MyObjectBuilder_Ore": return MyItemType.MakeOre(subId);
+                    case "MyObjectBuilder_Component": return MyItemType.MakeComponent(subId);
+                    case "MyObjectBuilder_AmmoMagazine": return MyItemType.MakeAmmo(subId);
+                    default: return null;
+                }
+            }
+
+            [Theory]
+            [InlineData(null)]
+            [InlineData("")]
+            [InlineData("Cargo")]
+            [InlineData("Cargo Stock [Stock]")]
+            [InlineData("Cargo [Stock] [P:01]")]
+            [InlineData("Cargo [Ingots]")]
+            [InlineData("Cargo [Ingot/Iron]")]
+            public void Extracts_no_quotas_from_non_quota_names(string name) {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                var malformed = Program.ExtractNameTagQuotas(name, dict, MakeBasedResolver);
+                dict.Should().BeEmpty();
+                malformed.Should().BeNull();
+            }
+
+            [Fact]
+            public void Extracts_single_quota() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                Program.ExtractNameTagQuotas("Cargo [Stock] [Ingot/Iron:100]", dict, MakeBasedResolver);
+                dict.Should().HaveCount(1);
+                dict[MyItemType.MakeIngot("Iron")].Amount.Should().Be(100);
+                dict[MyItemType.MakeIngot("Iron")].Mode.Should().Be(Program.QuotaMode.Exact);
+            }
+
+            [Fact]
+            public void Extracts_multiple_quotas() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                Program.ExtractNameTagQuotas("Cargo [Stock] [Ingot/Iron:100M] [Ingot/Cobalt:50L]", dict, MakeBasedResolver);
+                dict.Should().HaveCount(2);
+                dict[MyItemType.MakeIngot("Iron")].Mode.Should().Be(Program.QuotaMode.Minimum);
+                dict[MyItemType.MakeIngot("Cobalt")].Mode.Should().Be(Program.QuotaMode.Limiter);
+            }
+
+            [Fact]
+            public void Last_duplicate_key_wins() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                Program.ExtractNameTagQuotas("[Stock] [Ingot/Iron:100] [Ingot/Iron:50]", dict, MakeBasedResolver);
+                dict.Should().HaveCount(1);
+                dict[MyItemType.MakeIngot("Iron")].Amount.Should().Be(50);
+            }
+
+            [Fact]
+            public void Name_tag_overrides_existing_dictionary_entry() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                dict[MyItemType.MakeIngot("Iron")] =
+                    new Program.StockQuota { Amount = 500, Mode = Program.QuotaMode.Minimum };
+                Program.ExtractNameTagQuotas("Cargo [Stock] [Ingot/Iron:100]", dict, MakeBasedResolver);
+                dict.Should().HaveCount(1);
+                dict[MyItemType.MakeIngot("Iron")].Amount.Should().Be(100);
+                dict[MyItemType.MakeIngot("Iron")].Mode.Should().Be(Program.QuotaMode.Exact);
+            }
+
+            [Fact]
+            public void Tolerates_unmatched_open_bracket() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                var malformed = Program.ExtractNameTagQuotas("Cargo [Stock] [Ingot/Iron:100", dict, MakeBasedResolver);
+                dict.Should().BeEmpty();
+                malformed.Should().BeNull();
+            }
+
+            [Fact]
+            public void Reports_malformed_quota_tokens() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                var malformed = Program.ExtractNameTagQuotas("Cargo [Stock] [Ingot/Iron:abc]", dict, MakeBasedResolver);
+                dict.Should().BeEmpty();
+                malformed.Should().NotBeNull();
+                malformed.Should().ContainSingle().Which.Should().Be("Ingot/Iron:abc");
+            }
+
+            [Fact]
+            public void Mixes_valid_and_malformed_tokens() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                var malformed = Program.ExtractNameTagQuotas(
+                    "[Stock] [Ingot/Iron:100] [Ingot/Cobalt:abc] [P:01]", dict, MakeBasedResolver);
+                dict.Should().HaveCount(1);
+                dict[MyItemType.MakeIngot("Iron")].Amount.Should().Be(100);
+                malformed.Should().ContainSingle().Which.Should().Be("Ingot/Cobalt:abc");
+            }
+
+            [Fact]
+            public void Reports_unresolvable_types_as_malformed() {
+                var dict = new Dictionary<MyItemType, Program.StockQuota>();
+                var malformed = Program.ExtractNameTagQuotas(
+                    "[Stock] [UnknownType/Foo:100]", dict, MakeBasedResolver);
+                dict.Should().BeEmpty();
+                malformed.Should().ContainSingle().Which.Should().Be("UnknownType/Foo:100");
             }
         }
     }

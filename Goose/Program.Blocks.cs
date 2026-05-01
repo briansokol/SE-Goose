@@ -139,6 +139,7 @@ namespace IngameScript {
                     }
                     entry.Quotas = new Dictionary<MyItemType, StockQuota>();
                     ParseStockQuotas(block, entry);
+                    ParseNameTagQuotas(entry);
                     _stockContainers.Add(entry);
                 } else {
                     _stockTemplateVersion.Remove(block);
@@ -155,6 +156,99 @@ namespace IngameScript {
                 kv.Value.Sort((a, b) => a.Priority.CompareTo(b.Priority));
             }
             _stockContainers.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+        }
+
+        /// <summary>Returns true when <paramref name="token"/> contains both a slash and a colon —
+        /// the minimum shape for a name-tag quota override (e.g. <c>Ingot/Iron:100</c>). Tokens
+        /// without both characters belong to other tag families (<c>[Stock]</c>, <c>[P:NN]</c>,
+        /// bare category tags) and are skipped silently.</summary>
+        internal static bool LooksLikeNameTagQuota(string token) {
+            if (string.IsNullOrEmpty(token)) return false;
+            return token.IndexOf('/') >= 0 && token.IndexOf(':') >= 0;
+        }
+
+        /// <summary>Parses a single bracketed token shaped like <c>Type/Subtype:Value</c> into
+        /// its constituent shape strings and quota value. Whitespace around the colon and
+        /// inside the token is tolerated. Pure helper: no logging, no
+        /// <see cref="MyItemType.Parse"/> calls, no exceptions escape.</summary>
+        /// <param name="token">Token contents without the surrounding brackets.</param>
+        /// <param name="typeIdWithPrefix">Resolved type id (with <c>MyObjectBuilder_</c> prefix) on success.</param>
+        /// <param name="subtypeId">Resolved subtype on success.</param>
+        /// <param name="amount">Parsed amount (0 when <paramref name="mode"/> is <see cref="QuotaMode.All"/>).</param>
+        /// <param name="mode">Parsed quota mode.</param>
+        /// <returns><c>true</c> when the token is a syntactically valid quota override.</returns>
+        internal static bool TryParseNameTagQuotaShape(string token, out string typeIdWithPrefix, out string subtypeId, out long amount, out QuotaMode mode) {
+            typeIdWithPrefix = null;
+            subtypeId = null;
+            amount = 0;
+            mode = QuotaMode.Exact;
+            if (string.IsNullOrEmpty(token)) return false;
+            int colon = token.IndexOf(':');
+            if (colon <= 0 || colon >= token.Length - 1) return false;
+            string keyPart = token.Substring(0, colon).Trim();
+            string valuePart = token.Substring(colon + 1).Trim();
+            if (keyPart.Length == 0 || valuePart.Length == 0) return false;
+            if (!TryParseQuotaKeyShape(keyPart, out typeIdWithPrefix, out subtypeId)) return false;
+            return TryParseQuotaValue(valuePart, out amount, out mode);
+        }
+
+        /// <summary>Walks <paramref name="name"/> and merges every parseable name-tag quota
+        /// into <paramref name="destination"/>, overwriting on duplicate keys (last-write-wins).
+        /// Returns the list of quota-shaped tokens that failed to parse, or <c>null</c> when
+        /// none were malformed. Caller supplies <paramref name="typeResolver"/> so production
+        /// can use <see cref="MyItemType.Parse"/> while tests substitute factory methods.</summary>
+        /// <param name="name">Block display name to scan for <c>[Type/Subtype:Value]</c> tokens.</param>
+        /// <param name="destination">Quota dictionary that receives parsed entries.</param>
+        /// <param name="typeResolver">Maps a fully-qualified <c>Type/Subtype</c> string to a
+        /// <see cref="MyItemType"/>, returning <c>null</c> on resolution failure.</param>
+        /// <returns>List of malformed or unresolvable token strings, or <c>null</c> when all tokens parsed cleanly.</returns>
+        internal static List<string> ExtractNameTagQuotas(
+            string name,
+            Dictionary<MyItemType, StockQuota> destination,
+            Func<string, MyItemType?> typeResolver) {
+            if (string.IsNullOrEmpty(name) || destination == null || typeResolver == null) return null;
+            List<string> malformed = null;
+            int pos = 0;
+            while (pos < name.Length) {
+                int open = name.IndexOf('[', pos);
+                if (open < 0) break;
+                int close = name.IndexOf(']', open + 1);
+                if (close < 0) break;
+                string token = name.Substring(open + 1, close - open - 1);
+                pos = close + 1;
+                if (!LooksLikeNameTagQuota(token)) continue;
+                string typeIdWithPrefix, subtypeId;
+                long amount;
+                QuotaMode mode;
+                if (!TryParseNameTagQuotaShape(token, out typeIdWithPrefix, out subtypeId, out amount, out mode)) {
+                    if (malformed == null) malformed = new List<string>();
+                    malformed.Add(token);
+                    continue;
+                }
+                MyItemType? resolved = typeResolver(typeIdWithPrefix + "/" + subtypeId);
+                if (!resolved.HasValue) {
+                    if (malformed == null) malformed = new List<string>();
+                    malformed.Add(token);
+                    continue;
+                }
+                destination[resolved.Value] = new StockQuota { Amount = amount, Mode = mode };
+            }
+            return malformed;
+        }
+
+        /// <summary>Merges name-tag quota overrides from a stock container's display name into
+        /// its <see cref="ContainerEntry.Quotas"/>, overwriting any matching CustomData entry.
+        /// Logs a one-shot warning for each malformed quota-shaped token.</summary>
+        /// <param name="entry">Stock-tagged container entry whose name should be scanned.</param>
+        void ParseNameTagQuotas(ContainerEntry entry) {
+            if (entry == null || entry.Block == null || entry.Quotas == null) return;
+            List<string> malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
+            if (malformed == null) return;
+            for (int i = 0; i < malformed.Count; i++) {
+                string token = malformed[i];
+                LogWarningOnce("nametag:parse:" + entry.Block.CustomName + ":" + token,
+                    "[Goose] Stock container '" + entry.Block.CustomName + "' name tag '[" + token + "]' did not parse as a quota override. Skipped.");
+            }
         }
 
         /// <summary>Reads <c>[Goose]</c> CustomData entries on a stock container and populates
