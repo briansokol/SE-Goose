@@ -14,15 +14,17 @@ The Inventory-Sorter functional design wiki already names this feature: *"O2/H2 
 
 Today these consumer blocks are discovered (they pass `IsManaged`) but uncategorized. They never get pushed-to (they have no category tag), but `StepSortGenericCargo` *does* iterate them as sources, which means a hand-loaded reactor's Uranium leaks back to Ingot containers on the next sort pass. The balancer must therefore fix two things at once: actively top-up the consumers, and prevent the existing sort from draining them.
 
-**User-confirmed design decisions** (this session, 2026-04-30):
+**User-confirmed design decisions** (initial brainstorm 2026-04-30; iteration 2 2026-05-01):
 
 1. **Configuration shape:** three per-block-class scalar keys in the existing `[Goose]` section of the PB CustomData — not per-item-type entries. Smallest config surface, easiest to reason about.
-2. **No per-block overrides** for the target value — PB is the single source of truth for "how much."
-3. **Detection by item-acceptance probing**, not vanilla-interface whitelist. Auto-handles modded irrigation systems, modded reactors, and modded weapons without maintaining a type list.
-4. **Pull from any container**, scanning by priority. Treats consumer fill as the highest-priority demand on the grid (matches the wiki's `[P:00]`-equivalent framing). Stock containers are fair game.
-5. **Drain excess back to category containers** when a block has more than its target. Strict target enforcement, not "fill-only."
-6. **`[NoBalance]` name tag** opts a block out of the balancer only. Excluded blocks behave like normal generic containers — sorter still iterates them.
-7. **Discrete two-step pipeline addition**: `StepCategorizeConsumers` (probes once per rescan, caches result on `ContainerEntry`) followed by `StepBalanceConsumers` (does the work). Mirrors the existing categorize→sort separation.
+2. **PB-level keys are percent-of-volume across all three classes** *(iter 2)*. `reactorUraniumFillPercent`, `gasIceFillPercent`, `weaponAmmoFillPercent` — each meaning "fill this fraction of the block's inventory volume with the relevant item." Unifies the semantic across classes.
+3. **Per-block unit-count override via `[Balance=N]` name tag** *(iter 2)*. Tagging a block forces a unit count target instead of the class percent. A tagged block runs even when its class percent is 0 — explicit per-block intent always wins over class disable. Works on all three classes: a tagged reactor → N Uranium ingots, tagged gas/irrigation → N Ice, tagged weapon → N total magazines.
+4. **Detection by item-acceptance probing**, not vanilla-interface whitelist. Auto-handles modded irrigation systems, modded reactors, and modded weapons without maintaining a type list.
+5. **Pull from any container**, scanning by priority. Treats consumer fill as the highest-priority demand on the grid (matches the wiki's `[P:00]`-equivalent framing). Stock containers are fair game.
+6. **Drain excess back to category containers** when a block has more than its target. Strict target enforcement, not "fill-only."
+7. **`[NoBalance]` name tag** opts a block out of the balancer only. Excluded blocks behave like normal generic containers — sorter still iterates them.
+8. **Live-merge balancer keys into PB CustomData** *(iter 2)*. On parse, if any of the three keys is missing under `[Goose]`, it's appended with default 0 and a one-line hint comment. User-set values and existing comments are preserved. Mirrors the stock-template live-merge pattern.
+9. **Discrete two-step pipeline addition**: `StepCategorizeConsumers` (probes once per rescan, caches result + `[Balance=N]` count on `ContainerEntry`) followed by `StepBalanceConsumers` (does the work). Mirrors the existing categorize→sort separation.
 
 **Why these choices:** The user's framing was "limits configurable in CustomData of the PB" — that's class-level scalars, not per-item entries. Item-acceptance probing was chosen explicitly to cover irrigation systems (mod-only blocks). "Drain excess" was chosen over "fill-only" because the user wants strict target enforcement; the safety valve for hand-loading is the `[NoBalance]` tag, which is more discoverable than tuning targets per block. Discrete steps were preferred over folding probing into `StepCategorizeContainers` because that step already does five things (name tags, stock detection, quota parsing, template sync, category routing).
 
@@ -51,26 +53,44 @@ Why this order: probing depends on the entries built by `StepCategorizeContainer
 
 ### Configuration schema
 
-Three keys appended to the existing `[Goose]` section. **No new section** — keeps the user's CustomData surface single-section and matches the existing style.
+Three keys live-merged into the existing `[Goose]` section. **No new section** — keeps the user's CustomData surface single-section and matches the existing style. All three are percent-of-volume (0–100, clamped on parse).
 
 ```ini
 [Goose]
 ; ... existing keys ...
-reactorUraniumPerBlock=100      ; integer ingot count per reactor; 0 disables
-gasIcePerBlock=500              ; integer ore count per gas generator / irrigation system; 0 disables
-weaponAmmoFillPercent=80        ; 0–100, percent of inventory volume per weapon; 0 disables
+; Percent (0-100) of each reactor's inventory volume to fill with Uranium. 0 disables.
+; Per-block override: name-tag [Balance=N] for unit count; [NoBalance] to opt out.
+reactorUraniumFillPercent=80
+; Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.
+gasIceFillPercent=80
+; Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.
+weaponAmmoFillPercent=80
 ```
 
 Stored on `GooseConfig` (Program.Config.cs:44) as:
-- `public int ReactorUraniumPerBlock = 0;`
-- `public int GasIcePerBlock = 0;`
+- `public int ReactorUraniumFillPercent = 0;`
+- `public int GasIceFillPercent = 0;`
 - `public int WeaponAmmoFillPercent = 0;`
 
-Defaults are `0` — feature is opt-in, so an existing user's grid behaves identically until they add at least one key.
+Defaults are `0` — feature is opt-in, so an existing user's grid behaves identically until they add at least one key. Out-of-range values are clamped to 0–100 with a one-shot warning (`balancer:bad-percent:<key>`).
 
-Parsed inside `StepParseConfigIfDirty` (Program.Config.cs:74). Out-of-range `WeaponAmmoFillPercent` (negative or > 100) is clamped to 0–100 with a one-shot warning under key `balancer:bad-percent`. Negative count values for the two integer keys are clamped to 0 with `balancer:bad-count`.
+`StepParseConfigIfDirty` calls `EnsureBalancerKeysPopulated` after parsing. That helper checks each of the three balancer keys against the parsed `MyIni`; for any missing key it calls `_ini.Set` + `_ini.SetComment` to inject the default value plus the hint shown above, then writes the resulting INI string back to `Me.CustomData` and updates `_lastSeenCustomData` so the next cycle does not re-parse. The merge is idempotent — keys the user has already set are preserved untouched.
 
-The hardcoded fuel item types — `Ingot/Uranium` and `Ore/Ice` — live as private static readonly fields in the new `Program.Balancer.cs` partial. Modded fuels (e.g., `Ingot/Thorium`) are explicitly out of scope for v1. A control item type — `Component/SteelPlate` — is also static-readonly here for the probing test.
+The hardcoded fuel item types — `Ingot/Uranium` and `Ore/Ice` — live as lazy-init properties in the new `Program.Balancer.cs` partial. Modded fuels (e.g., `Ingot/Thorium`) are explicitly out of scope for v1. A control item type — `Component/SteelPlate` — is also a lazy-init property here for the probing test.
+
+### Per-block override: `[Balance=N]` *(iter 2)*
+
+Any consumer block can override its class percent with a unit count by tagging its CustomName with `[Balance=N]`:
+
+```
+"Big Reactor [Balance=200]"          -> fill exactly 200 Uranium ingots
+"Cargo O2 Generator [Balance=300]"   -> fill exactly 300 Ice
+"Forward Turret [Balance=50]"        -> fill exactly 50 magazines (any accepted ammo type)
+```
+
+Parsed by `ParseBalanceTagCount(string name)` (Program.Blocks.cs, alongside `ParsePriorityFromName`); returns `-1` when the tag is absent or malformed. Cached on `ContainerEntry.BalanceTagCount` during `StepCategorizeConsumers`, so the parse runs once per rescan rather than every balance cycle.
+
+A tagged block bypasses the class enable check — even with `reactorUraniumFillPercent=0`, a reactor named `[Balance=100]` is still balanced. This matches user intent (explicit per-block direction overrides class default).
 
 ### Consumer detection
 
@@ -103,58 +123,84 @@ Yields: `BudgetExceeded()` after each probed block; `ChunkBoundary` every 25 blo
 
 ### Balance algorithm
 
-`StepBalanceConsumers` iterates `_entryByBlock.Values` once per cycle. Suggested pseudo-iteration order: reactors first, then gas, then weapons (so critical-power demand wins under scarcity). Inside each class, blocks are processed in iteration order (no need for explicit priority sort — fill-in-order under scarcity is the documented behaviour).
+`StepBalanceConsumers` runs three sub-passes per cycle: reactors first, then gas, then weapons (so critical-power demand wins under scarcity). Inside each class, blocks are processed in `_entryByBlock` iteration order — fill-in-order under scarcity is the documented v1 behaviour.
 
-**Reactor / Gas (count target):**
+For each consumer entry, `BalanceConsumersOfKind` dispatches per block based on `ContainerEntry.BalanceTagCount`:
 
 ```
-target  = (kind == Reactor) ? config.ReactorUraniumPerBlock : config.GasIcePerBlock
+if entry.BalanceTagCount >= 0:
+    BalanceConsumerByCount(entry, kind, dst, entry.BalanceTagCount)   // tagged: count-based
+else if classPercent > 0:
+    BalanceConsumerByPercent(entry, kind, dst, classPercent)          // untagged + class enabled
+else:
+    skip                                                                // untagged + class disabled
+```
+
+A tagged block bypasses the class enable check, so a reactor named `[Balance=100]` is balanced even when `reactorUraniumFillPercent=0`.
+
+**Count-based (tagged) — Reactor / Gas:**
+
+```
 item    = (kind == Reactor) ? IngotUranium : OreIce
-current = GetCurrentAmount(entry.Inventory, item)  // reuses Sorting.cs:69
+current = GetCurrentAmount(dst, item)  // reuses Sorting.cs:69
 
 if current < target:
     needed = target - current
-    walk all entries (priority order, skip self, skip other consumers
-        unless they have excess of `item` — see below) whose inventory
-        has `item`; TryMove(src, entry.Inventory, item, needed) until
-        needed reaches 0 or all sources exhausted
+    walk all entries (skip self) whose inventory has `item`;
+    TryMove(src, dst, item, needed) until needed reaches 0 or sources exhausted
 
 if current > target:
     excess = current - target
     routes = _containersByCategory[Classify(item)]   // Ingots / Ores
-    walk routes by priority; TryMove(entry.Inventory, route.Inventory,
-        item, excess) until excess is 0 or all routes full
-    if no routes exist: LogWarningOnce("balancer:no-route:" + cat, ...)
+    walk routes; TryMove(dst, route, item, excess) until excess is 0
+    if no routes: LogWarningOnce("balancer:no-route:" + cat, ...)
 ```
 
-**Weapon (volume-percent target):**
+**Count-based (tagged) — Weapon:**
 
 ```
-percent = config.WeaponAmmoFillPercent
-if percent == 0: skip block (feature disabled)
+currentMags = sum of GetCurrentAmount(dst, ammo) for ammo in entry.AcceptedAmmo
 
-targetVolume = inv.MaxVolume * (percent / 100f)
+if currentMags < target:
+    needed = target - currentMags
+    for each ammo in entry.AcceptedAmmo:
+        walk all entries (skip self); TryMove(src, dst, ammo, needed)
+            until needed reaches 0 or sources exhausted
 
-if inv.CurrentVolume < targetVolume:
-    for each ammoType in entry.AcceptedAmmo:
-        if inv.CurrentVolume >= targetVolume: break
-        walk source containers in priority order; for each source:
-            attempt TryMove(src, inv, ammoType, amount=1)  // one mag at a time
-            recheck inv.CurrentVolume; if >= targetVolume: break
-        // continue to next ammoType if still under target
-
-if inv.CurrentVolume > targetVolume:
-    walk items in inv (oldest stack first); for each item:
-        if inv.CurrentVolume <= targetVolume: break
-        try TryMove(inv, route.Inventory, item.Type, amount=1) for each route
-            in _containersByCategory[Ammo] (priority order)
-        recheck inv.CurrentVolume after each successful move
+if currentMags > target:
+    excess = currentMags - target
+    walk items in dst (oldest stack first); for each stack:
+        take = min(stackAmount, excess)
+        TryMove(dst, route, stack.Type, take) into Ammo-tagged routes
+        excess -= moved
     if no Ammo route exists: LogWarningOnce("balancer:no-route:Ammo", ...)
 ```
 
-**Cross-consumer transfers:** when filling Reactor A, the balancer is *allowed* to pull Uranium from another reactor that has excess (provided that reactor's `current > target`). This handles the hand-loaded-reactor case naturally without special logic.
+**Percent-based (untagged) — unified for all three classes:**
 
-**Distribution under scarcity:** *fill in priority order until source exhausted.* A grid with 250 Uranium and three reactors at target 100 ends up 100/100/50 — fewer reactors fully fueled beats all reactors partly fueled (survival-game-friendly). Round-robin is explicitly rejected for v1.
+```
+targetVolume = ComputeFillTargetVolume(dst.MaxVolume, classPercent)
+                = dst.MaxVolume * (classPercent / 100f)
+
+if dst.CurrentVolume < targetVolume:
+    PULL: walk all entries (skip self), pull one unit / one magazine at a time
+          and re-check dst.CurrentVolume after each transfer until target hit
+          or sources exhausted
+        For Reactor: item = IngotUranium
+        For Gas:     item = OreIce
+        For Weapon:  iterate entry.AcceptedAmmo, one ammo type at a time
+
+if dst.CurrentVolume > targetVolume:
+    PUSH: one unit / magazine at a time to category-tagged routes
+        (Ingots / Ores / Ammo via Classify(item) or hardcoded for weapons)
+    if no route exists: LogWarningOnce("balancer:no-route:" + cat, ...)
+```
+
+The one-unit-at-a-time pattern is naturally correct for any unit volume (vanilla or modded) — no per-item-volume math needed.
+
+**Cross-consumer transfers:** when filling Reactor A, the balancer is *allowed* to pull Uranium from another reactor that has excess (because the source iteration walks every entry, not just non-consumers). This handles hand-loaded reactors and the `[Balance=N]` re-distribution case naturally without special logic.
+
+**Distribution under scarcity:** *fill in iteration order until source exhausted.* A grid with 250 Uranium and three untagged reactors at 80% fill ends up filling reactors 1 and 2 fully then reactor 3 partially — fewer reactors fully fueled beats all reactors partly fueled (survival-game-friendly). Round-robin is explicitly rejected for v1.
 
 **Yields:** `BudgetExceeded()` after each block; `ChunkBoundary` every 5 blocks (consumer counts are typically smaller than container counts).
 
@@ -345,9 +391,8 @@ Read-only reference:
 
 ## Out of scope (explicit non-goals)
 
-- **Per-block target overrides** (e.g., `[BalanceTarget=100]` on a turret). User declined; PB is single source of truth.
+- **Per-item fine-grained class config** (e.g., `Ingot/Uranium=100` line under `[Goose]`). Considered and rejected during brainstorming in favour of the three class-scalar percent keys. *Per-block* overrides via `[Balance=N]` are now supported (iter 2) but they're a per-block tag, not a per-item-type config.
 - **Modded fuel/control items** beyond `Ingot/Uranium`, `Ore/Ice`. Modded thorium reactors and the like will appear as Reactor consumers (probe accepts Uranium, rejects SteelPlate) but will only be balanced for Uranium; their other fuel slots are ignored. v1 limitation; revisit in v2.
-- **Per-item fine-grained balancer config** (e.g., `Ingot/Uranium=100` style). Considered and rejected during brainstorming; PB-class scalars chosen instead.
 - **Round-robin distribution under scarcity.** Considered and rejected; fill-in-order is the v1 behaviour.
 - **Refinery/Assembler input feeding.** Wiki lists this as separate v2+ work. Not part of this balancer.
 - **Cross-grid (connector) balancing.** Wiki notes connectors and `[ALLOW]` tags as v2+. Balancer respects the existing same-construct rule from `IsManaged`.

@@ -2,8 +2,15 @@
 
 > Brainstorming spec for the container-balancing feature. Companion to the implementation plan in `.specs/container-balancing.md`.
 
-**Date:** 2026-04-30
-**Status:** approved, in implementation
+**Date:** 2026-04-30 (initial design); 2026-05-01 (iteration 2)
+**Status:** approved, implemented; superseded in part by iter-2 changes (see top of `.specs/container-balancing.md`)
+
+> **Iteration 2 changes** (2026-05-01) — recorded here so this snapshot remains an accurate record of the original design plus its first revision:
+>
+> - PB-level keys are **all percent-of-volume**, not count. `reactorUraniumPerBlock` → `reactorUraniumFillPercent`, `gasIcePerBlock` → `gasIceFillPercent` (both clamped 0–100). The semantic across all three classes is unified to "fill X% of the block's inventory volume with the relevant item."
+> - **Per-block override via `[Balance=N]` name tag** added. Forces a single block to be balanced to N units (count) instead of the class percent. Works on all three classes; tagged blocks bypass the class enable check.
+> - **Live-merge of balancer keys into PB CustomData** added. On parse, missing keys are appended with default 0 and a one-line `MyIni` comment hint.
+> - **Algorithm** generalised: per-block dispatch on `BalanceTagCount` (≥0 → count-based, otherwise → percent-volume fill). The percent-volume path uses one-unit-at-a-time pulls/pushes so it works for any unit volume.
 
 ## Goal
 
