@@ -71,7 +71,7 @@ namespace IngameScript {
         /// <param name="maxVolume">Inventory's maximum volume, in m^3.</param>
         /// <param name="percent">Configured fill percent, 0-100. Caller is expected to clamp before calling.</param>
         /// <returns>Volume in m^3 that the weapon should be filled to.</returns>
-        internal static float ComputeWeaponTargetVolume(float maxVolume, int percent) {
+        internal static float ComputeFillTargetVolume(float maxVolume, int percent) {
             return maxVolume * (percent / 100f);
         }
 
@@ -135,6 +135,7 @@ namespace IngameScript {
                 IMyTerminalBlock block = entry.Block;
                 if (block == null) continue;
                 IMyInventory inv = entry.Inventory;
+                entry.BalanceTagCount = ParseBalanceTagCount(block.CustomName);
                 if (inv == null) {
                     entry.ConsumerKind = ConsumerKind.None;
                     entry.AcceptedAmmo = null;
@@ -189,27 +190,26 @@ namespace IngameScript {
 
         /// <summary>Top-level balancer step. Runs reactors, then gas, then weapons (so critical-power demand wins under scarcity). Each class is a no-op when its PB target is 0.</summary>
         IEnumerator<YieldReason> StepBalanceConsumers() {
-            bool reactorEnabled = _config.ReactorUraniumPerBlock > 0;
-            bool gasEnabled = _config.GasIcePerBlock > 0;
-            bool weaponEnabled = _config.WeaponAmmoFillPercent > 0;
-            if (!reactorEnabled && !gasEnabled && !weaponEnabled) yield break;
+            // Per-block tags ([Balance=N]) bypass the class enable check, so a
+            // tagged block runs even when its class percent is 0. The class
+            // pass for an untagged block runs only when the class percent is
+            // non-zero. Reactors first, then gas, then weapons so critical-
+            // power demand wins under scarcity.
 
-            if (reactorEnabled) {
-                IEnumerator<YieldReason> child = BalanceCountConsumers(ConsumerKind.Reactor, IngotUranium, _config.ReactorUraniumPerBlock);
-                while (child.MoveNext()) yield return child.Current;
-            }
-            if (gasEnabled) {
-                IEnumerator<YieldReason> child = BalanceCountConsumers(ConsumerKind.Gas, OreIce, _config.GasIcePerBlock);
-                while (child.MoveNext()) yield return child.Current;
-            }
-            if (weaponEnabled) {
-                IEnumerator<YieldReason> child = BalanceWeaponConsumers(_config.WeaponAmmoFillPercent);
-                while (child.MoveNext()) yield return child.Current;
-            }
+            IEnumerator<YieldReason> child;
+
+            child = BalanceConsumersOfKind(ConsumerKind.Reactor, _config.ReactorUraniumFillPercent);
+            while (child.MoveNext()) yield return child.Current;
+
+            child = BalanceConsumersOfKind(ConsumerKind.Gas, _config.GasIceFillPercent);
+            while (child.MoveNext()) yield return child.Current;
+
+            child = BalanceConsumersOfKind(ConsumerKind.Weapon, _config.WeaponAmmoFillPercent);
+            while (child.MoveNext()) yield return child.Current;
         }
 
-        /// <summary>Fills (or drains) every consumer of the given <paramref name="kind"/> with <paramref name="item"/> toward <paramref name="target"/> units. Sources include any entry on the grid that holds the item; cross-consumer transfers are intentional so a hand-loaded reactor's excess feeds the next reactor.</summary>
-        IEnumerator<YieldReason> BalanceCountConsumers(ConsumerKind kind, MyItemType item, long target) {
+        /// <summary>Iterates every consumer of the given <paramref name="kind"/>. Tagged blocks (<see cref="ContainerEntry.BalanceTagCount"/> &gt;= 0) use a unit-count target; untagged blocks use the class-wide <paramref name="classPercent"/> if non-zero, otherwise are skipped entirely.</summary>
+        IEnumerator<YieldReason> BalanceConsumersOfKind(ConsumerKind kind, int classPercent) {
             int counter = 0;
             foreach (var kv in _entryByBlock) {
                 ContainerEntry entry = kv.Value;
@@ -217,11 +217,10 @@ namespace IngameScript {
                 IMyInventory dst = entry.Inventory;
                 if (dst == null) continue;
 
-                long current = GetCurrentAmount(dst, item);
-                if (current < target) {
-                    PullCountFromAnySource(entry, dst, item, target - current);
-                } else if (current > target) {
-                    PushCountExcessToCategory(entry, dst, item, current - target);
+                if (entry.BalanceTagCount >= 0) {
+                    BalanceConsumerByCount(entry, kind, dst, entry.BalanceTagCount);
+                } else if (classPercent > 0) {
+                    BalanceConsumerByPercent(entry, kind, dst, classPercent);
                 }
 
                 counter++;
@@ -229,6 +228,136 @@ namespace IngameScript {
                 if (BudgetExceeded()) yield return YieldReason.BudgetHit;
             }
         }
+
+        /// <summary>Fills (or drains) <paramref name="dst"/> to exactly <paramref name="target"/> units of the relevant item type. For weapons, <paramref name="target"/> is the total magazine count across all accepted ammo subtypes.</summary>
+        void BalanceConsumerByCount(ContainerEntry entry, ConsumerKind kind, IMyInventory dst, long target) {
+            if (kind == ConsumerKind.Weapon) {
+                BalanceWeaponByMagCount(entry, dst, target);
+                return;
+            }
+            MyItemType item = (kind == ConsumerKind.Reactor) ? IngotUranium : OreIce;
+            long current = GetCurrentAmount(dst, item);
+            if (current < target) {
+                PullCountFromAnySource(entry, dst, item, target - current);
+            } else if (current > target) {
+                PushCountExcessToCategory(entry, dst, item, current - target);
+            }
+        }
+
+        /// <summary>Fills (or drains) <paramref name="dst"/> to <paramref name="percent"/>% of its inventory volume with the relevant item type. Pulls and pushes one unit / one magazine at a time, rechecking <see cref="IMyInventory.CurrentVolume"/> after each transfer so the loop is naturally correct for any unit volume (vanilla or modded).</summary>
+        void BalanceConsumerByPercent(ContainerEntry entry, ConsumerKind kind, IMyInventory dst, int percent) {
+            float targetVolume = ComputeFillTargetVolume((float)dst.MaxVolume, percent);
+            if (kind == ConsumerKind.Weapon) {
+                List<MyItemType> ammoList = entry.AcceptedAmmo;
+                if (ammoList == null || ammoList.Count == 0) return;
+                if ((float)dst.CurrentVolume < targetVolume) {
+                    PullWeaponAmmoFromAnySource(entry, dst, ammoList, targetVolume);
+                }
+                if ((float)dst.CurrentVolume > targetVolume) {
+                    PushWeaponExcessToAmmoCategory(entry, dst, targetVolume);
+                }
+                return;
+            }
+            MyItemType item = (kind == ConsumerKind.Reactor) ? IngotUranium : OreIce;
+            if ((float)dst.CurrentVolume < targetVolume) {
+                PullSingleItemByVolume(entry, dst, item, targetVolume);
+            }
+            if ((float)dst.CurrentVolume > targetVolume) {
+                PushSingleItemExcessByVolume(entry, dst, item, targetVolume);
+            }
+        }
+
+        /// <summary>Pulls one unit at a time of <paramref name="item"/> into <paramref name="dst"/> until <see cref="IMyInventory.CurrentVolume"/> reaches <paramref name="targetVolume"/> or no source has more of the item.</summary>
+        void PullSingleItemByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume) {
+            foreach (var kv in _entryByBlock) {
+                if ((float)dst.CurrentVolume >= targetVolume) return;
+                ContainerEntry srcEntry = kv.Value;
+                if (srcEntry == null || srcEntry == self) continue;
+                IMyInventory srcInv = srcEntry.Inventory;
+                if (srcInv == null) continue;
+                while ((float)dst.CurrentVolume < targetVolume) {
+                    long moved = TryMove(srcInv, dst, item, 1, "balance");
+                    if (moved == 0) break;
+                }
+            }
+        }
+
+        /// <summary>Pushes one unit at a time of <paramref name="item"/> out of <paramref name="dst"/> to category-tagged routes until volume falls under <paramref name="targetVolume"/>. Warns once when no route exists.</summary>
+        void PushSingleItemExcessByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume) {
+            ItemCategory cat = Classify(item);
+            List<ContainerEntry> routes;
+            if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0) {
+                LogWarningOnce("balancer:no-route:" + cat,
+                    "[Goose] Balancer cannot push excess " + item.SubtypeId + ": no container tagged " + cat);
+                return;
+            }
+            while ((float)dst.CurrentVolume > targetVolume) {
+                bool pushed = false;
+                for (int r = 0; r < routes.Count; r++) {
+                    ContainerEntry route = routes[r];
+                    if (route == null || route.Block == self.Block) continue;
+                    IMyInventory rinv = route.Inventory;
+                    if (rinv == null) continue;
+                    long moved = TryMove(dst, rinv, item, 1, "balance-excess");
+                    if (moved > 0) { pushed = true; break; }
+                }
+                if (!pushed) return;
+            }
+        }
+
+        /// <summary>Fills (or drains) a tagged weapon to exactly <paramref name="target"/> total magazines, summing across <see cref="ContainerEntry.AcceptedAmmo"/>. Uses bulk transfer (count-based) since the unit is integer magazines.</summary>
+        void BalanceWeaponByMagCount(ContainerEntry entry, IMyInventory dst, long target) {
+            List<MyItemType> ammoList = entry.AcceptedAmmo;
+            if (ammoList == null || ammoList.Count == 0) return;
+
+            long currentMags = 0;
+            for (int a = 0; a < ammoList.Count; a++) {
+                currentMags += GetCurrentAmount(dst, ammoList[a]);
+            }
+
+            if (currentMags < target) {
+                long needed = target - currentMags;
+                for (int a = 0; a < ammoList.Count && needed > 0; a++) {
+                    MyItemType ammo = ammoList[a];
+                    foreach (var kv in _entryByBlock) {
+                        if (needed <= 0) break;
+                        ContainerEntry srcEntry = kv.Value;
+                        if (srcEntry == null || srcEntry == entry) continue;
+                        IMyInventory srcInv = srcEntry.Inventory;
+                        if (srcInv == null) continue;
+                        long moved = TryMove(srcInv, dst, ammo, needed, "balance");
+                        needed -= moved;
+                    }
+                }
+            } else if (currentMags > target) {
+                long excess = currentMags - target;
+                List<ContainerEntry> routes;
+                if (!_containersByCategory.TryGetValue(ItemCategory.Ammo, out routes) || routes == null || routes.Count == 0) {
+                    LogWarningOnce("balancer:no-route:Ammo",
+                        "[Goose] Balancer cannot push excess ammo: no container tagged Ammo");
+                    return;
+                }
+                _itemBuffer.Clear();
+                dst.GetItems(_itemBuffer);
+                for (int i = 0; i < _itemBuffer.Count && excess > 0; i++) {
+                    MyItemType ammoType = _itemBuffer[i].Type;
+                    long stackAmount = (long)_itemBuffer[i].Amount;
+                    long take = stackAmount < excess ? stackAmount : excess;
+                    for (int r = 0; r < routes.Count && take > 0; r++) {
+                        ContainerEntry route = routes[r];
+                        if (route == null || route.Block == entry.Block) continue;
+                        IMyInventory rinv = route.Inventory;
+                        if (rinv == null) continue;
+                        long moved = TryMove(dst, rinv, ammoType, take, "balance-excess");
+                        take -= moved;
+                        excess -= moved;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Fills (or drains) every consumer of the given <paramref name="kind"/> with <paramref name="item"/> toward <paramref name="target"/> units. Sources include any entry on the grid that holds the item; cross-consumer transfers are intentional so a hand-loaded reactor's excess feeds the next reactor.</summary>
+        
 
         /// <summary>Pulls up to <paramref name="needed"/> units of <paramref name="item"/> into <paramref name="dst"/> from any other entry on the grid. Walks <see cref="_entryByBlock"/> in dictionary order; <see cref="TryMove"/> silently no-ops when a candidate source has nothing to give.</summary>
         void PullCountFromAnySource(ContainerEntry self, IMyInventory dst, MyItemType item, long needed) {
@@ -263,31 +392,7 @@ namespace IngameScript {
         }
 
         /// <summary>Fills (or drains) every weapon consumer to within the configured volume percent of its inventory capacity. Pulls and pushes one magazine at a time so the loop is naturally correct for any magazine size, including modded ones, without needing to know per-magazine volume.</summary>
-        IEnumerator<YieldReason> BalanceWeaponConsumers(int percent) {
-            int counter = 0;
-            foreach (var kv in _entryByBlock) {
-                ContainerEntry entry = kv.Value;
-                if (entry == null || entry.ConsumerKind != ConsumerKind.Weapon) continue;
-                IMyInventory dst = entry.Inventory;
-                if (dst == null) continue;
-                List<MyItemType> ammoList = entry.AcceptedAmmo;
-                if (ammoList == null || ammoList.Count == 0) continue;
-
-                float targetVolume = ComputeWeaponTargetVolume((float)dst.MaxVolume, percent);
-
-                if ((float)dst.CurrentVolume < targetVolume) {
-                    PullWeaponAmmoFromAnySource(entry, dst, ammoList, targetVolume);
-                }
-
-                if ((float)dst.CurrentVolume > targetVolume) {
-                    PushWeaponExcessToAmmoCategory(entry, dst, targetVolume);
-                }
-
-                counter++;
-                if (counter % 5 == 0) yield return YieldReason.ChunkBoundary;
-                if (BudgetExceeded()) yield return YieldReason.BudgetHit;
-            }
-        }
+        
 
         /// <summary>Pulls one magazine at a time across the cached <paramref name="ammoList"/> until <paramref name="dst"/>'s current volume reaches <paramref name="targetVolume"/> or no source has more compatible ammo.</summary>
         void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, List<MyItemType> ammoList, float targetVolume) {

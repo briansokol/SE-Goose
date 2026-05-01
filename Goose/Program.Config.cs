@@ -58,13 +58,13 @@ namespace IngameScript {
             /// <summary>Maximum number of distinct warnings retained before eviction.</summary>
             public int MaxWarningEntries = 32;
 
-            /// <summary>Per-reactor target count of <c>Ingot/Uranium</c>; <c>0</c> disables reactor balancing.</summary>
-            public int ReactorUraniumPerBlock = 0;
+            /// <summary>Per-reactor target as a percent (0-100) of the reactor's inventory volume to fill with <c>Ingot/Uranium</c>; <c>0</c> disables reactor balancing.</summary>
+            public int ReactorUraniumFillPercent = 0;
 
-            /// <summary>Per-block target count of <c>Ore/Ice</c> for gas generators and irrigation systems; <c>0</c> disables.</summary>
-            public int GasIcePerBlock = 0;
+            /// <summary>Per-block target as a percent (0-100) of the gas generator's or irrigation system's inventory volume to fill with <c>Ore/Ice</c>; <c>0</c> disables.</summary>
+            public int GasIceFillPercent = 0;
 
-            /// <summary>Per-weapon target fill as a percent (0–100) of the weapon's inventory volume; <c>0</c> disables.</summary>
+            /// <summary>Per-weapon target fill as a percent (0-100) of the weapon's inventory volume; <c>0</c> disables.</summary>
             public int WeaponAmmoFillPercent = 0;
         }
 
@@ -100,26 +100,26 @@ namespace IngameScript {
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
 
-            int reactorRaw = _ini.Get("Goose", "reactorUraniumPerBlock").ToInt32(0);
-            int reactorClamped = ClampNonNegativeCount(reactorRaw);
+            int reactorRaw = _ini.Get("Goose", "reactorUraniumFillPercent").ToInt32(0);
+            int reactorClamped = ClampPercent(reactorRaw);
             if (reactorRaw != reactorClamped) {
-                LogWarningOnce("balancer:bad-count:reactorUraniumPerBlock",
-                    "[Goose] reactorUraniumPerBlock must be >= 0; clamped to 0 (was " + reactorRaw + ")");
+                LogWarningOnce("balancer:bad-percent:reactorUraniumFillPercent",
+                    "[Goose] reactorUraniumFillPercent must be 0-100; clamped to " + reactorClamped + " (was " + reactorRaw + ")");
             }
-            _config.ReactorUraniumPerBlock = reactorClamped;
+            _config.ReactorUraniumFillPercent = reactorClamped;
 
-            int gasRaw = _ini.Get("Goose", "gasIcePerBlock").ToInt32(0);
-            int gasClamped = ClampNonNegativeCount(gasRaw);
+            int gasRaw = _ini.Get("Goose", "gasIceFillPercent").ToInt32(0);
+            int gasClamped = ClampPercent(gasRaw);
             if (gasRaw != gasClamped) {
-                LogWarningOnce("balancer:bad-count:gasIcePerBlock",
-                    "[Goose] gasIcePerBlock must be >= 0; clamped to 0 (was " + gasRaw + ")");
+                LogWarningOnce("balancer:bad-percent:gasIceFillPercent",
+                    "[Goose] gasIceFillPercent must be 0-100; clamped to " + gasClamped + " (was " + gasRaw + ")");
             }
-            _config.GasIcePerBlock = gasClamped;
+            _config.GasIceFillPercent = gasClamped;
 
             int weaponRaw = _ini.Get("Goose", "weaponAmmoFillPercent").ToInt32(0);
             int weaponClamped = ClampPercent(weaponRaw);
             if (weaponRaw != weaponClamped) {
-                LogWarningOnce("balancer:bad-percent",
+                LogWarningOnce("balancer:bad-percent:weaponAmmoFillPercent",
                     "[Goose] weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
             }
             _config.WeaponAmmoFillPercent = weaponClamped;
@@ -139,6 +139,9 @@ namespace IngameScript {
                     LogWarning("[Goose] Unknown category '" + val + "' for override " + name);
                 }
             }
+
+            EnsureBalancerKeysPopulated();
+
             _configDirty = false;
             yield return YieldReason.ChunkBoundary;
         }
@@ -201,9 +204,7 @@ namespace IngameScript {
         /// <summary>Clamps a count to be non-negative. Pure helper used by the balancer config parser.</summary>
         /// <param name="raw">Raw integer from CustomData.</param>
         /// <returns><paramref name="raw"/> when non-negative; <c>0</c> otherwise.</returns>
-        internal static int ClampNonNegativeCount(int raw) {
-            return raw < 0 ? 0 : raw;
-        }
+        
 
         /// <summary>Clamps a percent value to the inclusive range 0-100. Pure helper used by the balancer config parser.</summary>
         /// <param name="raw">Raw integer from CustomData.</param>
@@ -246,6 +247,35 @@ namespace IngameScript {
             if (!TryParseQuotaValue(raw, out amount, out mode)) return false;
             quota = new StockQuota { Amount = amount, Mode = mode };
             return true;
+        }
+
+
+        /// <summary>Live-merges the three balancer keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with a default value of <c>0</c> and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
+        void EnsureBalancerKeysPopulated() {
+            bool changed = false;
+            if (!_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
+                _ini.Set("Goose", "reactorUraniumFillPercent", 0);
+                _ini.SetComment("Goose", "reactorUraniumFillPercent",
+                    "Percent (0-100) of each reactor's inventory volume to fill with Uranium. 0 disables. " +
+                    "Per-block override: name-tag [Balance=N] for unit count; [NoBalance] to opt out.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "gasIceFillPercent")) {
+                _ini.Set("Goose", "gasIceFillPercent", 0);
+                _ini.SetComment("Goose", "gasIceFillPercent",
+                    "Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "weaponAmmoFillPercent")) {
+                _ini.Set("Goose", "weaponAmmoFillPercent", 0);
+                _ini.SetComment("Goose", "weaponAmmoFillPercent",
+                    "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
+                changed = true;
+            }
+            if (changed) {
+                Me.CustomData = _ini.ToString();
+                _lastSeenCustomData = Me.CustomData;
+            }
         }
     }
 }

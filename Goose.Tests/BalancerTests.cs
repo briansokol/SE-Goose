@@ -5,7 +5,7 @@ using Xunit;
 namespace Goose.Tests {
     /// <summary>Tests for the pure helpers in Program.Balancer.cs.</summary>
     public class BalancerTests {
-        public class ComputeWeaponTargetVolume_Tests {
+        public class ComputeFillTargetVolume_Tests {
             [Theory]
             [InlineData(10f, 80, 8f)]
             [InlineData(10f, 0, 0f)]
@@ -15,14 +15,14 @@ namespace Goose.Tests {
             [InlineData(0.064f, 80, 0.0512f)]
             [InlineData(64f, 25, 16f)]
             public void Returns_max_volume_times_percent(float maxVolume, int percent, float expected) {
-                Program.ComputeWeaponTargetVolume(maxVolume, percent).Should().BeApproximately(expected, 0.0001f);
+                Program.ComputeFillTargetVolume(maxVolume, percent).Should().BeApproximately(expected, 0.0001f);
             }
 
             [Fact]
             public void Caller_is_responsible_for_clamping_so_method_does_not_clamp() {
                 // Documents that this helper trusts its caller; ClampPercent is invoked at config-parse time.
-                Program.ComputeWeaponTargetVolume(10f, 150).Should().BeApproximately(15f, 0.0001f);
-                Program.ComputeWeaponTargetVolume(10f, -10).Should().BeApproximately(-1f, 0.0001f);
+                Program.ComputeFillTargetVolume(10f, 150).Should().BeApproximately(15f, 0.0001f);
+                Program.ComputeFillTargetVolume(10f, -10).Should().BeApproximately(-1f, 0.0001f);
             }
         }
 

@@ -69,19 +69,7 @@ namespace Goose.Tests {
             }
         }
 
-        public class ClampNonNegativeCount_Tests {
-            [Theory]
-            [InlineData(0, 0)]
-            [InlineData(1, 1)]
-            [InlineData(100, 100)]
-            [InlineData(int.MaxValue, int.MaxValue)]
-            [InlineData(-1, 0)]
-            [InlineData(-1000, 0)]
-            [InlineData(int.MinValue, 0)]
-            public void Clamps_to_non_negative(int raw, int expected) {
-                Program.ClampNonNegativeCount(raw).Should().Be(expected);
-            }
-        }
+        
 
         public class ClampPercent_Tests {
             [Theory]
