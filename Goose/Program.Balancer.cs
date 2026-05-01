@@ -106,6 +106,10 @@ namespace IngameScript {
         /// <summary>Reusable scratch set used to dedupe ammo candidate keys.</summary>
         readonly HashSet<string> _ammoCandidateKeys = new HashSet<string>();
 
+
+        /// <summary>Per-cycle cache of measured per-unit volume (m^3/unit) for items the balancer has transferred this cycle. Lets the bulk-transfer helpers compute exact unit counts from a remaining-volume headroom without iterating one unit at a time. Cleared at the start of every <see cref="StepBalanceConsumers"/> run.</summary>
+        readonly Dictionary<MyItemType, float> _balanceVolumeCache = new Dictionary<MyItemType, float>();
+
         /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
         void RebuildAmmoCandidateList() {
             _ammoCandidates.Clear();
@@ -196,6 +200,8 @@ namespace IngameScript {
             // non-zero. Reactors first, then gas, then weapons so critical-
             // power demand wins under scarcity.
 
+            _balanceVolumeCache.Clear();
+
             IEnumerator<YieldReason> child;
 
             child = BalanceConsumersOfKind(ConsumerKind.Reactor, _config.ReactorUraniumFillPercent);
@@ -206,6 +212,52 @@ namespace IngameScript {
 
             child = BalanceConsumersOfKind(ConsumerKind.Weapon, _config.WeaponAmmoFillPercent);
             while (child.MoveNext()) yield return child.Current;
+        }
+
+        /// <summary>Pulls into <paramref name="dst"/> from <paramref name="srcInv"/> using a probe-then-bulk pattern. The first successful transfer for an item type measures the per-unit volume; subsequent calls (and the same call once the cache is populated) compute the remaining headroom in units and pull it in a single <see cref="TryMove"/>. Avoids the O(n) iteration cost of one-unit-at-a-time pulls when the per-unit volume is small (e.g. Ice at ~0.00037 m^3/unit, where 25%% of a 30 m^3 generator is ~20,000 units).</summary>
+        void BulkPullToTargetVolume(IMyInventory srcInv, IMyInventory dst, MyItemType item, float targetVolume) {
+            if ((float)dst.CurrentVolume >= targetVolume) return;
+
+            float volPerUnit;
+            if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f) {
+                float beforeVol = (float)dst.CurrentVolume;
+                long moved = TryMove(srcInv, dst, item, 1, "balance");
+                if (moved == 0) return;
+                float afterVol = (float)dst.CurrentVolume;
+                volPerUnit = (afterVol - beforeVol) / moved;
+                if (volPerUnit > 0f) _balanceVolumeCache[item] = volPerUnit;
+                if ((float)dst.CurrentVolume >= targetVolume) return;
+            }
+
+            if (volPerUnit <= 0f) return;
+
+            float headroom = targetVolume - (float)dst.CurrentVolume;
+            long unitsToPull = (long)System.Math.Ceiling(headroom / volPerUnit);
+            if (unitsToPull <= 0) return;
+            TryMove(srcInv, dst, item, unitsToPull, "balance");
+        }
+
+        /// <summary>Mirror of <see cref="BulkPullToTargetVolume"/> for excess push: probes once if the cache is cold, then pushes the over-target volume in a single bulk <see cref="TryMove"/>.</summary>
+        void BulkPushFromExcessByVolume(IMyInventory dst, IMyInventory rinv, MyItemType item, float targetVolume) {
+            if ((float)dst.CurrentVolume <= targetVolume) return;
+
+            float volPerUnit;
+            if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f) {
+                float beforeVol = (float)dst.CurrentVolume;
+                long moved = TryMove(dst, rinv, item, 1, "balance-excess");
+                if (moved == 0) return;
+                float afterVol = (float)dst.CurrentVolume;
+                volPerUnit = (beforeVol - afterVol) / moved;
+                if (volPerUnit > 0f) _balanceVolumeCache[item] = volPerUnit;
+                if ((float)dst.CurrentVolume <= targetVolume) return;
+            }
+
+            if (volPerUnit <= 0f) return;
+
+            float overage = (float)dst.CurrentVolume - targetVolume;
+            long unitsToPush = (long)System.Math.Ceiling(overage / volPerUnit);
+            if (unitsToPush <= 0) return;
+            TryMove(dst, rinv, item, unitsToPush, "balance-excess");
         }
 
         /// <summary>Iterates every consumer of the given <paramref name="kind"/>. Tagged blocks (<see cref="ContainerEntry.BalanceTagCount"/> &gt;= 0) use a unit-count target; untagged blocks use the class-wide <paramref name="classPercent"/> if non-zero, otherwise are skipped entirely.</summary>
@@ -271,14 +323,12 @@ namespace IngameScript {
         void PullSingleItemByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume) {
             foreach (var kv in _entryByBlock) {
                 if ((float)dst.CurrentVolume >= targetVolume) return;
+                if (BudgetExceeded()) return;
                 ContainerEntry srcEntry = kv.Value;
                 if (srcEntry == null || srcEntry == self) continue;
                 IMyInventory srcInv = srcEntry.Inventory;
                 if (srcInv == null) continue;
-                while ((float)dst.CurrentVolume < targetVolume) {
-                    long moved = TryMove(srcInv, dst, item, 1, "balance");
-                    if (moved == 0) break;
-                }
+                BulkPullToTargetVolume(srcInv, dst, item, targetVolume);
             }
         }
 
@@ -291,17 +341,14 @@ namespace IngameScript {
                     "[Goose] Balancer cannot push excess " + item.SubtypeId + ": no container tagged " + cat);
                 return;
             }
-            while ((float)dst.CurrentVolume > targetVolume) {
-                bool pushed = false;
-                for (int r = 0; r < routes.Count; r++) {
-                    ContainerEntry route = routes[r];
-                    if (route == null || route.Block == self.Block) continue;
-                    IMyInventory rinv = route.Inventory;
-                    if (rinv == null) continue;
-                    long moved = TryMove(dst, rinv, item, 1, "balance-excess");
-                    if (moved > 0) { pushed = true; break; }
-                }
-                if (!pushed) return;
+            for (int r = 0; r < routes.Count; r++) {
+                if ((float)dst.CurrentVolume <= targetVolume) return;
+                if (BudgetExceeded()) return;
+                ContainerEntry route = routes[r];
+                if (route == null || route.Block == self.Block) continue;
+                IMyInventory rinv = route.Inventory;
+                if (rinv == null) continue;
+                BulkPushFromExcessByVolume(dst, rinv, item, targetVolume);
             }
         }
 
@@ -398,17 +445,16 @@ namespace IngameScript {
         void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, List<MyItemType> ammoList, float targetVolume) {
             for (int a = 0; a < ammoList.Count; a++) {
                 if ((float)dst.CurrentVolume >= targetVolume) return;
+                if (BudgetExceeded()) return;
                 MyItemType ammo = ammoList[a];
                 foreach (var kv in _entryByBlock) {
                     if ((float)dst.CurrentVolume >= targetVolume) break;
+                    if (BudgetExceeded()) return;
                     ContainerEntry srcEntry = kv.Value;
                     if (srcEntry == null || srcEntry == self) continue;
                     IMyInventory srcInv = srcEntry.Inventory;
                     if (srcInv == null) continue;
-                    while ((float)dst.CurrentVolume < targetVolume) {
-                        long moved = TryMove(srcInv, dst, ammo, 1, "balance");
-                        if (moved == 0) break;
-                    }
+                    BulkPullToTargetVolume(srcInv, dst, ammo, targetVolume);
                 }
             }
         }
@@ -421,22 +467,22 @@ namespace IngameScript {
                     "[Goose] Balancer cannot push excess ammo: no container tagged Ammo");
                 return;
             }
+            List<MyItemType> ammoList = self.AcceptedAmmo;
+            if (ammoList == null || ammoList.Count == 0) return;
 
-            while ((float)dst.CurrentVolume > targetVolume) {
-                _itemBuffer.Clear();
-                dst.GetItems(_itemBuffer);
-                if (_itemBuffer.Count == 0) return;
-                MyItemType ammoType = _itemBuffer[0].Type;
-                bool pushed = false;
+            for (int a = 0; a < ammoList.Count; a++) {
+                if ((float)dst.CurrentVolume <= targetVolume) return;
+                if (BudgetExceeded()) return;
+                MyItemType ammoType = ammoList[a];
                 for (int r = 0; r < routes.Count; r++) {
+                    if ((float)dst.CurrentVolume <= targetVolume) return;
+                    if (BudgetExceeded()) return;
                     ContainerEntry route = routes[r];
                     if (route == null || route.Block == self.Block) continue;
                     IMyInventory rinv = route.Inventory;
                     if (rinv == null) continue;
-                    long moved = TryMove(dst, rinv, ammoType, 1, "balance-excess");
-                    if (moved > 0) { pushed = true; break; }
+                    BulkPushFromExcessByVolume(dst, rinv, ammoType, targetVolume);
                 }
-                if (!pushed) return;
             }
         }
     }
