@@ -62,5 +62,102 @@ namespace IngameScript {
             if (canAddAnyAmmo) return ConsumerKind.Weapon;
             return ConsumerKind.None;
         }
+
+
+        /// <summary>Vanilla ammo magazine subtypes seeded into consumer probing so weapons are detected on a fresh world before any ammo has been observed by the catalog.</summary>
+        static readonly string[] VanillaAmmoMagazineSubtypes = new string[] {
+            "NATO_25x184mm",
+            "NATO_5p56x45mm",
+            "Missile200mm",
+            "AutocannonClip",
+            "MediumCalibreAmmo",
+            "LargeCalibreAmmo"
+        };
+
+        /// <summary>Reusable scratch list, refreshed each cycle, of ammo magazine types to probe weapon candidates with.</summary>
+        readonly List<MyItemType> _ammoCandidates = new List<MyItemType>();
+
+        /// <summary>Reusable scratch set used to dedupe ammo candidate keys.</summary>
+        readonly HashSet<string> _ammoCandidateKeys = new HashSet<string>();
+
+        /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
+        void RebuildAmmoCandidateList() {
+            _ammoCandidates.Clear();
+            _ammoCandidateKeys.Clear();
+            for (int i = 0; i < VanillaAmmoMagazineSubtypes.Length; i++) {
+                string subtype = VanillaAmmoMagazineSubtypes[i];
+                _ammoCandidates.Add(new MyItemType("MyObjectBuilder_AmmoMagazine", subtype));
+                _ammoCandidateKeys.Add("AmmoMagazine/" + subtype);
+            }
+            foreach (var kv in _knownItems) {
+                if (kv.Key.StartsWith("AmmoMagazine/", StringComparison.Ordinal)
+                    && !_ammoCandidateKeys.Contains(kv.Key)) {
+                    _ammoCandidates.Add(kv.Value);
+                    _ammoCandidateKeys.Add(kv.Key);
+                }
+            }
+        }
+
+        /// <summary>Walks every managed block, applies the <c>[NoBalance]</c> exclusion gate, then probes acceptance of <see cref="IngotUranium"/>, <see cref="OreIce"/>, and known ammo magazines to assign a <see cref="ConsumerKind"/> to each entry. Caches accepted ammo magazines on weapon entries so the balance step does not re-probe.</summary>
+        IEnumerator<YieldReason> StepCategorizeConsumers() {
+            RebuildAmmoCandidateList();
+
+            int counter = 0;
+            foreach (var kv in _entryByBlock) {
+                ContainerEntry entry = kv.Value;
+                if (entry == null) continue;
+                IMyTerminalBlock block = entry.Block;
+                if (block == null) continue;
+                IMyInventory inv = entry.Inventory;
+                if (inv == null) {
+                    entry.ConsumerKind = ConsumerKind.None;
+                    entry.AcceptedAmmo = null;
+                } else if (NameHasTag(block.CustomName, "[NoBalance]")) {
+                    entry.ConsumerKind = ConsumerKind.None;
+                    entry.AcceptedAmmo = null;
+                } else {
+                    ProbeConsumerKind(entry, inv);
+                }
+
+                counter++;
+                if (counter % 25 == 0) yield return YieldReason.ChunkBoundary;
+                if (BudgetExceeded()) yield return YieldReason.BudgetHit;
+            }
+        }
+
+        /// <summary>Probes a single inventory's item-acceptance and assigns the resulting <see cref="ConsumerKind"/> and (for weapons) <see cref="ContainerEntry.AcceptedAmmo"/> on <paramref name="entry"/>.</summary>
+        void ProbeConsumerKind(ContainerEntry entry, IMyInventory inv) {
+            entry.ConsumerKind = ConsumerKind.None;
+            entry.AcceptedAmmo = null;
+
+            MyFixedPoint epsilon = MyFixedPoint.SmallestPossibleValue;
+            bool canSteelPlate = inv.CanItemsBeAdded(epsilon, ComponentSteelPlate);
+            if (canSteelPlate) return;
+
+            bool canIngotUranium = inv.CanItemsBeAdded(epsilon, IngotUranium);
+            if (canIngotUranium) {
+                entry.ConsumerKind = ConsumerKind.Reactor;
+                return;
+            }
+
+            bool canOreIce = inv.CanItemsBeAdded(epsilon, OreIce);
+            if (canOreIce) {
+                entry.ConsumerKind = ConsumerKind.Gas;
+                return;
+            }
+
+            List<MyItemType> accepted = null;
+            for (int i = 0; i < _ammoCandidates.Count; i++) {
+                MyItemType ammo = _ammoCandidates[i];
+                if (inv.CanItemsBeAdded(epsilon, ammo)) {
+                    if (accepted == null) accepted = new List<MyItemType>();
+                    accepted.Add(ammo);
+                }
+            }
+            if (accepted != null) {
+                entry.ConsumerKind = ConsumerKind.Weapon;
+                entry.AcceptedAmmo = accepted;
+            }
+        }
     }
 }
