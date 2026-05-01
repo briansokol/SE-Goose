@@ -110,19 +110,55 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
         }
 
-        /// <summary>
-        /// Resolves an <c>Override.&lt;subtype&gt; = &lt;value&gt;</c> entry into a typed quota.
-        /// Numeric values may end with <c>M</c> for <see cref="QuotaMode.Minimum"/> or
-        /// <c>L</c> for <see cref="QuotaMode.Limiter"/>; the literal <c>All</c> selects <see cref="QuotaMode.All"/>.
-        /// </summary>
-        /// <param name="key">Subtype id used to look up the matching <see cref="MyItemType"/>.</param>
-        /// <param name="raw">Raw value string from CustomData.</param>
-        /// <param name="type">Resolved item type.</param>
-        /// <param name="quota">Parsed quota; <c>null</c> on failure.</param>
-        /// <returns>True if both the type and the quota parse successfully.</returns>
-        /// <summary>Parses a fully-qualified <c>Type/Subtype=value</c> entry into a quota.</summary>
-        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c> or <c>MyObjectBuilder_Ingot/Iron</c>).</param>
-        /// <param name="raw">Raw value (e.g. <c>100</c>, <c>500M</c>, <c>250L</c>, or <c>All</c>).</param>
+        /// <summary>Parses a quota key shaped like <c>Type/Subtype</c> (with an optional
+        /// <c>MyObjectBuilder_</c> prefix) into a <see cref="MyItemType"/>. Pure: no logging,
+        /// no exceptions escape.</summary>
+        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c>).</param>
+        /// <param name="type">Resolved type when parsing succeeds.</param>
+        /// <returns><c>true</c> when the key has a valid <c>Type/Subtype</c> shape and resolves to a known item type.</returns>
+        internal static bool TryParseQuotaKey(string key, out MyItemType type) {
+            type = default(MyItemType);
+            if (string.IsNullOrEmpty(key)) return false;
+            int slash = key.IndexOf('/');
+            if (slash <= 0 || slash >= key.Length - 1) return false;
+            string typeHalf = key.Substring(0, slash);
+            string fullyQualified = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
+                ? key
+                : "MyObjectBuilder_" + key;
+            try {
+                type = MyItemType.Parse(fullyQualified);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        /// <summary>Parses a quota value into an amount and mode. Accepts a bare integer
+        /// (Exact), integer + <c>M</c>/<c>m</c> (Minimum), integer + <c>L</c>/<c>l</c>
+        /// (Limiter), or literal <c>All</c>/<c>all</c> (uncapped). Pure helper.</summary>
+        /// <param name="raw">Raw value (e.g. <c>100</c>, <c>500M</c>, <c>250L</c>, <c>All</c>).</param>
+        /// <param name="amount">Parsed amount (0 when <paramref name="mode"/> is <see cref="QuotaMode.All"/>).</param>
+        /// <param name="mode">Resolved quota mode.</param>
+        /// <returns><c>true</c> when the value parses cleanly.</returns>
+        internal static bool TryParseQuotaValue(string raw, out long amount, out QuotaMode mode) {
+            amount = 0;
+            mode = QuotaMode.Exact;
+            if (string.IsNullOrEmpty(raw)) return false;
+            if (raw.Equals("All", StringComparison.OrdinalIgnoreCase)) {
+                mode = QuotaMode.All;
+                return true;
+            }
+            char suffix = raw[raw.Length - 1];
+            string numericPart = raw;
+            if (suffix == 'M' || suffix == 'm') { mode = QuotaMode.Minimum; numericPart = raw.Substring(0, raw.Length - 1); }
+            else if (suffix == 'L' || suffix == 'l') { mode = QuotaMode.Limiter; numericPart = raw.Substring(0, raw.Length - 1); }
+            return long.TryParse(numericPart, out amount);
+        }
+
+        /// <summary>Parses a CustomData quota line into a typed quota and emits user-facing
+        /// warnings on shape or type-resolution failures.</summary>
+        /// <param name="key">Quota key (e.g. <c>Component/SteelPlate</c>).</param>
+        /// <param name="raw">Raw value (e.g. <c>100</c>, <c>500M</c>, <c>250L</c>, <c>All</c>).</param>
         /// <param name="type">Resolved <see cref="MyItemType"/>.</param>
         /// <param name="quota">Resolved quota when parsing succeeds.</param>
         /// <returns><c>true</c> when both key and value parse cleanly; <c>false</c> otherwise.</returns>
@@ -138,29 +174,15 @@ namespace IngameScript {
                 return false;
             }
 
-            string typeHalf = key.Substring(0, slash);
-            string fullyQualified = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
-                ? key
-                : "MyObjectBuilder_" + key;
-            try {
-                type = MyItemType.Parse(fullyQualified);
-            } catch (Exception ex) {
+            if (!TryParseQuotaKey(key, out type)) {
                 LogWarningOnce("stockq:parse:" + key,
-                    "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type: " + ex.Message);
+                    "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type.");
                 return false;
             }
 
-            if (raw.Equals("All", StringComparison.OrdinalIgnoreCase)) {
-                quota = new StockQuota { Amount = 0, Mode = QuotaMode.All };
-                return true;
-            }
-            char suffix = raw[raw.Length - 1];
-            string numericPart = raw;
-            QuotaMode mode = QuotaMode.Exact;
-            if (suffix == 'M' || suffix == 'm') { mode = QuotaMode.Minimum; numericPart = raw.Substring(0, raw.Length - 1); }
-            else if (suffix == 'L' || suffix == 'l') { mode = QuotaMode.Limiter; numericPart = raw.Substring(0, raw.Length - 1); }
             long amount;
-            if (!long.TryParse(numericPart, out amount)) return false;
+            QuotaMode mode;
+            if (!TryParseQuotaValue(raw, out amount, out mode)) return false;
             quota = new StockQuota { Amount = amount, Mode = mode };
             return true;
         }
