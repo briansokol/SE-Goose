@@ -143,6 +143,23 @@ Files matching these patterns are excluded from the packaged script:
 - `Goose/MDK/**/*`
 - `**/*.debug.cs`
 
+## Branching
+
+**Never commit directly to `main`.** All work — features, refactors, docs, even one-line fixes — lands on `main` through pull requests from a topic branch.
+
+**Before every commit, check the current branch.** Run `git rev-parse --abbrev-ref HEAD` (or read `git status`'s first line) and confirm it's not `main`. Don't make a commit on `main` even if the change is small or tests pass; the rule is no exceptions.
+
+If you find yourself on `main` and about to commit, **stop and ask the user** whether to create a new branch (and what to call it). Don't auto-name a branch and proceed silently. Suggested naming follows the existing convention in this repo:
+
+- `feat/<short-name>` — new features
+- `fix/<short-name>` — bug fixes
+- `refactor/<short-name>` — code restructuring
+- `chore/<short-name>` — tooling, deps, process notes
+- `docs/<short-name>` — documentation-only changes
+- `test/<short-name>` — test additions
+
+If you've already accidentally committed to `main`, recover by creating a branch from the current `main` HEAD, then resetting `main` back to its upstream (`git reset --hard origin/main`). Verify the working tree's uncommitted changes survive (stash first if needed). Always confirm with the user before running `git reset --hard`.
+
 ## Git Commits
 
 **All commits must use the [Conventional Commits](https://www.conventionalcommits.org/) format:**
