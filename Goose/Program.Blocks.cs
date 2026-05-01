@@ -51,6 +51,12 @@ namespace IngameScript {
 
             /// <summary>Per-item stock quotas parsed from CustomData; <c>null</c> unless <see cref="IsStock"/> is true.</summary>
             public Dictionary<MyItemType, StockQuota> Quotas;
+
+            /// <summary>Detected consumer class for the balancer. <see cref="ConsumerKind.None"/> for non-consumers and <c>[NoBalance]</c>-tagged blocks.</summary>
+            public ConsumerKind ConsumerKind = ConsumerKind.None;
+
+            /// <summary>Cached list of <see cref="MyItemType"/> ammo magazines this block accepts; <c>null</c> unless <see cref="ConsumerKind"/> is <see cref="ConsumerKind.Weapon"/>.</summary>
+            public List<MyItemType> AcceptedAmmo;
         }
 
         /// <summary>Routing buckets keyed by category, sorted by ascending priority.</summary>
