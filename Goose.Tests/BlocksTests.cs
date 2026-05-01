@@ -40,6 +40,39 @@ namespace Goose.Tests {
             }
         }
 
+
+        public class ParseBalanceTagCount_Tests {
+            [Theory]
+            [InlineData("Reactor [Balance=100]", 100L)]
+            [InlineData("Reactor [Balance=0]", 0L)]
+            [InlineData("Reactor [Balance=99999]", 99999L)]
+            [InlineData("Turret [P:01] [Balance=50]", 50L)]
+            [InlineData("[Balance=10]", 10L)]
+            public void Parses_well_formed_tags(string name, long expected) {
+                Program.ParseBalanceTagCount(name).Should().Be(expected);
+            }
+
+            [Theory]
+            [InlineData(null)]
+            [InlineData("")]
+            [InlineData("Reactor")]
+            [InlineData("Reactor [NoBalance]")]
+            [InlineData("Reactor [P:01]")]
+            [InlineData("Reactor [Balance=]")]
+            [InlineData("Reactor [Balance=abc]")]
+            [InlineData("Reactor [Balance=-5]")]
+            [InlineData("Reactor [Balance=100")] // unmatched bracket
+            [InlineData("Reactor [Balance=1.5]")]
+            public void Returns_minus_one_for_absent_or_malformed_tags(string name) {
+                Program.ParseBalanceTagCount(name).Should().Be(-1L);
+            }
+
+            [Fact]
+            public void First_well_formed_tag_wins_when_multiple_present() {
+                Program.ParseBalanceTagCount("Reactor [Balance=10] [Balance=20]").Should().Be(10L);
+            }
+        }
+
         public class IsIdentifier_Tests {
             [Theory]
             [InlineData("Foo")]

@@ -45,7 +45,8 @@ namespace IngameScript {
         /// <summary>Step labels indexed by step number; mirrored on the Echo display.</summary>
         static readonly string[] StepLabels = {
             "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
-            "ScanInventories", "FulfillStockQuotas", "SortGenericCargo"
+            "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
+            "SortGenericCargo", "BalanceConsumers"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -61,7 +62,7 @@ namespace IngameScript {
         IEnumerator<YieldReason> StepRoot() {
             while (true) {
                 ResetOneShotWarnings();
-                for (int i = 0; i < 6; i++) {
+                for (int i = 0; i < 8; i++) {
                     _stepIndex = i;
                     _subStep = 0;
                     _stepLabel = StepLabels[i];
@@ -83,10 +84,18 @@ namespace IngameScript {
                 case 0: return StepRescanIfDue();
                 case 1: return StepParseConfigIfDirty();
                 case 2: return StepCategorizeContainers();
-                case 3: return StepScanInventories();
-                case 4: return StepFulfillStockQuotas();
-                default: return StepSortGenericCargo();
+                case 3: return StepCategorizeConsumers();
+                case 4: return StepScanInventories();
+                case 5: return StepFulfillStockQuotas();
+                case 6: return StepSortGenericCargo();
+                case 7: return StepBalanceConsumers();
+                default: return NoOpStep();
             }
+        }
+
+        /// <summary>Defensive no-op iterator returned by <see cref="StepFor"/> when the step index drifts out of range. Yields once and exits so the dispatcher's pump survives an off-by-one bug without throwing.</summary>
+        IEnumerator<YieldReason> NoOpStep() {
+            yield return YieldReason.ChunkBoundary;
         }
 
         /// <summary>Pumps one entry of the work iterator, restarting the pipeline on completion or fault.</summary>

@@ -236,6 +236,7 @@ namespace IngameScript {
 
                 ContainerEntry srcEntry;
                 _entryByBlock.TryGetValue(block, out srcEntry);
+                if (srcEntry != null && srcEntry.ConsumerKind != ConsumerKind.None) continue;
 
                 IMyInventory src = GetSortableInventory(block);
                 if (src == null) continue;

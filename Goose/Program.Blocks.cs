@@ -51,6 +51,15 @@ namespace IngameScript {
 
             /// <summary>Per-item stock quotas parsed from CustomData; <c>null</c> unless <see cref="IsStock"/> is true.</summary>
             public Dictionary<MyItemType, StockQuota> Quotas;
+
+            /// <summary>Detected consumer class for the balancer. <see cref="ConsumerKind.None"/> for non-consumers and <c>[NoBalance]</c>-tagged blocks.</summary>
+            public ConsumerKind ConsumerKind = ConsumerKind.None;
+
+            /// <summary>Cached list of <see cref="MyItemType"/> ammo magazines this block accepts; <c>null</c> unless <see cref="ConsumerKind"/> is <see cref="ConsumerKind.Weapon"/>.</summary>
+            public List<MyItemType> AcceptedAmmo;
+
+            /// <summary>Per-block unit-count override parsed from the <c>[Balance=N]</c> name tag; <c>-1</c> means "no tag, use the class percent target." Only meaningful when <see cref="ConsumerKind"/> is non-None.</summary>
+            public long BalanceTagCount = -1;
         }
 
         /// <summary>Routing buckets keyed by category, sorted by ascending priority.</summary>
@@ -90,6 +99,23 @@ namespace IngameScript {
             int p;
             if (int.TryParse(raw, out p)) return p;
             return 100;
+        }
+
+
+        /// <summary>Parses an optional <c>[Balance=N]</c> name-tag into a non-negative unit count. Returns <c>-1</c> when the tag is absent or malformed; the balancer treats the absence sentinel as "use the class percent target instead."</summary>
+        /// <param name="name">Block's CustomName.</param>
+        /// <returns>Parsed non-negative count, or <c>-1</c> if no tag is present (or it failed to parse).</returns>
+        internal static long ParseBalanceTagCount(string name) {
+            if (string.IsNullOrEmpty(name)) return -1;
+            int idx = name.IndexOf("[Balance=", StringComparison.Ordinal);
+            if (idx < 0) return -1;
+            int end = name.IndexOf(']', idx + 9);
+            if (end < 0) return -1;
+            string raw = name.Substring(idx + 9, end - idx - 9).Trim();
+            long v;
+            if (!long.TryParse(raw, out v)) return -1;
+            if (v < 0) return -1;
+            return v;
         }
 
         /// <summary>Returns true when <paramref name="name"/> contains <paramref name="tag"/> as a substring.</summary>
