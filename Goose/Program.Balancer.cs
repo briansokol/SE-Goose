@@ -32,14 +32,40 @@ namespace IngameScript {
             Weapon
         }
 
+        // The three balancer item types are exposed as lazy properties rather than
+        // static-readonly fields so the test harness can load Program without
+        // triggering the SE definition-registry lookup that runs inside the
+        // MyItemType ctor (and which is unavailable outside the game runtime).
+
+        static MyItemType? _ingotUraniumCache;
+
         /// <summary>Reactor fuel type used by the balancer's reactor probe and fill logic.</summary>
-        static readonly MyItemType IngotUranium = new MyItemType("MyObjectBuilder_Ingot", "Uranium");
+        static MyItemType IngotUranium {
+            get {
+                if (!_ingotUraniumCache.HasValue) _ingotUraniumCache = new MyItemType("MyObjectBuilder_Ingot", "Uranium");
+                return _ingotUraniumCache.Value;
+            }
+        }
+
+        static MyItemType? _oreIceCache;
 
         /// <summary>Gas-generator and irrigation feedstock used by the balancer's gas probe and fill logic.</summary>
-        static readonly MyItemType OreIce = new MyItemType("MyObjectBuilder_Ore", "Ice");
+        static MyItemType OreIce {
+            get {
+                if (!_oreIceCache.HasValue) _oreIceCache = new MyItemType("MyObjectBuilder_Ore", "Ice");
+                return _oreIceCache.Value;
+            }
+        }
+
+        static MyItemType? _componentSteelPlateCache;
 
         /// <summary>Control item used to reject generic cargo containers from consumer detection. A real cargo container accepts SteelPlate; a reactor or weapon does not.</summary>
-        static readonly MyItemType ComponentSteelPlate = new MyItemType("MyObjectBuilder_Component", "SteelPlate");
+        static MyItemType ComponentSteelPlate {
+            get {
+                if (!_componentSteelPlateCache.HasValue) _componentSteelPlateCache = new MyItemType("MyObjectBuilder_Component", "SteelPlate");
+                return _componentSteelPlateCache.Value;
+            }
+        }
 
         /// <summary>Computes the absolute volume target (in m^3) for a weapon given its inventory capacity and the configured fill percent.</summary>
         /// <param name="maxVolume">Inventory's maximum volume, in m^3.</param>
