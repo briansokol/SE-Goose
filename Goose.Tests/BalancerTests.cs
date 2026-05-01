@@ -90,5 +90,30 @@ namespace Goose.Tests {
                 Program.WillBlockBeBalanced(Program.ConsumerKind.Reactor, 0L, 0).Should().BeTrue();
             }
         }
+
+
+        public class ComputeProportionalFactor_Tests {
+            [Theory]
+            [InlineData(300f, 0f, 300f, 1f)]      // supply == demand exactly
+            [InlineData(500f, 0f, 300f, 1f)]      // supply > demand → clamped to 1
+            [InlineData(150f, 0f, 300f, 0.5f)]    // half-supply → 0.5 factor
+            [InlineData(100f, 0f, 300f, 0.3333333f)]
+            [InlineData(0f, 0f, 300f, 0f)]        // no supply → 0
+            [InlineData(300f, 0f, 0f, 1f)]        // no demand → 1
+            [InlineData(0f, 0f, 0f, 1f)]          // both zero → 1 (degenerate)
+            [InlineData(300f, 100f, 300f, 0.6666667f)]   // 100 reserved by tagged, 200 left for 300 demand
+            [InlineData(300f, 300f, 100f, 0f)]    // tagged eats all supply, untagged starves
+            [InlineData(300f, 400f, 100f, 0f)]    // tagged exceeds supply (their fill will be partial)
+            [InlineData(500f, 100f, 300f, 1f)]    // 400 left vs 300 demand → clamped to 1
+            public void Returns_factor_for_proportional_fill(float supply, float taggedReserved, float untaggedDemand, float expected) {
+                Program.ComputeProportionalFactor(supply, taggedReserved, untaggedDemand).Should().BeApproximately(expected, 0.0001f);
+            }
+
+            [Fact]
+            public void Tagged_reservation_does_not_starve_untagged_when_supply_is_plentiful() {
+                // 1000 supply, 100 reserved, 300 demand → 900 left, factor capped at 1.
+                Program.ComputeProportionalFactor(1000f, 100f, 300f).Should().BeApproximately(1f, 0.0001f);
+            }
+        }
     }
 }

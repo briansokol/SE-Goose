@@ -200,7 +200,13 @@ The one-unit-at-a-time pattern is naturally correct for any unit volume (vanilla
 
 **Cross-consumer transfers:** when filling Reactor A, the balancer is *allowed* to pull Uranium from another reactor that has excess (because the source iteration walks every entry, not just non-consumers). This handles hand-loaded reactors and the `[Balance=N]` re-distribution case naturally without special logic.
 
-**Distribution under scarcity:** *fill in iteration order until source exhausted.* A grid with 250 Uranium and three untagged reactors at 80% fill ends up filling reactors 1 and 2 fully then reactor 3 partially — fewer reactors fully fueled beats all reactors partly fueled (survival-game-friendly). Round-robin is explicitly rejected for v1.
+**Distribution under scarcity:** *proportional* (iter 4). Before each kind's pass, compute `factor = clamp((supplyVolume - taggedReservedVolume) / untaggedDemandVolume, 0, 1)`. Each untagged block's effective target volume becomes `MaxVolume * classPercent / 100 * factor`, so all untagged blocks of a kind fill to the same fraction of their *own* volume. A grid with 1000 L of Uranium and three reactors with combined 2500 L of 80%-of-volume demand gets `factor = 0.4`, so each reactor fills to 32% of its own volume regardless of size — bigger reactors get proportionally more, but everyone gets *something*.
+
+Tagged blocks (`[Balance=N]`) are reserved their full count from the supply pool first, so the factor only scales untagged demand. A tagged reactor whose reservation alone exceeds total supply still gets first-come fill from the supply but won't reach its target; the untagged factor in that case is 0 and untagged reactors get nothing.
+
+For weapons, indivisible-magazine units mean the proportional math naturally produces "5 weapons get 1 magazine, 5 get 0" when supply is half of demand — the volume-fill loop overshoots a fractional target by one whole magazine, exhausting the supply. This matches the user-stated preference for whole-magazine fills.
+
+**Cache lifecycle:** the per-unit volume cache (`_balanceVolumeCache`) is **persistent across cycles** — it must be, because the proportional factor needs `volPerUnit` *before* any transfer in the cycle, and probes only populate it during transfer. The first cycle ever has a cold cache and falls back to `factor = 1.0` (matching pre-iter-4 behaviour); subsequent cycles compute the factor accurately. This is a one-time first-cycle behavioural difference, not a steady-state issue.
 
 **Yields:** `BudgetExceeded()` after each block; `ChunkBoundary` every 5 blocks (consumer counts are typically smaller than container counts).
 

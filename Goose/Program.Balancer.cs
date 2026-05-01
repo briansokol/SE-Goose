@@ -230,13 +230,10 @@ namespace IngameScript {
 
         /// <summary>Top-level balancer step. Runs reactors, then gas, then weapons (so critical-power demand wins under scarcity). Each class is a no-op when its PB target is 0.</summary>
         IEnumerator<YieldReason> StepBalanceConsumers() {
-            // Per-block tags ([Balance=N]) bypass the class enable check, so a
-            // tagged block runs even when its class percent is 0. The class
-            // pass for an untagged block runs only when the class percent is
-            // non-zero. Reactors first, then gas, then weapons so critical-
-            // power demand wins under scarcity.
-
-            _balanceVolumeCache.Clear();
+            // _balanceVolumeCache persists across cycles. The proportional
+            // factor needs volPerUnit *before* any transfer in this cycle, so
+            // we cannot clear the cache here. It is invalidated only on script
+            // recompile (via the field's natural lifecycle).
 
             IEnumerator<YieldReason> child;
 
@@ -296,8 +293,116 @@ namespace IngameScript {
             TryMove(dst, rinv, item, unitsToPush, "balance-excess");
         }
 
+
+        /// <summary>Pure helper: returns the proportional fill factor in [0, 1] for untagged blocks of a kind. Tagged blocks are reserved their full count from the supply before factor is computed; whatever's left is divided across untagged demand. Pure for unit testing.</summary>
+        /// <param name="supplyVolume">Total supply of the relevant item across the grid, in m^3.</param>
+        /// <param name="taggedReservedVolume">Volume reserved by tagged ([Balance=N]) blocks of the kind, in m^3.</param>
+        /// <param name="untaggedDemandVolume">Total natural-target volume of untagged blocks of the kind, in m^3.</param>
+        /// <returns><c>1.0</c> when there is no untagged demand or supply meets demand fully; <c>0.0</c> when tagged reservation already exhausts supply; otherwise <c>(supply - taggedReserved) / untaggedDemand</c>.</returns>
+        internal static float ComputeProportionalFactor(float supplyVolume, float taggedReservedVolume, float untaggedDemandVolume) {
+            if (untaggedDemandVolume <= 0f) return 1f;
+            float availableForUntagged = supplyVolume - taggedReservedVolume;
+            if (availableForUntagged <= 0f) return 0f;
+            if (availableForUntagged >= untaggedDemandVolume) return 1f;
+            return availableForUntagged / untaggedDemandVolume;
+        }
+
+        /// <summary>Computes the proportional factor for a given <paramref name="kind"/>. Returns <c>1.0</c> (no scaling) when the class is disabled, the cache is cold, or no untagged blocks are present. Otherwise computes the factor by walking the grid for supply + iterating <see cref="_entryByBlock"/> for tagged-reservation and untagged-demand sums.</summary>
+        float ComputeFactorForKind(ConsumerKind kind, int classPercent) {
+            if (classPercent == 0) return 1f;
+            if (kind == ConsumerKind.None) return 1f;
+
+            // Sum untagged demand volume.
+            float untaggedDemandVolume = 0f;
+            foreach (var kv in _entryByBlock) {
+                ContainerEntry entry = kv.Value;
+                if (entry == null || entry.ConsumerKind != kind) continue;
+                if (entry.BalanceTagCount >= 0) continue;
+                if (entry.Inventory == null) continue;
+                untaggedDemandVolume += (float)entry.Inventory.MaxVolume * (classPercent / 100f);
+            }
+            if (untaggedDemandVolume <= 0f) return 1f;
+
+            float supplyVolume;
+            float taggedReservedVolume;
+            if (kind == ConsumerKind.Weapon) {
+                supplyVolume = SumGridAmmoVolume();
+                if (supplyVolume <= 0f) return 1f;
+                float avgAmmoVol = AverageCachedAmmoVolPerUnit();
+                long taggedTotalCount = 0;
+                foreach (var kv in _entryByBlock) {
+                    ContainerEntry entry = kv.Value;
+                    if (entry == null || entry.ConsumerKind != ConsumerKind.Weapon) continue;
+                    if (entry.BalanceTagCount < 0) continue;
+                    taggedTotalCount += entry.BalanceTagCount;
+                }
+                taggedReservedVolume = taggedTotalCount * avgAmmoVol;
+            } else {
+                MyItemType item = (kind == ConsumerKind.Reactor) ? IngotUranium : OreIce;
+                float volPerUnit;
+                if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f) return 1f;
+                long supplyUnits = SumGridItemAmount(item);
+                supplyVolume = supplyUnits * volPerUnit;
+                long taggedUnits = 0;
+                foreach (var kv in _entryByBlock) {
+                    ContainerEntry entry = kv.Value;
+                    if (entry == null || entry.ConsumerKind != kind) continue;
+                    if (entry.BalanceTagCount < 0) continue;
+                    taggedUnits += entry.BalanceTagCount;
+                }
+                taggedReservedVolume = taggedUnits * volPerUnit;
+            }
+
+            return ComputeProportionalFactor(supplyVolume, taggedReservedVolume, untaggedDemandVolume);
+        }
+
+        /// <summary>Sums the amount of <paramref name="item"/> across every managed inventory on the grid (containers, consumer blocks, etc.). Used by the proportional-fill factor computation.</summary>
+        long SumGridItemAmount(MyItemType item) {
+            long total = 0;
+            foreach (var kv in _entryByBlock) {
+                ContainerEntry entry = kv.Value;
+                if (entry == null || entry.Inventory == null) continue;
+                total += GetCurrentAmount(entry.Inventory, item);
+            }
+            return total;
+        }
+
+        /// <summary>Sums the volume of every <c>AmmoMagazine/*</c> stack across every managed inventory, using cached per-unit volumes. Magazines whose volPerUnit has not yet been measured are skipped (their contribution is unknown), which conservatively understates supply and biases factor downward.</summary>
+        float SumGridAmmoVolume() {
+            float total = 0f;
+            foreach (var kv in _entryByBlock) {
+                ContainerEntry entry = kv.Value;
+                if (entry == null || entry.Inventory == null) continue;
+                _itemBuffer.Clear();
+                entry.Inventory.GetItems(_itemBuffer);
+                for (int i = 0; i < _itemBuffer.Count; i++) {
+                    MyItemType type = _itemBuffer[i].Type;
+                    if (type.TypeId != "MyObjectBuilder_AmmoMagazine") continue;
+                    float volPerUnit;
+                    if (!_balanceVolumeCache.TryGetValue(type, out volPerUnit) || volPerUnit <= 0f) continue;
+                    total += (float)_itemBuffer[i].Amount * volPerUnit;
+                }
+            }
+            return total;
+        }
+
+        /// <summary>Returns the average cached per-unit volume across all <c>AmmoMagazine/*</c> entries in the cache. Used to convert tagged weapon counts to a volume estimate for proportional-fill reservation. Returns <c>0</c> when no ammo volumes have been cached yet.</summary>
+        float AverageCachedAmmoVolPerUnit() {
+            int count = 0;
+            float total = 0f;
+            foreach (var kv in _balanceVolumeCache) {
+                if (kv.Key.TypeId != "MyObjectBuilder_AmmoMagazine") continue;
+                if (kv.Value <= 0f) continue;
+                total += kv.Value;
+                count++;
+            }
+            return count > 0 ? total / count : 0f;
+        }
+
         /// <summary>Iterates every consumer of the given <paramref name="kind"/>. Tagged blocks (<see cref="ContainerEntry.BalanceTagCount"/> &gt;= 0) use a unit-count target; untagged blocks use the class-wide <paramref name="classPercent"/> if non-zero, otherwise are skipped entirely.</summary>
         IEnumerator<YieldReason> BalanceConsumersOfKind(ConsumerKind kind, int classPercent) {
+            float factor = ComputeFactorForKind(kind, classPercent);
+
             int counter = 0;
             foreach (var kv in _entryByBlock) {
                 ContainerEntry entry = kv.Value;
@@ -308,7 +413,7 @@ namespace IngameScript {
                 if (entry.BalanceTagCount >= 0) {
                     BalanceConsumerByCount(entry, kind, dst, entry.BalanceTagCount);
                 } else if (classPercent > 0) {
-                    BalanceConsumerByPercent(entry, kind, dst, classPercent);
+                    BalanceConsumerByPercent(entry, kind, dst, classPercent, factor);
                 }
 
                 counter++;
@@ -333,8 +438,8 @@ namespace IngameScript {
         }
 
         /// <summary>Fills (or drains) <paramref name="dst"/> to <paramref name="percent"/>% of its inventory volume with the relevant item type. Pulls and pushes one unit / one magazine at a time, rechecking <see cref="IMyInventory.CurrentVolume"/> after each transfer so the loop is naturally correct for any unit volume (vanilla or modded).</summary>
-        void BalanceConsumerByPercent(ContainerEntry entry, ConsumerKind kind, IMyInventory dst, int percent) {
-            float targetVolume = ComputeFillTargetVolume((float)dst.MaxVolume, percent);
+        void BalanceConsumerByPercent(ContainerEntry entry, ConsumerKind kind, IMyInventory dst, int percent, float factor) {
+            float targetVolume = ComputeFillTargetVolume((float)dst.MaxVolume, percent) * factor;
             if (kind == ConsumerKind.Weapon) {
                 List<MyItemType> ammoList = entry.AcceptedAmmo;
                 if (ammoList == null || ammoList.Count == 0) return;
