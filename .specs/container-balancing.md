@@ -204,6 +204,19 @@ The one-unit-at-a-time pattern is naturally correct for any unit volume (vanilla
 
 **Yields:** `BudgetExceeded()` after each block; `ChunkBoundary` every 5 blocks (consumer counts are typically smaller than container counts).
 
+### UseConveyor auto-disable *(iter 3)*
+
+Reactors, gas generators, irrigation systems, and weapons all expose a `UseConveyor` terminal property that, when true, lets the block auto-pull what it needs from the conveyor system on its own. This fights the balancer's pull/push logic — the block keeps re-pulling immediately after the balancer pushes excess out, or insists on its own internal target while the balancer is trying to drain to a different target.
+
+`StepCategorizeConsumers` now disables `UseConveyor` on every block the balancer will act on this cycle. The decision is gated by the pure-static `WillBlockBeBalanced(kind, tagCount, classPercent)` predicate:
+- `kind == None` → not balanced (covers `[NoBalance]` and non-consumer blocks)
+- `BalanceTagCount >= 0` → balanced (tagged blocks bypass the class enable check)
+- otherwise → balanced only when the class percent is non-zero
+
+`DisableUseConveyor(block)` reads the property first and only writes when it's currently `true`, so cycles after the first are no-ops. The call is wrapped in try/catch so modded blocks that don't expose `UseConveyor` are silently ignored — the balancer keeps working on them, just with the auto-pull race condition unresolved.
+
+The change is one-way for v1: there is no automatic restore when the balancer is later disabled (e.g., user removes the `[Balance=N]` tag and sets the class percent to 0). Re-enabling auto-pull requires manually toggling the block's terminal control. Acceptable for v1 because the user can recover trivially and the alternative — remembering original state per block — is meaningful complexity for a recovery scenario most users won't hit.
+
 ### Sort interaction guard
 
 `Program.Sorting.cs:233` — inside `StepSortGenericCargo`, immediately after the existing `if (IsStockTagged(block)) continue;` line:

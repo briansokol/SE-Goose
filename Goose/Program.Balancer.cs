@@ -150,9 +150,45 @@ namespace IngameScript {
                     ProbeConsumerKind(entry, inv);
                 }
 
+                if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassPercentFor(entry.ConsumerKind))) {
+                    DisableUseConveyor(block);
+                }
+
                 counter++;
                 if (counter % 25 == 0) yield return YieldReason.ChunkBoundary;
                 if (BudgetExceeded()) yield return YieldReason.BudgetHit;
+            }
+        }
+
+        /// <summary>Returns true when the balancer will act on a block this cycle. Tagged blocks (<paramref name="balanceTagCount"/> &gt;= 0) always run; untagged blocks run only when their class percent is non-zero. Pure helper exposed for unit testing.</summary>
+        internal static bool WillBlockBeBalanced(ConsumerKind kind, long balanceTagCount, int classPercent) {
+            if (kind == ConsumerKind.None) return false;
+            if (balanceTagCount >= 0) return true;
+            return classPercent > 0;
+        }
+
+        /// <summary>Returns the configured class fill percent for a given <paramref name="kind"/>.</summary>
+        int ClassPercentFor(ConsumerKind kind) {
+            switch (kind) {
+                case ConsumerKind.Reactor: return _config.ReactorUraniumFillPercent;
+                case ConsumerKind.Gas: return _config.GasIceFillPercent;
+                case ConsumerKind.Weapon: return _config.WeaponAmmoFillPercent;
+                default: return 0;
+            }
+        }
+
+        /// <summary>Disables the block's built-in <c>UseConveyor</c> auto-pull so it stops fighting the balancer's pull/push decisions. The toggle is set via the standard terminal property exposed by reactors, gas generators, and weapons; modded blocks that omit the property are silently ignored. The change is one-way for v1 — there is no automatic restore when the balancer is later disabled. The user can re-enable conveyor pull manually via the block's terminal panel.</summary>
+        void DisableUseConveyor(IMyTerminalBlock block) {
+            if (block == null) return;
+            try {
+                if (block.GetValueBool("UseConveyor")) {
+                    block.SetValueBool("UseConveyor", false);
+                    if (_config.DebugLogging) {
+                        LogAction("balance: disabled UseConveyor on " + block.CustomName);
+                    }
+                }
+            } catch {
+                // The block does not expose a UseConveyor terminal property; silently ignore.
             }
         }
 

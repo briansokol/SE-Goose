@@ -56,5 +56,39 @@ namespace Goose.Tests {
                 Program.IsConsumerKindFromProbes(false, true, true, false).Should().Be(Program.ConsumerKind.Gas);
             }
         }
+
+
+        public class WillBlockBeBalanced_Tests {
+            [Theory]
+            [InlineData(Program.ConsumerKind.None, -1L, 0, false)]
+            [InlineData(Program.ConsumerKind.None, -1L, 80, false)]
+            [InlineData(Program.ConsumerKind.None, 100L, 80, false)]
+            [InlineData(Program.ConsumerKind.Reactor, -1L, 0, false)]
+            [InlineData(Program.ConsumerKind.Reactor, -1L, 80, true)]
+            [InlineData(Program.ConsumerKind.Reactor, 100L, 0, true)]
+            [InlineData(Program.ConsumerKind.Reactor, 100L, 80, true)]
+            [InlineData(Program.ConsumerKind.Reactor, 0L, 0, true)]
+            [InlineData(Program.ConsumerKind.Gas, -1L, 25, true)]
+            [InlineData(Program.ConsumerKind.Gas, -1L, 0, false)]
+            [InlineData(Program.ConsumerKind.Weapon, 50L, 0, true)]
+            [InlineData(Program.ConsumerKind.Weapon, -1L, 80, true)]
+            [InlineData(Program.ConsumerKind.Weapon, -1L, 0, false)]
+            public void Returns_true_when_balancer_acts_on_block(Program.ConsumerKind kind, long tagCount, int classPercent, bool expected) {
+                Program.WillBlockBeBalanced(kind, tagCount, classPercent).Should().Be(expected);
+            }
+
+            [Fact]
+            public void None_kind_never_balanced_even_with_tag() {
+                // [NoBalance] forces ConsumerKind.None; a co-existing [Balance=N] tag is ignored.
+                Program.WillBlockBeBalanced(Program.ConsumerKind.None, 100L, 80).Should().BeFalse();
+            }
+
+            [Fact]
+            public void Tag_with_zero_count_is_still_an_explicit_balance_intent() {
+                // [Balance=0] explicitly says "fill to 0 units" -- not the same as no tag.
+                // Documents that 0 tag count == drain to empty, not "skip me".
+                Program.WillBlockBeBalanced(Program.ConsumerKind.Reactor, 0L, 0).Should().BeTrue();
+            }
+        }
     }
 }
