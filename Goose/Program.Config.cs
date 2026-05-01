@@ -57,6 +57,15 @@ namespace IngameScript {
 
             /// <summary>Maximum number of distinct warnings retained before eviction.</summary>
             public int MaxWarningEntries = 32;
+
+            /// <summary>Per-reactor target count of <c>Ingot/Uranium</c>; <c>0</c> disables reactor balancing.</summary>
+            public int ReactorUraniumPerBlock = 0;
+
+            /// <summary>Per-block target count of <c>Ore/Ice</c> for gas generators and irrigation systems; <c>0</c> disables.</summary>
+            public int GasIcePerBlock = 0;
+
+            /// <summary>Per-weapon target fill as a percent (0–100) of the weapon's inventory volume; <c>0</c> disables.</summary>
+            public int WeaponAmmoFillPercent = 0;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -90,6 +99,30 @@ namespace IngameScript {
             _config.DebugLogging = _ini.Get("Goose", "debugLogging").ToBoolean(false);
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
+
+            int reactorRaw = _ini.Get("Goose", "reactorUraniumPerBlock").ToInt32(0);
+            int reactorClamped = ClampNonNegativeCount(reactorRaw);
+            if (reactorRaw != reactorClamped) {
+                LogWarningOnce("balancer:bad-count:reactorUraniumPerBlock",
+                    "[Goose] reactorUraniumPerBlock must be >= 0; clamped to 0 (was " + reactorRaw + ")");
+            }
+            _config.ReactorUraniumPerBlock = reactorClamped;
+
+            int gasRaw = _ini.Get("Goose", "gasIcePerBlock").ToInt32(0);
+            int gasClamped = ClampNonNegativeCount(gasRaw);
+            if (gasRaw != gasClamped) {
+                LogWarningOnce("balancer:bad-count:gasIcePerBlock",
+                    "[Goose] gasIcePerBlock must be >= 0; clamped to 0 (was " + gasRaw + ")");
+            }
+            _config.GasIcePerBlock = gasClamped;
+
+            int weaponRaw = _ini.Get("Goose", "weaponAmmoFillPercent").ToInt32(0);
+            int weaponClamped = ClampPercent(weaponRaw);
+            if (weaponRaw != weaponClamped) {
+                LogWarningOnce("balancer:bad-percent",
+                    "[Goose] weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
+            }
+            _config.WeaponAmmoFillPercent = weaponClamped;
 
             _categoryOverrides.Clear();
             List<MyIniKey> keys = new List<MyIniKey>();
@@ -162,6 +195,23 @@ namespace IngameScript {
             if (suffix == 'M' || suffix == 'm') { mode = QuotaMode.Minimum; numericPart = raw.Substring(0, raw.Length - 1); }
             else if (suffix == 'L' || suffix == 'l') { mode = QuotaMode.Limiter; numericPart = raw.Substring(0, raw.Length - 1); }
             return long.TryParse(numericPart, out amount);
+        }
+
+
+        /// <summary>Clamps a count to be non-negative. Pure helper used by the balancer config parser.</summary>
+        /// <param name="raw">Raw integer from CustomData.</param>
+        /// <returns><paramref name="raw"/> when non-negative; <c>0</c> otherwise.</returns>
+        internal static int ClampNonNegativeCount(int raw) {
+            return raw < 0 ? 0 : raw;
+        }
+
+        /// <summary>Clamps a percent value to the inclusive range 0-100. Pure helper used by the balancer config parser.</summary>
+        /// <param name="raw">Raw integer from CustomData.</param>
+        /// <returns><paramref name="raw"/> when in range; <c>0</c> when negative; <c>100</c> when greater than 100.</returns>
+        internal static int ClampPercent(int raw) {
+            if (raw < 0) return 0;
+            if (raw > 100) return 100;
+            return raw;
         }
 
         /// <summary>Parses a CustomData quota line into a typed quota and emits user-facing

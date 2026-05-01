@@ -68,5 +68,35 @@ namespace Goose.Tests {
                 Program.TryParseQuotaValue(raw, out amount, out mode).Should().BeFalse();
             }
         }
+
+        public class ClampNonNegativeCount_Tests {
+            [Theory]
+            [InlineData(0, 0)]
+            [InlineData(1, 1)]
+            [InlineData(100, 100)]
+            [InlineData(int.MaxValue, int.MaxValue)]
+            [InlineData(-1, 0)]
+            [InlineData(-1000, 0)]
+            [InlineData(int.MinValue, 0)]
+            public void Clamps_to_non_negative(int raw, int expected) {
+                Program.ClampNonNegativeCount(raw).Should().Be(expected);
+            }
+        }
+
+        public class ClampPercent_Tests {
+            [Theory]
+            [InlineData(0, 0)]
+            [InlineData(50, 50)]
+            [InlineData(100, 100)]
+            [InlineData(-1, 0)]
+            [InlineData(-1000, 0)]
+            [InlineData(101, 100)]
+            [InlineData(200, 100)]
+            [InlineData(int.MaxValue, 100)]
+            [InlineData(int.MinValue, 0)]
+            public void Clamps_to_zero_through_one_hundred(int raw, int expected) {
+                Program.ClampPercent(raw).Should().Be(expected);
+            }
+        }
     }
 }
