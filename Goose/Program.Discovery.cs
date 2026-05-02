@@ -23,13 +23,13 @@ namespace IngameScript {
         /// <summary>All inventory-bearing blocks Goose currently manages.</summary>
         List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
 
-        /// <summary>Cargo containers on the same construct, including unmanaged ones.</summary>
+        /// <summary>Cargo containers in scope, including unmanaged ones.</summary>
         List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
 
-        /// <summary>Ship connectors on the same construct.</summary>
+        /// <summary>Ship connectors in scope.</summary>
         List<IMyShipConnector> _connectors = new List<IMyShipConnector>();
 
-        /// <summary>Refineries, assemblers, and other production blocks on the same construct.</summary>
+        /// <summary>Refineries, assemblers, and other production blocks in scope.</summary>
         List<IMyProductionBlock> _productionBlocks = new List<IMyProductionBlock>();
 
         /// <summary>Ticks elapsed since the last rescan; initialized high to force a first-cycle rescan.</summary>
@@ -38,11 +38,12 @@ namespace IngameScript {
         /// <summary>Set by the <c>rescan</c> command to trigger an immediate rescan on the next cycle.</summary>
         bool _rescanRequested = false;
 
-        /// <summary>Predicate for blocks Goose should manage: same construct, has inventory, not ignored.</summary>
+        /// <summary>Predicate for blocks Goose should manage: in scope, has inventory, not ignored.</summary>
         bool IsManaged(IMyTerminalBlock block) {
             if (block == null) return false;
             if (block.Closed) return false;
-            if (!block.IsSameConstructAs(Me)) return false;
+            if (block.CubeGrid == null) return false;
+            if (!_scopeGrids.Contains(block.CubeGrid.EntityId)) return false;
             if (!block.HasInventory) return false;
             if (block == Me) return false;
             if (block is IMyShipController) return false;
@@ -50,9 +51,12 @@ namespace IngameScript {
             return true;
         }
 
-        /// <summary>Returns true when a previously discovered block is still alive on the same construct.</summary>
+        /// <summary>Returns true when a previously discovered block is still alive and in scope.</summary>
         bool ValidateBlock(IMyTerminalBlock block) {
-            return block != null && !block.Closed && block.IsSameConstructAs(Me);
+            return block != null
+                && !block.Closed
+                && block.CubeGrid != null
+                && _scopeGrids.Contains(block.CubeGrid.EntityId);
         }
 
         /// <summary>Returns true when a block name carries an opt-out tag (<c>[Ignore]</c> or <c>[Locked]</c>).</summary>
@@ -82,15 +86,15 @@ namespace IngameScript {
             if (BudgetExceeded()) yield return YieldReason.BudgetHit;
 
             _cargoContainers.Clear();
-            GridTerminalSystem.GetBlocksOfType(_cargoContainers, b => b.IsSameConstructAs(Me) && !b.Closed);
+            GridTerminalSystem.GetBlocksOfType(_cargoContainers, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
             yield return YieldReason.ChunkBoundary;
 
             _connectors.Clear();
-            GridTerminalSystem.GetBlocksOfType(_connectors, b => b.IsSameConstructAs(Me) && !b.Closed);
+            GridTerminalSystem.GetBlocksOfType(_connectors, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
             yield return YieldReason.ChunkBoundary;
 
             _productionBlocks.Clear();
-            GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => b.IsSameConstructAs(Me) && !b.Closed);
+            GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
             yield return YieldReason.ChunkBoundary;
 
             LogAction("Rescan: " + _allInventoryBlocks.Count + " inv, "

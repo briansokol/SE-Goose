@@ -44,7 +44,7 @@ namespace IngameScript {
 
         /// <summary>Step labels indexed by step number; mirrored on the Echo display.</summary>
         static readonly string[] StepLabels = {
-            "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
+            "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
             "SortGenericCargo", "BalanceConsumers"
         };
@@ -62,7 +62,7 @@ namespace IngameScript {
         IEnumerator<YieldReason> StepRoot() {
             while (true) {
                 ResetOneShotWarnings();
-                for (int i = 0; i < 8; i++) {
+                for (int i = 0; i < 9; i++) {
                     _stepIndex = i;
                     _subStep = 0;
                     _stepLabel = StepLabels[i];
@@ -81,14 +81,15 @@ namespace IngameScript {
         /// <summary>Returns the iterator for the step at index <paramref name="i"/>.</summary>
         IEnumerator<YieldReason> StepFor(int i) {
             switch (i) {
-                case 0: return StepRescanIfDue();
-                case 1: return StepParseConfigIfDirty();
-                case 2: return StepCategorizeContainers();
-                case 3: return StepCategorizeConsumers();
-                case 4: return StepScanInventories();
-                case 5: return StepFulfillStockQuotas();
-                case 6: return StepSortGenericCargo();
-                case 7: return StepBalanceConsumers();
+                case 0: return StepRebuildScopeIfDue();
+                case 1: return StepRescanIfDue();
+                case 2: return StepParseConfigIfDirty();
+                case 3: return StepCategorizeContainers();
+                case 4: return StepCategorizeConsumers();
+                case 5: return StepScanInventories();
+                case 6: return StepFulfillStockQuotas();
+                case 7: return StepSortGenericCargo();
+                case 8: return StepBalanceConsumers();
                 default: return NoOpStep();
             }
         }
