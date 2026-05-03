@@ -66,6 +66,9 @@ namespace IngameScript {
 
             /// <summary>Per-weapon target fill as a percent (0-100) of the weapon's inventory volume; <c>0</c> disables.</summary>
             public int WeaponAmmoFillPercent = 0;
+
+            /// <summary>Master kill-switch for connector federation. When false, <c>[Federate]</c>-tagged connectors are ignored.</summary>
+            public bool EnableConnectorFederation = true;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -99,6 +102,7 @@ namespace IngameScript {
             _config.DebugLogging = _ini.Get("Goose", "debugLogging").ToBoolean(false);
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
+            _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumFillPercent").ToInt32(0);
             int reactorClamped = ClampPercent(reactorRaw);
