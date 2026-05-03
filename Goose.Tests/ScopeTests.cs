@@ -58,5 +58,20 @@ namespace Goose.Tests {
                 Mech(MidId, RootId)
             }).Should().BeEquivalentTo(new[] { RootId, MidId });
         }
+
+        [Fact]
+        public void NoSubgrid_tag_blocks_extension_past_the_rotor() {
+            Run(new List<Program.MechanicalEdge> {
+                Mech(RootId, MidId, noSubgridTag: true)
+            }).Should().BeEquivalentTo(new[] { RootId });
+        }
+
+        [Fact]
+        public void NoSubgrid_mid_chain_cuts_off_descendants() {
+            Run(new List<Program.MechanicalEdge> {
+                Mech(RootId, MidId),
+                Mech(MidId, LeafId, noSubgridTag: true)
+            }).Should().BeEquivalentTo(new[] { RootId, MidId });
+        }
     }
 }

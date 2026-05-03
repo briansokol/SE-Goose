@@ -16,6 +16,9 @@ namespace IngameScript {
         /// <summary>Reusable buffer for projected connector edges fed to <see cref="BuildScope"/>. Empty until connector federation lands in a later PR.</summary>
         readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
 
+        /// <summary>Name-tag on a rotor/piston/hinge base that excludes its TopGrid (and everything past it) from scope.</summary>
+        internal const string NoSubgridTag = "[NoSubgrid]";
+
         /// <summary>POCO projection of <see cref="IMyMechanicalConnectionBlock"/> attachment state, used so the BFS core can be unit-tested without SE runtime.</summary>
         internal struct MechanicalEdge {
             /// <summary>EntityId of the grid hosting the base/stator side of this connection.</summary>
@@ -63,6 +66,7 @@ namespace IngameScript {
                         MechanicalEdge e = mechEdges[i];
                         if (e.BaseGridId != gridId) continue;
                         if (!e.Attached) continue;
+                        if (e.NoSubgridTag) continue;
                         if (e.TopGridId == 0) continue;
                         if (output.Add(e.TopGridId)) frontier.Enqueue(e.TopGridId);
                     }
@@ -81,7 +85,7 @@ namespace IngameScript {
                 edge.BaseGridId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
                 edge.TopGridId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
                 edge.Attached = m.IsAttached;
-                edge.NoSubgridTag = false;
+                edge.NoSubgridTag = NameHasTag(m.CustomName, NoSubgridTag);
                 _scopeMechBuf.Add(edge);
             }
             _scopeConnBuf.Clear();
