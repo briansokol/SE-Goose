@@ -67,6 +67,16 @@ namespace IngameScript {
             }
         }
 
+        /// <summary>Logs <paramref name="msg"/> the first time <paramref name="key"/> is seen across the lifetime of the script run. Subsequent calls with the same key are suppressed; a different key (e.g. one whose embedded count differs) emits a fresh entry. Used for routine state messages that would otherwise spam the action log.</summary>
+        /// <param name="key">Stable identifier for the action condition; encode any value that should trigger a fresh log into the key string.</param>
+        /// <param name="msg">Display message recorded on first occurrence of <paramref name="key"/>.</param>
+        void LogActionOnce(string key, string msg) {
+            if (_actionOnceKeys.Add(key)) LogAction(msg);
+        }
+
+        /// <summary>Keys for action messages already emitted via <see cref="LogActionOnce"/>. Persists across cycles so the same routine state is not re-logged.</summary>
+        HashSet<string> _actionOnceKeys = new HashSet<string>();
+
         /// <summary>
         /// Clears once-per-cycle warning state and removes their messages from the warning list,
         /// so resolved conditions stop appearing once their <see cref="LogWarningOnce"/> call site no longer fires.
