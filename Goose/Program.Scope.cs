@@ -181,6 +181,7 @@ namespace IngameScript {
                 ulong currentHash = ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
                 if (currentHash != _scopeDriftHash) {
                     LogAction("Scope drift detected");
+                    _rescanRequested = true;
                     needs = true;
                 }
             }
