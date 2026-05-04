@@ -1,4 +1,5 @@
 using Sandbox.ModAPI.Ingame;
+using SpaceEngineers.Game.ModAPI.Ingame;
 using System.Collections.Generic;
 using VRage.Game.ModAPI.Ingame;
 
@@ -13,11 +14,17 @@ namespace IngameScript {
         /// <summary>Reusable buffer for projected mechanical edges fed to <see cref="BuildScope"/>.</summary>
         readonly List<MechanicalEdge> _scopeMechBuf = new List<MechanicalEdge>();
 
-        /// <summary>Reusable buffer for projected connector edges fed to <see cref="BuildScope"/>. Empty until connector federation lands in a later PR.</summary>
+        /// <summary>Reusable buffer for projected connector edges fed to <see cref="BuildScope"/>.</summary>
         readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
+
+        /// <summary>Reusable buffer for raw connector enumeration during <see cref="RebuildScope"/>. Holds every <see cref="IMyShipConnector"/> visible to GTS, not just in-scope ones — federation is what brings new connectors into scope.</summary>
+        readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
 
         /// <summary>Name-tag on a rotor/piston/hinge base that excludes its TopGrid (and everything past it) from scope.</summary>
         internal const string NoSubgridTag = "[NoSubgrid]";
+
+        /// <summary>Name-tag on a PB-side connector that admits the currently-locked remote ship into scope.</summary>
+        internal const string FederateTag = "[Federate]";
 
         /// <summary>POCO projection of <see cref="IMyMechanicalConnectionBlock"/> attachment state, used so the BFS core can be unit-tested without SE runtime.</summary>
         internal struct MechanicalEdge {
@@ -39,15 +46,15 @@ namespace IngameScript {
             public long OtherGridId;
             /// <summary>True when the connector pair is currently locked.</summary>
             public bool Connected;
-            /// <summary>True when the local connector carries the <c>[Federate]</c> opt-in tag. Honored starting with the connector-federation PR.</summary>
+            /// <summary>True when the local connector carries the <c>[Federate]</c> opt-in tag.</summary>
             public bool FederateTag;
         }
 
-        /// <summary>Pure BFS that fills <paramref name="output"/> with every grid in scope. Walks mechanical edges from any scoped grid; connector edges and tag opt-out land in later PRs.</summary>
+        /// <summary>Pure BFS that fills <paramref name="output"/> with every grid in scope. Admits the remote side of any [Federate]-tagged, locked connector on the root grid (single-hop), then walks mechanical edges from every admitted grid.</summary>
         /// <param name="rootGridId">EntityId of the seed grid (the PB's own grid in production).</param>
         /// <param name="mechEdges">All mechanical-connection edges in the visible grid system.</param>
-        /// <param name="connEdges">All connector edges in the visible grid system. Reserved for the connector-federation PR; ignored here.</param>
-        /// <param name="enableFederation">Master kill-switch for connector federation. Reserved for the connector-federation PR.</param>
+        /// <param name="connEdges">All connector edges in the visible grid system. Only edges whose <see cref="ConnectorEdge.OwnerGridId"/> equals <paramref name="rootGridId"/> can extend scope (federation is non-transitive through further connectors).</param>
+        /// <param name="enableFederation">Master kill-switch for connector federation. When false, all <see cref="ConnectorEdge"/> entries are ignored.</param>
         /// <param name="output">Set to populate. Cleared first.</param>
         internal static void BuildScope(
             long rootGridId,
@@ -59,6 +66,18 @@ namespace IngameScript {
             output.Add(rootGridId);
             Queue<long> frontier = new Queue<long>();
             frontier.Enqueue(rootGridId);
+
+            if (enableFederation && connEdges != null) {
+                for (int i = 0; i < connEdges.Count; i++) {
+                    ConnectorEdge c = connEdges[i];
+                    if (c.OwnerGridId != rootGridId) continue;
+                    if (!c.Connected) continue;
+                    if (!c.FederateTag) continue;
+                    if (c.OtherGridId == 0) continue;
+                    if (output.Add(c.OtherGridId)) frontier.Enqueue(c.OtherGridId);
+                }
+            }
+
             while (frontier.Count > 0) {
                 long gridId = frontier.Dequeue();
                 if (mechEdges != null) {
@@ -88,8 +107,22 @@ namespace IngameScript {
                 edge.NoSubgridTag = NameHasTag(m.CustomName, NoSubgridTag);
                 _scopeMechBuf.Add(edge);
             }
+
+            _scopeConnRaw.Clear();
+            GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
             _scopeConnBuf.Clear();
-            BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, false, _scopeGrids);
+            for (int i = 0; i < _scopeConnRaw.Count; i++) {
+                IMyShipConnector c = _scopeConnRaw[i];
+                ConnectorEdge edge;
+                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
+                IMyShipConnector other = c.OtherConnector;
+                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
+                edge.FederateTag = NameHasTag(c.CustomName, FederateTag);
+                _scopeConnBuf.Add(edge);
+            }
+
+            BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
         }
 
         /// <summary>Rebuilds <see cref="_scopeGrids"/> when a rescan is pending, on first run, or once the rescan interval elapses; otherwise yields cheaply.</summary>

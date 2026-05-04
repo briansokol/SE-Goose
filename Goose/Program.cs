@@ -72,6 +72,11 @@ namespace IngameScript {
                         _config.DebugLogging = on;
                         LogAction("cmd: debug " + (on ? "on" : "off"));
                     }
+                } },
+                { "reset-scope", c => {
+                    _scopeGrids.Clear();
+                    _rescanRequested = true;
+                    LogAction("cmd: reset-scope");
                 } }
             };
         }
