@@ -109,9 +109,8 @@ namespace IngameScript {
                 .Append('/').Append(Runtime.MaxInstructionCount).Append('\n');
             _echoBuffer.Append("LastRunMs: ").Append(Runtime.LastRunTimeMs.ToString("F2")).Append('\n');
             if (_actionLog.Count > 0) {
-                _echoBuffer.Append("Last: ");
-                foreach (string s in _actionLog) { _echoBuffer.Append(s); }
-                _echoBuffer.Append('\n');
+                _echoBuffer.Append("Last:\n");
+                foreach (string s in _actionLog) { _echoBuffer.Append("  ").Append(s).Append('\n'); }
             }
             if (_warnings.Count > 0) {
                 _echoBuffer.Append("Warnings(").Append(_warnings.Count).Append("):\n");
