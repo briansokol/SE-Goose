@@ -518,6 +518,7 @@ namespace IngameScript {
         /// </summary>
         IEnumerator<YieldReason> StepScanInventories() {
             _itemTotals.Clear();
+            _gridAmmoVolume = 0f;
             int counter = 0;
             for (int b = 0; b < _allInventoryBlocks.Count; b++) {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
@@ -533,6 +534,12 @@ namespace IngameScript {
                         _itemTotals.TryGetValue(item.Type, out current);
                         _itemTotals[item.Type] = current + (long)item.Amount;
                         Catalog_RecordItem(item.Type);
+                        if (item.Type.TypeId == "MyObjectBuilder_AmmoMagazine") {
+                            float volPerUnit;
+                            if (_balanceVolumeCache.TryGetValue(item.Type, out volPerUnit) && volPerUnit > 0f) {
+                                _gridAmmoVolume += (float)item.Amount * volPerUnit;
+                            }
+                        }
                     }
                 }
                 counter++;
