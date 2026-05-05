@@ -386,5 +386,8 @@ namespace Goose.Tests {
                 malformed.Should().ContainSingle().Which.Should().Be("UnknownType/Foo:100");
             }
         }
+
+
+        
     }
 }

@@ -110,6 +110,13 @@ namespace IngameScript {
         /// <summary>Per-cycle cache of measured per-unit volume (m^3/unit) for items the balancer has transferred this cycle. Lets the bulk-transfer helpers compute exact unit counts from a remaining-volume headroom without iterating one unit at a time. Cleared at the start of every <see cref="StepBalanceConsumers"/> run.</summary>
         readonly Dictionary<MyItemType, float> _balanceVolumeCache = new Dictionary<MyItemType, float>();
 
+
+        /// <summary>Per-pass list of viable source containers (non-null entries with a non-null inventory). Populated at the top of <see cref="StepBalanceConsumers"/> so the three pull dispatches do not each rewalk <see cref="_entryByBlock"/>.</summary>
+        readonly List<ContainerEntry> _balanceSources = new List<ContainerEntry>();
+
+        /// <summary>Total ammo-magazine volume across <see cref="_entryByBlock"/>, accumulated during <see cref="StepScanInventories"/>. Only items whose volume-per-unit has been measured into <see cref="_balanceVolumeCache"/> contribute.</summary>
+        float _gridAmmoVolume;
+
         /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
         void RebuildAmmoCandidateList() {
             _ammoCandidates.Clear();
@@ -234,6 +241,14 @@ namespace IngameScript {
             // factor needs volPerUnit *before* any transfer in this cycle, so
             // we cannot clear the cache here. It is invalidated only on script
             // recompile (via the field's natural lifecycle).
+
+            _balanceSources.Clear();
+            foreach (var kv in _entryByBlock) {
+                ContainerEntry entry = kv.Value;
+                if (entry == null) continue;
+                if (entry.Inventory == null) continue;
+                _balanceSources.Add(entry);
+            }
 
             IEnumerator<YieldReason> child;
 
@@ -367,23 +382,9 @@ namespace IngameScript {
             return total;
         }
 
-        /// <summary>Sums the volume of every <c>AmmoMagazine/*</c> stack across every managed inventory, using cached per-unit volumes. Magazines whose volPerUnit has not yet been measured are skipped (their contribution is unknown), which conservatively understates supply and biases factor downward.</summary>
+        /// <summary>Returns the cached total volume of every <c>AmmoMagazine/*</c> stack on the grid, accumulated by <see cref="StepScanInventories"/>. Magazines whose volPerUnit has not yet been measured are excluded (their contribution is unknown), which conservatively understates supply and biases factor downward.</summary>
         float SumGridAmmoVolume() {
-            float total = 0f;
-            foreach (var kv in _entryByBlock) {
-                ContainerEntry entry = kv.Value;
-                if (entry == null || entry.Inventory == null) continue;
-                _itemBuffer.Clear();
-                entry.Inventory.GetItems(_itemBuffer);
-                for (int i = 0; i < _itemBuffer.Count; i++) {
-                    MyItemType type = _itemBuffer[i].Type;
-                    if (type.TypeId != "MyObjectBuilder_AmmoMagazine") continue;
-                    float volPerUnit;
-                    if (!_balanceVolumeCache.TryGetValue(type, out volPerUnit) || volPerUnit <= 0f) continue;
-                    total += (float)_itemBuffer[i].Amount * volPerUnit;
-                }
-            }
-            return total;
+            return _gridAmmoVolume;
         }
 
         /// <summary>Returns the average cached per-unit volume across all <c>AmmoMagazine/*</c> entries in the cache. Used to convert tagged weapon counts to a volume estimate for proportional-fill reservation. Returns <c>0</c> when no ammo volumes have been cached yet.</summary>
@@ -462,14 +463,12 @@ namespace IngameScript {
 
         /// <summary>Pulls one unit at a time of <paramref name="item"/> into <paramref name="dst"/> until <see cref="IMyInventory.CurrentVolume"/> reaches <paramref name="targetVolume"/> or no source has more of the item.</summary>
         void PullSingleItemByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume) {
-            foreach (var kv in _entryByBlock) {
+            for (int s = 0; s < _balanceSources.Count; s++) {
                 if ((float)dst.CurrentVolume >= targetVolume) return;
                 if (BudgetExceeded()) return;
-                ContainerEntry srcEntry = kv.Value;
-                if (srcEntry == null || srcEntry == self) continue;
-                IMyInventory srcInv = srcEntry.Inventory;
-                if (srcInv == null) continue;
-                BulkPullToTargetVolume(srcInv, dst, item, targetVolume);
+                ContainerEntry srcEntry = _balanceSources[s];
+                if (srcEntry == self) continue;
+                BulkPullToTargetVolume(srcEntry.Inventory, dst, item, targetVolume);
             }
         }
 
@@ -549,13 +548,11 @@ namespace IngameScript {
 
         /// <summary>Pulls up to <paramref name="needed"/> units of <paramref name="item"/> into <paramref name="dst"/> from any other entry on the grid. Walks <see cref="_entryByBlock"/> in dictionary order; <see cref="TryMove"/> silently no-ops when a candidate source has nothing to give.</summary>
         void PullCountFromAnySource(ContainerEntry self, IMyInventory dst, MyItemType item, long needed) {
-            foreach (var kv in _entryByBlock) {
+            for (int s = 0; s < _balanceSources.Count; s++) {
                 if (needed <= 0) return;
-                ContainerEntry srcEntry = kv.Value;
-                if (srcEntry == null || srcEntry == self) continue;
-                IMyInventory srcInv = srcEntry.Inventory;
-                if (srcInv == null) continue;
-                long moved = TryMove(srcInv, dst, item, needed, "balance");
+                ContainerEntry srcEntry = _balanceSources[s];
+                if (srcEntry == self) continue;
+                long moved = TryMove(srcEntry.Inventory, dst, item, needed, "balance");
                 needed -= moved;
             }
         }
@@ -586,16 +583,13 @@ namespace IngameScript {
         void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, List<MyItemType> ammoList, float targetVolume) {
             for (int a = 0; a < ammoList.Count; a++) {
                 if ((float)dst.CurrentVolume >= targetVolume) return;
-                if (BudgetExceeded()) return;
                 MyItemType ammo = ammoList[a];
-                foreach (var kv in _entryByBlock) {
+                for (int s = 0; s < _balanceSources.Count; s++) {
                     if ((float)dst.CurrentVolume >= targetVolume) break;
                     if (BudgetExceeded()) return;
-                    ContainerEntry srcEntry = kv.Value;
-                    if (srcEntry == null || srcEntry == self) continue;
-                    IMyInventory srcInv = srcEntry.Inventory;
-                    if (srcInv == null) continue;
-                    BulkPullToTargetVolume(srcInv, dst, ammo, targetVolume);
+                    ContainerEntry srcEntry = _balanceSources[s];
+                    if (srcEntry == self) continue;
+                    BulkPullToTargetVolume(srcEntry.Inventory, dst, ammo, targetVolume);
                 }
             }
         }

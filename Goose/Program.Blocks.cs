@@ -87,6 +87,18 @@ namespace IngameScript {
         /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
         List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
 
+        /// <summary>Reused active-quota map for <see cref="SyncStockTemplate"/>; key = quota key, value = full <c>key=value</c> line.</summary>
+        readonly Dictionary<string, string> _stockActiveQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>Reused builder for the <c>[Goose]</c> stock-template body.</summary>
+        readonly StringBuilder _stockTemplateSB = new StringBuilder(1024);
+
+        /// <summary>Reused merged-key set (catalog ∪ active) for the stock template.</summary>
+        readonly HashSet<string> _stockMergedKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>Reused sorted-key list for the stock template render order.</summary>
+        readonly List<string> _stockSortedKeys = new List<string>();
+
         /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
         /// <returns>The parsed priority, or 100 when no tag is present.</returns>
         internal static int ParsePriorityFromName(string name) {
@@ -308,7 +320,7 @@ namespace IngameScript {
         void SyncStockTemplate(IMyTerminalBlock block) {
             string current = block.CustomData ?? string.Empty;
 
-            Dictionary<string, string> activeQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
+            _stockActiveQuotas.Clear();
             string[] lines = current.Split('\n');
             bool inGooseSection = false;
             for (int i = 0; i < lines.Length; i++) {
@@ -326,10 +338,11 @@ namespace IngameScript {
                 string val = trimmed.Substring(eq + 1).Trim();
                 if (key.Length == 0 || val.Length == 0) continue;
                 if (!IsValidQuotaKey(key)) continue;
-                activeQuotas[key] = key + "=" + val;
+                _stockActiveQuotas[key] = key + "=" + val;
             }
 
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = _stockTemplateSB;
+            sb.Length = 0;
             sb.Append("[Goose]\n");
             sb.Append(";Stock container quotas.\n");
             sb.Append(";Uncomment a line to enable management of an item (remove the ; at the start of the line)\n");
@@ -347,20 +360,21 @@ namespace IngameScript {
 
             sb.Append("\n; --- Manage Items Below ---\n");
 
-            HashSet<string> mergedKeys = new HashSet<string>(StringComparer.Ordinal);
+            _stockMergedKeys.Clear();
             foreach (string k in _knownItems.Keys) {
-                mergedKeys.Add(k);
+                _stockMergedKeys.Add(k);
             }
-            foreach (string k in activeQuotas.Keys) {
-                mergedKeys.Add(k);
+            foreach (string k in _stockActiveQuotas.Keys) {
+                _stockMergedKeys.Add(k);
             }
-            if (mergedKeys.Count > 0) {
-                List<string> sortedKeys = new List<string>(mergedKeys);
-                sortedKeys.Sort(StringComparer.Ordinal);
-                for (int i = 0; i < sortedKeys.Count; i++) {
-                    string mergedKey = sortedKeys[i];
+            if (_stockMergedKeys.Count > 0) {
+                _stockSortedKeys.Clear();
+                foreach (string k in _stockMergedKeys) _stockSortedKeys.Add(k);
+                _stockSortedKeys.Sort(StringComparer.Ordinal);
+                for (int i = 0; i < _stockSortedKeys.Count; i++) {
+                    string mergedKey = _stockSortedKeys[i];
                     string activeLine;
-                    if (activeQuotas.TryGetValue(mergedKey, out activeLine)) {
+                    if (_stockActiveQuotas.TryGetValue(mergedKey, out activeLine)) {
                         sb.Append(activeLine);
                         sb.Append("\n");
                     } else {
@@ -478,6 +492,7 @@ namespace IngameScript {
         /// </summary>
         IEnumerator<YieldReason> StepScanInventories() {
             _itemTotals.Clear();
+            _gridAmmoVolume = 0f;
             int counter = 0;
             for (int b = 0; b < _allInventoryBlocks.Count; b++) {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
@@ -493,6 +508,12 @@ namespace IngameScript {
                         _itemTotals.TryGetValue(item.Type, out current);
                         _itemTotals[item.Type] = current + (long)item.Amount;
                         Catalog_RecordItem(item.Type);
+                        if (item.Type.TypeId == "MyObjectBuilder_AmmoMagazine") {
+                            float volPerUnit;
+                            if (_balanceVolumeCache.TryGetValue(item.Type, out volPerUnit) && volPerUnit > 0f) {
+                                _gridAmmoVolume += (float)item.Amount * volPerUnit;
+                            }
+                        }
                     }
                 }
                 counter++;
