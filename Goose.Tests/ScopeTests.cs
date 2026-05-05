@@ -150,5 +150,68 @@ namespace Goose.Tests {
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) }
             ).Should().BeEquivalentTo(new[] { RootId, RemoteId });
         }
+
+
+        [Fact]
+        public void DriftHash_is_seed_for_empty_inputs() {
+            ulong h = Program.ComputeScopeDriftHash(
+                new List<Program.MechanicalEdge>(),
+                new List<Program.ConnectorEdge>());
+            h.Should().Be(1469598103934665603UL);
+        }
+
+        [Fact]
+        public void DriftHash_is_stable_across_equal_inputs() {
+            var mech = new List<Program.MechanicalEdge> { Mech(RootId, MidId), Mech(MidId, LeafId, attached: false) };
+            var conn = new List<Program.ConnectorEdge> { Conn(RootId, RemoteId), Conn(RootId, RemoteTopId, federateTag: false) };
+            Program.ComputeScopeDriftHash(mech, conn)
+                .Should().Be(Program.ComputeScopeDriftHash(mech, conn));
+        }
+
+        [Fact]
+        public void DriftHash_changes_when_any_mech_field_changes() {
+            ulong baseline = Program.ComputeScopeDriftHash(
+                new List<Program.MechanicalEdge> { Mech(RootId, MidId) },
+                new List<Program.ConnectorEdge>());
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge> { Mech(LeafId, MidId) },
+                    new List<Program.ConnectorEdge>())
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge> { Mech(RootId, LeafId) },
+                    new List<Program.ConnectorEdge>())
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge> { Mech(RootId, MidId, attached: false) },
+                    new List<Program.ConnectorEdge>())
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge> { Mech(RootId, MidId, noSubgridTag: true) },
+                    new List<Program.ConnectorEdge>())
+                .Should().NotBe(baseline);
+        }
+
+        [Fact]
+        public void DriftHash_changes_when_any_connector_field_changes() {
+            ulong baseline = Program.ComputeScopeDriftHash(
+                new List<Program.MechanicalEdge>(),
+                new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) });
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge>(),
+                    new List<Program.ConnectorEdge> { Conn(MidId, RemoteId) })
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge>(),
+                    new List<Program.ConnectorEdge> { Conn(RootId, RemoteTopId) })
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge>(),
+                    new List<Program.ConnectorEdge> { Conn(RootId, RemoteId, connected: false) })
+                .Should().NotBe(baseline);
+            Program.ComputeScopeDriftHash(
+                    new List<Program.MechanicalEdge>(),
+                    new List<Program.ConnectorEdge> { Conn(RootId, RemoteId, federateTag: false) })
+                .Should().NotBe(baseline);
+        }
     }
 }

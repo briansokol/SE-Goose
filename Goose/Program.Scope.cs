@@ -105,7 +105,7 @@ namespace IngameScript {
         /// <summary>Cheap rolling hash over mechanical and connector edges. Differs whenever any input that affects scope changes.</summary>
         /// <param name="mech">Mechanical edges to mix into the hash.</param>
         /// <param name="conn">Connector edges to mix into the hash.</param>
-        static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn) {
+        internal static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn) {
             ulong h = 1469598103934665603UL;
             if (mech != null) {
                 for (int i = 0; i < mech.Count; i++) {
@@ -126,6 +126,37 @@ namespace IngameScript {
                     h ^= c.FederateTag ? 0x8UL : 0x0UL;
                     h *= 1099511628211UL;
                 }
+            }
+            return h;
+        }
+
+
+        /// <summary>Computes the scope drift hash directly from the live raw block lists, avoiding a full edge-cache rebuild on stable ticks.</summary>
+        /// <remarks>The bit composition must remain identical to <see cref="ComputeScopeDriftHash"/> so the two hashes are interchangeable.</remarks>
+        ulong ComputeScopeDriftHashFromRaw() {
+            ulong h = 1469598103934665603UL;
+            for (int i = 0; i < _scopeMechRaw.Count; i++) {
+                IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
+                if (m.Closed) continue;
+                long baseId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
+                long topId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
+                h ^= (ulong)baseId;
+                h ^= ((ulong)topId) << 1;
+                h ^= m.IsAttached ? 0x1UL : 0x0UL;
+                h ^= NameHasTag(m.CustomName, NoSubgridTag) ? 0x2UL : 0x0UL;
+                h *= 1099511628211UL;
+            }
+            for (int i = 0; i < _scopeConnRaw.Count; i++) {
+                IMyShipConnector c = _scopeConnRaw[i];
+                if (c.Closed) continue;
+                long ownerId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
+                IMyShipConnector other = c.OtherConnector;
+                long otherId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                h ^= (ulong)ownerId;
+                h ^= ((ulong)otherId) << 1;
+                h ^= c.Status == MyShipConnectorStatus.Connected ? 0x4UL : 0x0UL;
+                h ^= NameHasTag(c.CustomName, FederateTag) ? 0x8UL : 0x0UL;
+                h *= 1099511628211UL;
             }
             return h;
         }
@@ -177,8 +208,7 @@ namespace IngameScript {
                       || _ticksSinceRescan >= _config.RescanIntervalTicks;
 
             if (!needs && _scopeGrids.Count > 0) {
-                RefreshScopeCachesInPlace();
-                ulong currentHash = ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
+                ulong currentHash = ComputeScopeDriftHashFromRaw();
                 if (currentHash != _scopeDriftHash) {
                     LogAction("Scope drift detected");
                     _rescanRequested = true;
@@ -194,31 +224,5 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
         }
 
-        /// <summary>Re-projects the cached raw mechanical/connector blocks into the edge caches without hitting GTS. Used by the per-tick drift check to see live state without enumerating the world.</summary>
-        void RefreshScopeCachesInPlace() {
-            _scopeMechCache.Clear();
-            for (int i = 0; i < _scopeMechRaw.Count; i++) {
-                IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
-                if (m.Closed) continue;
-                MechanicalEdge edge;
-                edge.BaseGridId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
-                edge.TopGridId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
-                edge.Attached = m.IsAttached;
-                edge.NoSubgridTag = NameHasTag(m.CustomName, NoSubgridTag);
-                _scopeMechCache.Add(edge);
-            }
-            _scopeConnCache.Clear();
-            for (int i = 0; i < _scopeConnRaw.Count; i++) {
-                IMyShipConnector c = _scopeConnRaw[i];
-                if (c.Closed) continue;
-                ConnectorEdge edge;
-                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
-                IMyShipConnector other = c.OtherConnector;
-                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
-                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
-                edge.FederateTag = NameHasTag(c.CustomName, FederateTag);
-                _scopeConnCache.Add(edge);
-            }
-        }
     }
 }
