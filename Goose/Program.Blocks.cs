@@ -87,6 +87,10 @@ namespace IngameScript {
         /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
         List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
 
+
+        /// <summary>Scratch set reused by <see cref="StepCategorizeContainers"/> for one-pass tag extraction.</summary>
+        readonly HashSet<string> _tagScratch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
         /// <returns>The parsed priority, or 100 when no tag is present.</returns>
         internal static int ParsePriorityFromName(string name) {
@@ -123,6 +127,25 @@ namespace IngameScript {
             return !string.IsNullOrEmpty(name) && name.IndexOf(tag, StringComparison.Ordinal) >= 0;
         }
 
+
+        /// <summary>Extracts every bracketed token from a block name into <paramref name="tags"/>; the brackets themselves are stripped.</summary>
+        /// <remarks>So <c>"Cargo [Stock][Ingots]"</c> populates <paramref name="tags"/> with <c>"Stock"</c> and <c>"Ingots"</c>, matching the bare-token form of <see cref="CategoryTags"/>.</remarks>
+        /// <param name="name">Block name to scan; may be <c>null</c> or empty.</param>
+        /// <param name="tags">Set to populate. Cleared first.</param>
+        internal static void ExtractBracketedTags(string name, HashSet<string> tags) {
+            tags.Clear();
+            if (string.IsNullOrEmpty(name)) return;
+            int i = 0;
+            while (i < name.Length) {
+                int open = name.IndexOf('[', i);
+                if (open < 0) break;
+                int close = name.IndexOf(']', open + 1);
+                if (close < 0) break;
+                tags.Add(name.Substring(open + 1, close - open - 1));
+                i = close + 1;
+            }
+        }
+
         /// <summary>
         /// Rebuilds <see cref="_containersByCategory"/>, <see cref="_stockContainers"/>, and
         /// <see cref="_entryByBlock"/> from name tags and CustomData on every managed block.
@@ -137,15 +160,17 @@ namespace IngameScript {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
                 if (!ValidateBlock(block)) continue;
 
+                ExtractBracketedTags(block.CustomName, _tagScratch);
+
                 ContainerEntry entry = new ContainerEntry {
                     Block = block,
                     Inventory = block.GetInventory(0),
                     Priority = ParsePriorityFromName(block.CustomName),
-                    IsStock = NameHasTag(block.CustomName, "[Stock]")
+                    IsStock = _tagScratch.Contains("Stock")
                 };
 
                 for (int c = 0; c < CategoryTags.Length; c++) {
-                    if (NameHasTag(block.CustomName, CategoryTags[c])) {
+                    if (_tagScratch.Contains(CategoryTags[c])) {
                         ItemCategory cat = (ItemCategory)c;
                         entry.Categories.Add(cat);
                         List<ContainerEntry> bucket;
