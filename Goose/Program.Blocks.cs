@@ -23,13 +23,13 @@ namespace IngameScript {
         /// <summary>High-level item buckets used to route inventory between containers.</summary>
         public enum ItemCategory {
             Ingots, Ores, Components, Prototech, Tools, Weapons,
-            Ammo, Consumables, Ingredients, Meals, Misc
+            Ammo, Consumables, Ingredients, Meals, Seeds, Misc
         }
 
         /// <summary>Bare tag tokens (no brackets) recognized in container names; index aligns with <see cref="ItemCategory"/>.</summary>
         static readonly string[] CategoryTags = {
             "Ingots", "Ores", "Components", "Prototech", "Tools", "Weapons",
-            "Ammo", "Consumables", "Ingredients", "Meals", "Misc"
+            "Ammo", "Consumables", "Ingredients", "Meals", "Seeds", "Misc"
         };
 
         /// <summary>Cached metadata for a single managed inventory block.</summary>
@@ -448,6 +448,7 @@ namespace IngameScript {
             if (typeId == "MyObjectBuilder_Ingot") return ItemCategory.Ingots;
             if (typeId == "MyObjectBuilder_AmmoMagazine") return ItemCategory.Ammo;
             if (typeId == "MyObjectBuilder_Datapad") return ItemCategory.Misc;
+            if (typeId == "MyObjectBuilder_SeedItem") return ItemCategory.Seeds;
 
             if (typeId == "MyObjectBuilder_Component") {
                 if (PrototechSubtypes.Contains(subId)) return ItemCategory.Prototech;
