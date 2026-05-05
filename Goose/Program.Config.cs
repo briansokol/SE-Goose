@@ -69,6 +69,13 @@ namespace IngameScript {
 
             /// <summary>Master kill-switch for connector federation. When false, <c>[Federate]</c>-tagged connectors are ignored.</summary>
             public bool EnableConnectorFederation = true;
+
+            /// <summary>
+            /// When true, redistributes items across non-Stock category-tagged containers so each
+            /// <c>[P:NN]</c> tier holds an equal share per item type. Higher-priority tiers fill first;
+            /// overflow lands in lower tiers. Off by default.
+            /// </summary>
+            public bool EnableSameRoleBalancing = false;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -103,6 +110,7 @@ namespace IngameScript {
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
+            _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumFillPercent").ToInt32(0);
             int reactorClamped = ClampPercent(reactorRaw);
@@ -254,7 +262,7 @@ namespace IngameScript {
         }
 
 
-        /// <summary>Live-merges the three balancer keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with a default value of <c>0</c> and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
+        /// <summary>Live-merges the balancer-related keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with their default value and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
         void EnsureBalancerKeysPopulated() {
             bool changed = false;
             if (!_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
@@ -274,6 +282,14 @@ namespace IngameScript {
                 _ini.Set("Goose", "weaponAmmoFillPercent", 0);
                 _ini.SetComment("Goose", "weaponAmmoFillPercent",
                     "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "enableSameRoleBalancing")) {
+                _ini.Set("Goose", "enableSameRoleBalancing", false);
+                _ini.SetComment("Goose", "enableSameRoleBalancing",
+                    "When true, redistributes items inside non-Stock category-tagged containers so each " +
+                    "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
+                    "overflow lands in lower tiers. false (default) disables.");
                 changed = true;
             }
             if (changed) {

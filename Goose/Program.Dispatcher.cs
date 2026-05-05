@@ -46,7 +46,7 @@ namespace IngameScript {
         static readonly string[] StepLabels = {
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
-            "SortGenericCargo", "BalanceConsumers"
+            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -62,7 +62,7 @@ namespace IngameScript {
         IEnumerator<YieldReason> StepRoot() {
             while (true) {
                 ResetOneShotWarnings();
-                for (int i = 0; i < 9; i++) {
+                for (int i = 0; i < 10; i++) {
                     _stepIndex = i;
                     _subStep = 0;
                     _stepLabel = StepLabels[i];
@@ -90,6 +90,7 @@ namespace IngameScript {
                 case 6: return StepFulfillStockQuotas();
                 case 7: return StepSortGenericCargo();
                 case 8: return StepBalanceConsumers();
+                case 9: return StepBalanceSameRoleContainers();
                 default: return NoOpStep();
             }
         }
