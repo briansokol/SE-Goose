@@ -160,6 +160,14 @@ namespace Goose.Tests {
             }
 
             [Theory]
+            [InlineData("MyObjectBuilder_SeedItem", "Seed", Program.ItemCategory.Seeds)]
+            [InlineData("MyObjectBuilder_SeedItem", "", Program.ItemCategory.Seeds)]
+            [InlineData("MyObjectBuilder_SeedItem", "WheatSeed", Program.ItemCategory.Seeds)]
+            public void Classifies_seed_items(string typeId, string subId, Program.ItemCategory expected) {
+                Program.ClassifyByTypeId(typeId, subId).Should().Be(expected);
+            }
+
+            [Theory]
             [InlineData("MyObjectBuilder_PhysicalObject", "ScrapPart")]
             [InlineData("MyObjectBuilder_TotallyMadeUp", "Whatever")]
             [InlineData("", "")]
