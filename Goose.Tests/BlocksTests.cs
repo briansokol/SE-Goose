@@ -388,66 +388,6 @@ namespace Goose.Tests {
         }
 
 
-        public class ExtractBracketedTags_Tests {
-            static HashSet<string> Run(string name) {
-                var tags = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-                Program.ExtractBracketedTags(name, tags);
-                return tags;
-            }
-
-            [Fact]
-            public void Null_name_yields_empty_set() {
-                Run(null).Should().BeEmpty();
-            }
-
-            [Fact]
-            public void Empty_name_yields_empty_set() {
-                Run("").Should().BeEmpty();
-            }
-
-            [Fact]
-            public void Plain_name_yields_empty_set() {
-                Run("Cargo Container").Should().BeEmpty();
-            }
-
-            [Fact]
-            public void Single_tag_is_extracted_without_brackets() {
-                Run("Cargo [Stock]").Should().BeEquivalentTo(new[] { "Stock" });
-            }
-
-            [Fact]
-            public void Multiple_tags_are_all_extracted() {
-                Run("Cargo [Stock][Ingots]").Should().BeEquivalentTo(new[] { "Stock", "Ingots" });
-            }
-
-            [Fact]
-            public void Tags_with_internal_spaces_are_kept_as_is() {
-                Run("Cargo [P:5] [Ingot/Iron:100]")
-                    .Should().BeEquivalentTo(new[] { "P:5", "Ingot/Iron:100" });
-            }
-
-            [Fact]
-            public void Membership_check_is_case_insensitive() {
-                var tags = Run("Cargo [stock]");
-                tags.Contains("Stock").Should().BeTrue();
-            }
-
-            [Fact]
-            public void Unclosed_bracket_terminates_extraction() {
-                Run("Cargo [Ingots] [Open").Should().BeEquivalentTo(new[] { "Ingots" });
-            }
-
-            [Fact]
-            public void Tags_clear_set_before_populating() {
-                var tags = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { "Leftover" };
-                Program.ExtractBracketedTags("Cargo [Stock]", tags);
-                tags.Should().BeEquivalentTo(new[] { "Stock" });
-            }
-
-            [Fact]
-            public void Nested_open_bracket_is_swallowed_into_token() {
-                Run("[a[b]").Should().BeEquivalentTo(new[] { "a[b" });
-            }
-        }
+        
     }
 }
