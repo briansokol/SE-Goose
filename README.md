@@ -90,7 +90,7 @@ The Programmable Block's own Custom Data accepts a few optional settings:
 ```
 [Goose]
 rescanIntervalTicks=600       ; How often to rediscover blocks (in ticks)
-budgetFraction=0.5            ; How much per-tick processing time to use (0–1)
+budgetFraction=0.8            ; How much per-tick processing time to use (0–1)
 debugLogging=false            ; Log every transfer to the action log
 maxActionLogEntries=48        ; How many recent actions to remember
 maxWarningEntries=32          ; How many distinct warnings to remember

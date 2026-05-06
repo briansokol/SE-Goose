@@ -47,7 +47,7 @@ namespace IngameScript {
             public int RescanIntervalTicks = 600;
 
             /// <summary>Fraction of the per-tick instruction budget the script may consume before yielding.</summary>
-            public float BudgetFraction = 0.5f;
+            public float BudgetFraction = 0.8f;
 
             /// <summary>When true, every transfer is added to the action log.</summary>
             public bool DebugLogging = false;
@@ -105,7 +105,7 @@ namespace IngameScript {
                 yield break;
             }
             _config.RescanIntervalTicks = _ini.Get("Goose", "rescanIntervalTicks").ToInt32(600);
-            _config.BudgetFraction = (float)_ini.Get("Goose", "budgetFraction").ToDouble(0.5);
+            _config.BudgetFraction = (float)_ini.Get("Goose", "budgetFraction").ToDouble(0.8);
             _config.DebugLogging = _ini.Get("Goose", "debugLogging").ToBoolean(false);
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);

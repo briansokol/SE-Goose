@@ -31,7 +31,7 @@ namespace IngameScript {
         }
 
         /// <summary>Fallback budget fraction used before configuration is parsed.</summary>
-        const float DefaultBudgetFraction = 0.5f;
+        const float DefaultBudgetFraction = 0.8f;
 
         /// <summary>Index of the currently executing top-level step.</summary>
         int _stepIndex;
