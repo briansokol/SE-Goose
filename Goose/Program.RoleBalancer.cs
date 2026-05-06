@@ -63,7 +63,7 @@ namespace IngameScript {
                 }
                 if (!WillSameRoleBalancingRun(true, _roleBalanceCandidates.Count)) continue;
 
-                IEnumerator<YieldReason> child = BalanceCategoryByTier(_roleBalanceCandidates);
+                IEnumerator<YieldReason> child = BalanceCategoryByTier(kv.Key, _roleBalanceCandidates);
                 while (child.MoveNext()) yield return child.Current;
 
                 yield return YieldReason.ChunkBoundary;
@@ -76,7 +76,7 @@ namespace IngameScript {
         /// tier at a time. For each tier, first pulls items up from all lower tiers, then equalises
         /// holdings within the tier. Yields between tiers and on budget hits.
         /// </summary>
-        IEnumerator<YieldReason> BalanceCategoryByTier(List<ContainerEntry> candidates) {
+        IEnumerator<YieldReason> BalanceCategoryByTier(ItemCategory category, List<ContainerEntry> candidates) {
             int n = candidates.Count;
             int i = 0;
             while (i < n) {
@@ -92,12 +92,12 @@ namespace IngameScript {
                 for (int t = tierEnd; t < n; t++) _roleBalanceLowerTiers.Add(candidates[t]);
 
                 if (_roleBalanceLowerTiers.Count > 0) {
-                    IEnumerator<YieldReason> pull = PullUpIntoTier(_roleBalanceTier, _roleBalanceLowerTiers);
+                    IEnumerator<YieldReason> pull = PullUpIntoTier(category, _roleBalanceTier, _roleBalanceLowerTiers);
                     while (pull.MoveNext()) yield return pull.Current;
                 }
 
                 if (_roleBalanceTier.Count >= 2) {
-                    IEnumerator<YieldReason> split = BalanceWithinTier(_roleBalanceTier);
+                    IEnumerator<YieldReason> split = BalanceWithinTier(category, _roleBalanceTier);
                     while (split.MoveNext()) yield return split.Current;
                 }
 
@@ -107,12 +107,19 @@ namespace IngameScript {
 
         /// <summary>
         /// Pulls items up from <paramref name="lowerTiers"/> into <paramref name="upperTier"/>
-        /// until upper containers cannot accept more of any type held below. The order is
-        /// upper-by-position, then lower-by-position; <see cref="MoveAllOfType"/>'s capacity
-        /// clamping handles partial fits naturally.
+        /// until upper containers cannot accept more of any type that classifies into
+        /// <paramref name="category"/>. Off-category items (e.g. Ingots sitting in a multi-tag
+        /// "Ores Ingots" container while we are processing the Ores category) are intentionally
+        /// left in place so the Ingots-category pass can balance them, and so the generic sort
+        /// step doesn't fight us by routing them straight back. Order is upper-by-position then
+        /// lower-by-position; <see cref="MoveAllOfType"/>'s capacity clamping handles partial fits.
         /// </summary>
-        IEnumerator<YieldReason> PullUpIntoTier(List<ContainerEntry> upperTier, List<ContainerEntry> lowerTiers) {
-            // Collect distinct item types observed in any lower-tier container.
+        IEnumerator<YieldReason> PullUpIntoTier(ItemCategory category, List<ContainerEntry> upperTier, List<ContainerEntry> lowerTiers) {
+            // Collect distinct item types observed in any lower-tier container, filtered to
+            // types that classify into the current category. This prevents a multi-tag container
+            // (e.g. one tagged both "Ores" and "Ingots") from leaking its off-category contents
+            // into containers tagged only for the current category — which the next sort pass
+            // would just route back, wasting budget every cycle.
             // _roleBalanceHoldings is reused as a key-only set here; values are null and unused.
             _roleBalanceHoldings.Clear();
             for (int l = 0; l < lowerTiers.Count; l++) {
@@ -122,6 +129,7 @@ namespace IngameScript {
                 low.Inventory.GetItems(_itemBuffer);
                 for (int k = 0; k < _itemBuffer.Count; k++) {
                     MyItemType t = _itemBuffer[k].Type;
+                    if (Classify(t) != category) continue;
                     if (!_roleBalanceHoldings.ContainsKey(t)) _roleBalanceHoldings[t] = null;
                 }
             }
@@ -145,13 +153,16 @@ namespace IngameScript {
         }
 
         /// <summary>
-        /// Equalises holdings of every item type observed in <paramref name="tier"/> across the
-        /// tier's containers, water-filling around per-container capacity ceilings. Computes
-        /// targets via <see cref="ComputeEqualSplitTargets"/> then applies them with a single
-        /// pass of pair-wise transfers from over-target sources to under-target destinations.
+        /// Equalises holdings of every item type observed in <paramref name="tier"/> that
+        /// classifies into <paramref name="category"/>, water-filling around per-container
+        /// capacity ceilings. Off-category items in the tier (rare; a transient state between
+        /// the sorter and the connector hand-off) are skipped so we don't redistribute items
+        /// that the sorter is about to relocate. Computes targets via
+        /// <see cref="ComputeEqualSplitTargets"/> then applies them with a single pass of
+        /// pair-wise transfers from over-target sources to under-target destinations.
         /// </summary>
-        IEnumerator<YieldReason> BalanceWithinTier(List<ContainerEntry> tier) {
-            BuildTierHoldings(tier, _roleBalanceHoldings);
+        IEnumerator<YieldReason> BalanceWithinTier(ItemCategory category, List<ContainerEntry> tier) {
+            BuildTierHoldings(category, tier, _roleBalanceHoldings);
             foreach (var kv in _roleBalanceHoldings) {
                 MyItemType type = kv.Key;
                 long[] holdings = kv.Value;
@@ -188,11 +199,12 @@ namespace IngameScript {
         }
 
         /// <summary>
-        /// Aggregates per-container holdings of every observed item type across <paramref name="tier"/>
-        /// into <paramref name="outHoldings"/>. The output dictionary is cleared on entry; each value
+        /// Aggregates per-container holdings across <paramref name="tier"/> into
+        /// <paramref name="outHoldings"/>, restricted to item types that classify into
+        /// <paramref name="category"/>. The output dictionary is cleared on entry; each value
         /// is a fresh <c>long[]</c> sized to the tier's container count, indexed by tier position.
         /// </summary>
-        void BuildTierHoldings(List<ContainerEntry> tier, Dictionary<MyItemType, long[]> outHoldings) {
+        void BuildTierHoldings(ItemCategory category, List<ContainerEntry> tier, Dictionary<MyItemType, long[]> outHoldings) {
             outHoldings.Clear();
             int n = tier.Count;
             for (int i = 0; i < n; i++) {
@@ -202,6 +214,10 @@ namespace IngameScript {
                 inv.GetItems(_itemBuffer);
                 for (int k = 0; k < _itemBuffer.Count; k++) {
                     MyItemType type = _itemBuffer[k].Type;
+                    // Defense in depth: skip items that don't belong to this category.
+                    // The within-tier split must not redistribute foreign items between
+                    // containers — those should be left for StepSortGenericCargo to relocate.
+                    if (Classify(type) != category) continue;
                     long[] arr;
                     if (!outHoldings.TryGetValue(type, out arr)) {
                         arr = new long[n];
