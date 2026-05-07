@@ -100,12 +100,15 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
         }
 
-        /// <summary>Pumps one entry of the work iterator, restarting the pipeline on completion or fault.</summary>
+        /// <summary>Pumps the work iterator repeatedly within a single tick until <see cref="BudgetExceeded"/> trips or the iterator finishes, restarting the pipeline on completion or fault.</summary>
         void RunOneTick() {
             try {
-                if (_workIterator == null || !_workIterator.MoveNext()) {
-                    _workIterator = StepRoot();
-                }
+                do {
+                    if (_workIterator == null || !_workIterator.MoveNext()) {
+                        _workIterator = StepRoot();
+                        break;
+                    }
+                } while (!BudgetExceeded());
             } catch (Exception ex) {
                 LogError("step " + _stepIndex + "." + _subStep + " " + _stepLabel, ex);
                 _workIterator = StepRoot();
