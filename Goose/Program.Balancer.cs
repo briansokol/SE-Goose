@@ -24,9 +24,9 @@ namespace IngameScript {
         public enum ConsumerKind {
             /// <summary>Not a consumer; balancer ignores. Also the value used for blocks tagged <c>[NoBalance]</c>.</summary>
             None,
-            /// <summary>Reactor (or modded equivalent) that accepts <c>Ingot/Uranium</c>.</summary>
+            /// <summary>Block implementing <see cref="IMyReactor"/>; balanced for <c>Ingot/Uranium</c>.</summary>
             Reactor,
-            /// <summary>O2/H2 generator, irrigation system, or other block that accepts <c>Ore/Ice</c>.</summary>
+            /// <summary>Block implementing <see cref="IMyGasGenerator"/> (O2/H2 generators, irrigation systems, etc.); balanced for <c>Ore/Ice</c>.</summary>
             Gas,
             /// <summary>Weapon (turret, fixed gun, or modded equivalent) that accepts an <c>AmmoMagazine</c> subtype.</summary>
             Weapon
@@ -81,10 +81,13 @@ namespace IngameScript {
         /// <param name="canAddAnyAmmo">True if the inventory accepts at least one known <c>AmmoMagazine</c> subtype.</param>
         /// <param name="canAddSteelPlate">True if the inventory accepts <c>Component/SteelPlate</c>; identifies generic cargo containers.</param>
         /// <returns>The matched <see cref="ConsumerKind"/>, or <see cref="ConsumerKind.None"/> when the block is a generic container or accepts nothing recognised.</returns>
-        internal static ConsumerKind IsConsumerKindFromProbes(bool canAddIngotUranium, bool canAddOreIce, bool canAddAnyAmmo, bool canAddSteelPlate) {
+        /// <summary>Resolves the <see cref="ConsumerKind"/> for the weapon-detection path from probe results.</summary>
+        /// <remarks>Reactor and Gas are detected by interface check (<see cref="IMyReactor"/> / <see cref="IMyGasGenerator"/>) and do not flow through this helper. Returns <see cref="ConsumerKind.Weapon"/> only when the inventory accepts at least one ammo magazine and rejects steel plate (i.e. it isn't a generic cargo container).</remarks>
+        /// <param name="canAddAnyAmmo">True if the inventory accepts at least one known <c>AmmoMagazine</c> subtype.</param>
+        /// <param name="canAddSteelPlate">True if the inventory accepts <c>Component/SteelPlate</c> (used to gate out generic cargo).</param>
+        /// <returns><see cref="ConsumerKind.Weapon"/> or <see cref="ConsumerKind.None"/>.</returns>
+        internal static ConsumerKind IsWeaponFromProbe(bool canAddAnyAmmo, bool canAddSteelPlate) {
             if (canAddSteelPlate) return ConsumerKind.None;
-            if (canAddIngotUranium) return ConsumerKind.Reactor;
-            if (canAddOreIce) return ConsumerKind.Gas;
             if (canAddAnyAmmo) return ConsumerKind.Weapon;
             return ConsumerKind.None;
         }
@@ -204,21 +207,17 @@ namespace IngameScript {
             entry.ConsumerKind = ConsumerKind.None;
             entry.AcceptedAmmo = null;
 
-            MyFixedPoint epsilon = MyFixedPoint.SmallestPossibleValue;
-            bool canSteelPlate = inv.CanItemsBeAdded(epsilon, ComponentSteelPlate);
-            if (canSteelPlate) return;
-
-            bool canIngotUranium = inv.CanItemsBeAdded(epsilon, IngotUranium);
-            if (canIngotUranium) {
+            if (entry.Block is IMyReactor) {
                 entry.ConsumerKind = ConsumerKind.Reactor;
                 return;
             }
-
-            bool canOreIce = inv.CanItemsBeAdded(epsilon, OreIce);
-            if (canOreIce) {
+            if (entry.Block is IMyGasGenerator) {
                 entry.ConsumerKind = ConsumerKind.Gas;
                 return;
             }
+
+            MyFixedPoint epsilon = MyFixedPoint.SmallestPossibleValue;
+            if (inv.CanItemsBeAdded(epsilon, ComponentSteelPlate)) return;
 
             List<MyItemType> accepted = null;
             for (int i = 0; i < _ammoCandidates.Count; i++) {

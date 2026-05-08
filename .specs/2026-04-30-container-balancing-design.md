@@ -12,6 +12,14 @@
 > - **Live-merge of balancer keys into PB CustomData** added. On parse, missing keys are appended with default 0 and a one-line `MyIni` comment hint.
 > - **Algorithm** generalised: per-block dispatch on `BalanceTagCount` (≥0 → count-based, otherwise → percent-volume fill). The percent-volume path uses one-unit-at-a-time pulls/pushes so it works for any unit volume.
 
+> **Iteration 3 changes** (2026-05-08) — Reactor and Gas detection switched from item-acceptance probing to PB-API interface checks:
+>
+> - **Reactor:** `block is IMyReactor` (replaces the `Ingot/Uranium` probe).
+> - **Gas:** `block is IMyGasGenerator` (replaces the `Ore/Ice` probe). Confirmed via PB API to cover both O2/H2 generators and the `IrrigationSystem` subtype.
+> - **Trigger:** Assembler **input** inventories accept `Ingot/Uranium` and reject `Component/SteelPlate`, so the steel-plate gate did not catch them and the balancer was misclassifying assemblers as reactors and pulling uranium into their input slots.
+> - **Trade-off:** modded reactors and gas generators that don't implement the canonical interfaces lose balancer support. Most well-behaved mods do. The original "probe over whitelist" rationale (design point 4 below) is reversed for Reactor/Gas only.
+> - **Weapon detection unchanged.** Still item-probe based (`AmmoMagazine` accepts, gated by `Component/SteelPlate`). The pure helper is renamed `IsWeaponFromProbe(canAmmo, canSteelPlate)` and its tests trimmed accordingly.
+
 ## Goal
 
 Add a "balancer" subsystem that keeps fuel/ammo levels at a configurable target on three classes of consumer blocks:

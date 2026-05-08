@@ -26,34 +26,20 @@ namespace Goose.Tests {
             }
         }
 
-        public class IsConsumerKindFromProbes_Tests {
+        public class IsWeaponFromProbe_Tests {
             [Theory]
-            // (canIngotU, canOreIce, canAnyAmmo, canSteelPlate, expected)
-            [InlineData(true, true, true, true, Program.ConsumerKind.None)]      // generic cargo container
-            [InlineData(false, false, false, true, Program.ConsumerKind.None)]   // generic cargo accepting only steel plate
-            [InlineData(true, false, false, false, Program.ConsumerKind.Reactor)]
-            [InlineData(false, true, false, false, Program.ConsumerKind.Gas)]
-            [InlineData(false, false, true, false, Program.ConsumerKind.Weapon)]
-            [InlineData(false, false, false, false, Program.ConsumerKind.None)]  // accepts nothing recognised
-            public void Resolves_consumer_kind_from_probe_results(bool canIngotU, bool canOreIce, bool canAmmo, bool canSteelPlate, Program.ConsumerKind expected) {
-                Program.IsConsumerKindFromProbes(canIngotU, canOreIce, canAmmo, canSteelPlate).Should().Be(expected);
+            [InlineData(false, false, Program.ConsumerKind.None)]   // accepts nothing recognised
+            [InlineData(true, false, Program.ConsumerKind.Weapon)]  // accepts ammo, not steel plate
+            [InlineData(false, true, Program.ConsumerKind.None)]    // generic cargo
+            [InlineData(true, true, Program.ConsumerKind.None)]     // accepts steel plate => generic cargo, ammo gate ignored
+            public void Resolves_weapon_from_probe_results(bool canAmmo, bool canSteelPlate, Program.ConsumerKind expected) {
+                Program.IsWeaponFromProbe(canAmmo, canSteelPlate).Should().Be(expected);
             }
 
             [Fact]
-            public void SteelPlate_acceptance_overrides_everything() {
-                // A container that accepts uranium AND steel plate is a generic container, not a reactor.
-                Program.IsConsumerKindFromProbes(true, false, false, true).Should().Be(Program.ConsumerKind.None);
-            }
-
-            [Fact]
-            public void Reactor_wins_over_gas_and_weapon_on_overlap() {
-                // Hypothetical modded block that accepts uranium AND ice AND ammo (no steel plate).
-                Program.IsConsumerKindFromProbes(true, true, true, false).Should().Be(Program.ConsumerKind.Reactor);
-            }
-
-            [Fact]
-            public void Gas_wins_over_weapon_on_overlap() {
-                Program.IsConsumerKindFromProbes(false, true, true, false).Should().Be(Program.ConsumerKind.Gas);
+            public void SteelPlate_acceptance_blocks_weapon_classification() {
+                // A container that accepts ammo AND steel plate is a generic container, not a weapon.
+                Program.IsWeaponFromProbe(true, true).Should().Be(Program.ConsumerKind.None);
             }
         }
 
