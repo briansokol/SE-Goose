@@ -58,8 +58,8 @@ namespace IngameScript {
             /// <summary>Maximum number of distinct warnings retained before eviction.</summary>
             public int MaxWarningEntries = 32;
 
-            /// <summary>Per-reactor target as a percent (0-100) of the reactor's inventory volume to fill with <c>Ingot/Uranium</c>; <c>0</c> disables reactor balancing.</summary>
-            public int ReactorUraniumFillPercent = 0;
+            /// <summary>Per-reactor uranium-ingot target as ingots per 1000L of reactor inventory volume; <c>0</c> disables reactor balancing. Reactors with less than 1000L of volume are floored to 10 ingots when the feature is active. Suggested value: 25.</summary>
+            public int ReactorUraniumIngotsPer1000L = 0;
 
             /// <summary>Per-block target as a percent (0-100) of the gas generator's or irrigation system's inventory volume to fill with <c>Ore/Ice</c>; <c>0</c> disables.</summary>
             public int GasIceFillPercent = 0;
@@ -112,13 +112,18 @@ namespace IngameScript {
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
             _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
 
-            int reactorRaw = _ini.Get("Goose", "reactorUraniumFillPercent").ToInt32(0);
-            int reactorClamped = ClampPercent(reactorRaw);
+            int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
+            int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
             if (reactorRaw != reactorClamped) {
-                LogWarningOnce("balancer:bad-percent:reactorUraniumFillPercent",
-                    "[Goose] reactorUraniumFillPercent must be 0-100; clamped to " + reactorClamped + " (was " + reactorRaw + ")");
+                LogWarningOnce("balancer:bad-ratio:reactorUraniumIngotsPer1000L",
+                    "[Goose] reactorUraniumIngotsPer1000L must be >= 0; clamped to 0 (was " + reactorRaw + ")");
             }
-            _config.ReactorUraniumFillPercent = reactorClamped;
+            _config.ReactorUraniumIngotsPer1000L = reactorClamped;
+
+            if (_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
+                LogWarningOnce("balancer:deprecated:reactorUraniumFillPercent",
+                    "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 25). You can delete the old key from CustomData.");
+            }
 
             int gasRaw = _ini.Get("Goose", "gasIceFillPercent").ToInt32(0);
             int gasClamped = ClampPercent(gasRaw);
@@ -265,11 +270,12 @@ namespace IngameScript {
         /// <summary>Live-merges the balancer-related keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with their default value and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
         void EnsureBalancerKeysPopulated() {
             bool changed = false;
-            if (!_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
-                _ini.Set("Goose", "reactorUraniumFillPercent", 0);
-                _ini.SetComment("Goose", "reactorUraniumFillPercent",
-                    "Percent (0-100) of each reactor's inventory volume to fill with Uranium. 0 disables. " +
-                    "Per-block override: name-tag [Balance=N] for unit count; [NoBalance] to opt out.");
+            if (!_ini.ContainsKey("Goose", "reactorUraniumIngotsPer1000L")) {
+                _ini.Set("Goose", "reactorUraniumIngotsPer1000L", 0);
+                _ini.SetComment("Goose", "reactorUraniumIngotsPer1000L",
+                    "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 25). 0 disables. " +
+                    "Reactors with less than 1000L of volume are floored to 10 ingots when active. " +
+                    "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
                 changed = true;
             }
             if (!_ini.ContainsKey("Goose", "gasIceFillPercent")) {
