@@ -1,4 +1,4 @@
-name: Release alpha build
+name: Release beta build
 
 on:
   push:
@@ -34,9 +34,9 @@ jobs:
         run: |
           $stamp = [DateTime]::UtcNow.ToString("yyyy-MM-dd_HH-mm-ss")
           "stamp=$stamp"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "tag=alpha-$stamp" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=beta-$stamp"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Locate built script.cs
+      - name: Locate built script and rename to .txt
         id: script
         shell: pwsh
         run: |
@@ -44,7 +44,9 @@ jobs:
           if (-not (Test-Path $src)) {
             throw "Expected packaged script not found at: $src"
           }
-          "path=$src" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $dst = Join-Path (Split-Path $src) 'script.txt'
+          Move-Item -Path $src -Destination $dst -Force
+          "path=$dst" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
