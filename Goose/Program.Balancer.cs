@@ -85,11 +85,20 @@ namespace IngameScript {
         /// <param name="maxVolumeCubicMeters">Reactor inventory <c>MaxVolume</c> in m³ (1 m³ = 1000 L).</param>
         /// <param name="ingotsPer1000L">Class ratio. Caller is responsible for treating <c>&lt;= 0</c> as "feature off".</param>
         /// <returns>Target uranium-ingot count for this reactor (always non-negative).</returns>
+        /// <summary>
+        /// Computes the natural per-reactor uranium-ingot fill target from the reactor's inventory volume
+        /// and a "ingots per 1000L" ratio. Each 1000L of volume adds another bucket of <paramref name="ingotsPer1000L"/>
+        /// ingots, with the first bucket starting at 1L: 1–999L → 1 × ratio, 1000–1999L → 2 × ratio,
+        /// 2000–2999L → 3 × ratio, etc.
+        /// </summary>
+        /// <param name="maxVolumeCubicMeters">Reactor inventory <c>MaxVolume</c> in m³ (1 m³ = 1000 L).</param>
+        /// <param name="ingotsPer1000L">Class ratio. <c>&lt;= 0</c> disables this class (returns 0).</param>
+        /// <returns>Target uranium-ingot count for this reactor (always non-negative).</returns>
         internal static long ComputeReactorIngotTarget(double maxVolumeCubicMeters, int ingotsPer1000L) {
-            double volumeLiters = maxVolumeCubicMeters * 1000.0;
-            if (volumeLiters < 1000.0) return 10L;
-            long buckets = (long)Math.Round(volumeLiters / 1000.0, MidpointRounding.AwayFromZero);
             if (ingotsPer1000L <= 0) return 0L;
+            double volumeLiters = maxVolumeCubicMeters * 1000.0;
+            if (volumeLiters < 0.0) volumeLiters = 0.0;
+            long buckets = (long)(volumeLiters / 1000.0) + 1L;
             return buckets * (long)ingotsPer1000L;
         }
 

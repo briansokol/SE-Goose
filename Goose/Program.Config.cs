@@ -58,7 +58,7 @@ namespace IngameScript {
             /// <summary>Maximum number of distinct warnings retained before eviction.</summary>
             public int MaxWarningEntries = 32;
 
-            /// <summary>Per-reactor uranium-ingot target as ingots per 1000L of reactor inventory volume; <c>0</c> disables reactor balancing. Reactors with less than 1000L of volume are floored to 10 ingots when the feature is active. Suggested value: 25.</summary>
+            /// <summary>Per-reactor uranium-ingot target as ingots per 1000L of reactor inventory volume; the natural per-reactor target is <c>(floor(volumeL / 1000) + 1) × ratio</c> (the first 1000L earns one bucket; each additional 1000L adds another). <c>0</c> disables reactor balancing. Suggested value: 10.</summary>
             public int ReactorUraniumIngotsPer1000L = 0;
 
             /// <summary>Per-block target as a percent (0-100) of the gas generator's or irrigation system's inventory volume to fill with <c>Ore/Ice</c>; <c>0</c> disables.</summary>
@@ -122,7 +122,7 @@ namespace IngameScript {
 
             if (_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
                 LogWarningOnce("balancer:deprecated:reactorUraniumFillPercent",
-                    "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 25). You can delete the old key from CustomData.");
+                    "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 10). You can delete the old key from CustomData.");
             }
 
             int gasRaw = _ini.Get("Goose", "gasIceFillPercent").ToInt32(0);
@@ -273,8 +273,9 @@ namespace IngameScript {
             if (!_ini.ContainsKey("Goose", "reactorUraniumIngotsPer1000L")) {
                 _ini.Set("Goose", "reactorUraniumIngotsPer1000L", 0);
                 _ini.SetComment("Goose", "reactorUraniumIngotsPer1000L",
-                    "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 25). 0 disables. " +
-                    "Reactors with less than 1000L of volume are floored to 10 ingots when active. " +
+                    "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 10). 0 disables. " +
+                    "Each 1000L of inventory adds one bucket of ingots, starting at 1L: 1-999L gets 1*ratio, " +
+                    "1000-1999L gets 2*ratio, 2000-2999L gets 3*ratio, etc. " +
                     "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
                 changed = true;
             }
