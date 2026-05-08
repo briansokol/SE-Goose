@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/briansokol/SE-Goose/main/Goose/thumb.png" alt="Goose thumbnail" width="540" />
+  <br />
+  <sub>Thumbnail by <a href="https://www.youtube.com/@RevPlays898">RevPlaysGames</a></sub>
+</p>
+
 # Goose
 
 An automatic inventory sorter for Space Engineers. A single Programmable Block script that watches your grid's containers and quietly keeps everything in the right place.
