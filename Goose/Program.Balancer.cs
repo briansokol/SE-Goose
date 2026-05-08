@@ -75,6 +75,24 @@ namespace IngameScript {
             return maxVolume * (percent / 100f);
         }
 
+
+        /// <summary>
+        /// Computes the natural per-reactor uranium-ingot fill target from the reactor's inventory volume
+        /// and a "ingots per 1000L" ratio. Reactors with less than 1000L of volume are floored to 10 ingots
+        /// (so a small reactor still has spark fuel). Larger reactors use round(volumeL / 1000) * ratio,
+        /// rounding half-away-from-zero (1500L → 2 buckets, 2490L → 2 buckets).
+        /// </summary>
+        /// <param name="maxVolumeCubicMeters">Reactor inventory <c>MaxVolume</c> in m³ (1 m³ = 1000 L).</param>
+        /// <param name="ingotsPer1000L">Class ratio. Caller is responsible for treating <c>&lt;= 0</c> as "feature off".</param>
+        /// <returns>Target uranium-ingot count for this reactor (always non-negative).</returns>
+        internal static long ComputeReactorIngotTarget(double maxVolumeCubicMeters, int ingotsPer1000L) {
+            double volumeLiters = maxVolumeCubicMeters * 1000.0;
+            if (volumeLiters < 1000.0) return 10L;
+            long buckets = (long)Math.Round(volumeLiters / 1000.0, MidpointRounding.AwayFromZero);
+            if (ingotsPer1000L <= 0) return 0L;
+            return buckets * (long)ingotsPer1000L;
+        }
+
         /// <summary>Resolves a <see cref="ConsumerKind"/> from four item-acceptance probe results. Pure helper exposed for unit testing; production code calls <c>IMyInventory.CanItemsBeAdded</c> on the live inventory and feeds the booleans here.</summary>
         /// <param name="canAddIngotUranium">True if the inventory accepts <c>Ingot/Uranium</c>.</param>
         /// <param name="canAddOreIce">True if the inventory accepts <c>Ore/Ice</c>.</param>
@@ -160,7 +178,7 @@ namespace IngameScript {
                     ProbeConsumerKind(entry, inv);
                 }
 
-                if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassPercentFor(entry.ConsumerKind))) {
+                if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind))) {
                     DisableUseConveyor(block);
                 }
 
@@ -171,16 +189,26 @@ namespace IngameScript {
         }
 
         /// <summary>Returns true when the balancer will act on a block this cycle. Tagged blocks (<paramref name="balanceTagCount"/> &gt;= 0) always run; untagged blocks run only when their class percent is non-zero. Pure helper exposed for unit testing.</summary>
-        internal static bool WillBlockBeBalanced(ConsumerKind kind, long balanceTagCount, int classPercent) {
+        /// <summary>
+        /// Returns true when the balancer will act on a block of this consumer kind.
+        /// <paramref name="classActivator"/> is the relevant config value: ingots-per-1000L for
+        /// <see cref="ConsumerKind.Reactor"/>, percent (0-100) for Gas / Weapon. Any value &gt; 0
+        /// activates the class.
+        /// </summary>
+        internal static bool WillBlockBeBalanced(ConsumerKind kind, long balanceTagCount, int classActivator) {
             if (kind == ConsumerKind.None) return false;
             if (balanceTagCount >= 0) return true;
-            return classPercent > 0;
+            return classActivator > 0;
         }
 
         /// <summary>Returns the configured class fill percent for a given <paramref name="kind"/>.</summary>
-        int ClassPercentFor(ConsumerKind kind) {
+        /// <summary>
+        /// Returns the class-activating config value: ingots-per-1000L for <see cref="ConsumerKind.Reactor"/>,
+        /// percent-of-volume for Gas and Weapon. Any value &gt; 0 activates the class.
+        /// </summary>
+        int ClassActivatorFor(ConsumerKind kind) {
             switch (kind) {
-                case ConsumerKind.Reactor: return _config.ReactorUraniumFillPercent;
+                case ConsumerKind.Reactor: return _config.ReactorUraniumIngotsPer1000L;
                 case ConsumerKind.Gas: return _config.GasIceFillPercent;
                 case ConsumerKind.Weapon: return _config.WeaponAmmoFillPercent;
                 default: return 0;
@@ -251,7 +279,7 @@ namespace IngameScript {
 
             IEnumerator<YieldReason> child;
 
-            child = BalanceConsumersOfKind(ConsumerKind.Reactor, _config.ReactorUraniumFillPercent);
+            child = BalanceConsumersOfKind(ConsumerKind.Reactor, _config.ReactorUraniumIngotsPer1000L);
             while (child.MoveNext()) yield return child.Current;
 
             child = BalanceConsumersOfKind(ConsumerKind.Gas, _config.GasIceFillPercent);
@@ -322,49 +350,75 @@ namespace IngameScript {
         }
 
         /// <summary>Computes the proportional factor for a given <paramref name="kind"/>. Returns <c>1.0</c> (no scaling) when the class is disabled, the cache is cold, or no untagged blocks are present. Otherwise computes the factor by walking the grid for supply + iterating <see cref="_entryByBlock"/> for tagged-reservation and untagged-demand sums.</summary>
-        float ComputeFactorForKind(ConsumerKind kind, int classPercent) {
-            if (classPercent == 0) return 1f;
+        float ComputeFactorForKind(ConsumerKind kind, int classActivator) {
+            if (classActivator == 0) return 1f;
             if (kind == ConsumerKind.None) return 1f;
-
-            // Sum untagged demand volume.
-            float untaggedDemandVolume = 0f;
-            foreach (var kv in _entryByBlock) {
-                ContainerEntry entry = kv.Value;
-                if (entry == null || entry.ConsumerKind != kind) continue;
-                if (entry.BalanceTagCount >= 0) continue;
-                if (entry.Inventory == null) continue;
-                untaggedDemandVolume += (float)entry.Inventory.MaxVolume * (classPercent / 100f);
-            }
-            if (untaggedDemandVolume <= 0f) return 1f;
 
             float supplyVolume;
             float taggedReservedVolume;
-            if (kind == ConsumerKind.Weapon) {
-                supplyVolume = SumGridAmmoVolume();
-                if (supplyVolume <= 0f) return 1f;
-                float avgAmmoVol = AverageCachedAmmoVolPerUnit();
-                long taggedTotalCount = 0;
-                foreach (var kv in _entryByBlock) {
-                    ContainerEntry entry = kv.Value;
-                    if (entry == null || entry.ConsumerKind != ConsumerKind.Weapon) continue;
-                    if (entry.BalanceTagCount < 0) continue;
-                    taggedTotalCount += entry.BalanceTagCount;
-                }
-                taggedReservedVolume = taggedTotalCount * avgAmmoVol;
-            } else {
-                MyItemType item = (kind == ConsumerKind.Reactor) ? IngotUranium : OreIce;
+            float untaggedDemandVolume;
+
+            if (kind == ConsumerKind.Reactor) {
+                MyItemType item = IngotUranium;
                 float volPerUnit;
                 if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f) return 1f;
-                long supplyUnits = SumGridItemAmount(item);
-                supplyVolume = supplyUnits * volPerUnit;
+
+                long untaggedDemandUnits = 0;
                 long taggedUnits = 0;
                 foreach (var kv in _entryByBlock) {
                     ContainerEntry entry = kv.Value;
                     if (entry == null || entry.ConsumerKind != kind) continue;
-                    if (entry.BalanceTagCount < 0) continue;
-                    taggedUnits += entry.BalanceTagCount;
+                    if (entry.Inventory == null) continue;
+                    if (entry.BalanceTagCount >= 0) {
+                        taggedUnits += entry.BalanceTagCount;
+                    } else {
+                        untaggedDemandUnits += ComputeReactorIngotTarget((double)entry.Inventory.MaxVolume, classActivator);
+                    }
                 }
+                if (untaggedDemandUnits <= 0) return 1f;
+
+                long supplyUnits = SumGridItemAmount(item);
+                supplyVolume = supplyUnits * volPerUnit;
                 taggedReservedVolume = taggedUnits * volPerUnit;
+                untaggedDemandVolume = untaggedDemandUnits * volPerUnit;
+            } else {
+                untaggedDemandVolume = 0f;
+                foreach (var kv in _entryByBlock) {
+                    ContainerEntry entry = kv.Value;
+                    if (entry == null || entry.ConsumerKind != kind) continue;
+                    if (entry.BalanceTagCount >= 0) continue;
+                    if (entry.Inventory == null) continue;
+                    untaggedDemandVolume += (float)entry.Inventory.MaxVolume * (classActivator / 100f);
+                }
+                if (untaggedDemandVolume <= 0f) return 1f;
+
+                if (kind == ConsumerKind.Weapon) {
+                    supplyVolume = SumGridAmmoVolume();
+                    if (supplyVolume <= 0f) return 1f;
+                    float avgAmmoVol = AverageCachedAmmoVolPerUnit();
+                    long taggedTotalCount = 0;
+                    foreach (var kv in _entryByBlock) {
+                        ContainerEntry entry = kv.Value;
+                        if (entry == null || entry.ConsumerKind != ConsumerKind.Weapon) continue;
+                        if (entry.BalanceTagCount < 0) continue;
+                        taggedTotalCount += entry.BalanceTagCount;
+                    }
+                    taggedReservedVolume = taggedTotalCount * avgAmmoVol;
+                } else {
+                    MyItemType item = OreIce;
+                    float volPerUnit;
+                    if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f) return 1f;
+                    long supplyUnits = SumGridItemAmount(item);
+                    supplyVolume = supplyUnits * volPerUnit;
+                    long taggedUnits = 0;
+                    foreach (var kv in _entryByBlock) {
+                        ContainerEntry entry = kv.Value;
+                        if (entry == null || entry.ConsumerKind != kind) continue;
+                        if (entry.BalanceTagCount < 0) continue;
+                        taggedUnits += entry.BalanceTagCount;
+                    }
+                    taggedReservedVolume = taggedUnits * volPerUnit;
+                }
             }
 
             return ComputeProportionalFactor(supplyVolume, taggedReservedVolume, untaggedDemandVolume);
@@ -400,8 +454,8 @@ namespace IngameScript {
         }
 
         /// <summary>Iterates every consumer of the given <paramref name="kind"/>. Tagged blocks (<see cref="ContainerEntry.BalanceTagCount"/> &gt;= 0) use a unit-count target; untagged blocks use the class-wide <paramref name="classPercent"/> if non-zero, otherwise are skipped entirely.</summary>
-        IEnumerator<YieldReason> BalanceConsumersOfKind(ConsumerKind kind, int classPercent) {
-            float factor = ComputeFactorForKind(kind, classPercent);
+        IEnumerator<YieldReason> BalanceConsumersOfKind(ConsumerKind kind, int classActivator) {
+            float factor = ComputeFactorForKind(kind, classActivator);
 
             int counter = 0;
             foreach (var kv in _entryByBlock) {
@@ -412,8 +466,12 @@ namespace IngameScript {
 
                 if (entry.BalanceTagCount >= 0) {
                     BalanceConsumerByCount(entry, kind, dst, entry.BalanceTagCount);
-                } else if (classPercent > 0) {
-                    BalanceConsumerByPercent(entry, kind, dst, classPercent, factor);
+                } else if (kind == ConsumerKind.Reactor && classActivator > 0) {
+                    long natural = ComputeReactorIngotTarget((double)dst.MaxVolume, classActivator);
+                    long scaled = (long)Math.Round(natural * (double)factor, MidpointRounding.AwayFromZero);
+                    if (scaled > 0) BalanceConsumerByCount(entry, kind, dst, scaled);
+                } else if (classActivator > 0) {
+                    BalanceConsumerByPercent(entry, kind, dst, classActivator, factor);
                 }
 
                 counter++;

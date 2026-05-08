@@ -26,6 +26,40 @@ namespace Goose.Tests {
             }
         }
 
+
+        public class ComputeReactorIngotTarget_Tests {
+            [Theory]
+            [InlineData(0.0, 25, 10L)]
+            [InlineData(0.5, 25, 10L)]
+            [InlineData(0.999, 25, 10L)]
+            [InlineData(0.5, 100, 10L)]
+            [InlineData(1.0, 25, 25L)]
+            [InlineData(1.4, 25, 25L)]
+            [InlineData(1.5, 25, 50L)]
+            [InlineData(2.49, 25, 50L)]
+            [InlineData(2.5, 25, 75L)]
+            [InlineData(4.5, 25, 125L)]
+            [InlineData(4.49, 25, 100L)]
+            [InlineData(10.0, 25, 250L)]
+            [InlineData(26.25, 25, 650L)]
+            [InlineData(1.0, 1, 1L)]
+            [InlineData(1.0, 100, 100L)]
+            [InlineData(5.0, 50, 250L)]
+            public void Returns_ingot_target_for_volume_and_ratio(double maxVolumeM3, int ingotsPer1000L, long expected) {
+                Program.ComputeReactorIngotTarget(maxVolumeM3, ingotsPer1000L).Should().Be(expected);
+            }
+
+            [Fact]
+            public void Caller_is_responsible_for_validating_ratio_so_zero_returns_zero_above_floor() {
+                Program.ComputeReactorIngotTarget(5.0, 0).Should().Be(0L);
+            }
+
+            [Fact]
+            public void Floor_takes_priority_over_zero_ratio_for_small_reactors() {
+                Program.ComputeReactorIngotTarget(0.5, 0).Should().Be(10L);
+            }
+        }
+
         public class IsWeaponFromProbe_Tests {
             [Theory]
             [InlineData(false, false, Program.ConsumerKind.None)]   // accepts nothing recognised
