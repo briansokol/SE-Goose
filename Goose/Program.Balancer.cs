@@ -75,6 +75,24 @@ namespace IngameScript {
             return maxVolume * (percent / 100f);
         }
 
+
+        /// <summary>
+        /// Computes the natural per-reactor uranium-ingot fill target from the reactor's inventory volume
+        /// and a "ingots per 1000L" ratio. Reactors with less than 1000L of volume are floored to 10 ingots
+        /// (so a small reactor still has spark fuel). Larger reactors use round(volumeL / 1000) * ratio,
+        /// rounding half-away-from-zero (1500L → 2 buckets, 2490L → 2 buckets).
+        /// </summary>
+        /// <param name="maxVolumeCubicMeters">Reactor inventory <c>MaxVolume</c> in m³ (1 m³ = 1000 L).</param>
+        /// <param name="ingotsPer1000L">Class ratio. Caller is responsible for treating <c>&lt;= 0</c> as "feature off".</param>
+        /// <returns>Target uranium-ingot count for this reactor (always non-negative).</returns>
+        internal static long ComputeReactorIngotTarget(double maxVolumeCubicMeters, int ingotsPer1000L) {
+            double volumeLiters = maxVolumeCubicMeters * 1000.0;
+            if (volumeLiters < 1000.0) return 10L;
+            long buckets = (long)Math.Round(volumeLiters / 1000.0, MidpointRounding.AwayFromZero);
+            if (ingotsPer1000L <= 0) return 0L;
+            return buckets * (long)ingotsPer1000L;
+        }
+
         /// <summary>Resolves a <see cref="ConsumerKind"/> from four item-acceptance probe results. Pure helper exposed for unit testing; production code calls <c>IMyInventory.CanItemsBeAdded</c> on the live inventory and feeds the booleans here.</summary>
         /// <param name="canAddIngotUranium">True if the inventory accepts <c>Ingot/Uranium</c>.</param>
         /// <param name="canAddOreIce">True if the inventory accepts <c>Ore/Ice</c>.</param>
