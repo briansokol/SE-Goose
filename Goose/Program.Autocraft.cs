@@ -69,12 +69,6 @@ namespace IngameScript {
         /// triggers a regenerate when new items appear so hints stay current.</summary>
         int _gcraftLastCatalogVersion = -1;
 
-        /// <summary>Rotating start index for round-robin distribution across Assembly-mode assemblers.</summary>
-        int _assembleRotationPtr;
-
-        /// <summary>Rotating start index for round-robin distribution across Disassembly-mode assemblers.</summary>
-        int _disassembleRotationPtr;
-
         /// <summary>Scratch buffer for <see cref="MyProductionItem"/> queues; allocated once and reused.</summary>
         List<MyProductionItem> _autocraftQueueScratch = new List<MyProductionItem>();
 
@@ -383,13 +377,13 @@ namespace IngameScript {
 
             Autocraft_DistributeAndReconcile(
                 _autocraftAssembleKeys, 0, assembleCount,
-                MyAssemblerMode.Assembly, maxDepth, ref _assembleRotationPtr);
+                MyAssemblerMode.Assembly, maxDepth);
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded()) yield return YieldReason.BudgetHit;
 
             Autocraft_DistributeAndReconcile(
                 _autocraftDisassembleKeys, assembleCount, disassembleCount,
-                MyAssemblerMode.Disassembly, maxDepth, ref _disassembleRotationPtr);
+                MyAssemblerMode.Disassembly, maxDepth);
             yield return YieldReason.ChunkBoundary;
         }
 
@@ -484,7 +478,7 @@ namespace IngameScript {
         /// for the status LCD.</summary>
         void Autocraft_DistributeAndReconcile(
             List<string> keys, int startIdx, int count,
-            MyAssemblerMode mode, int maxDepth, ref int rotationPtr) {
+            MyAssemblerMode mode, int maxDepth) {
             if (count <= 0 || keys.Count == 0) {
                 // Still need to clear leftover queue entries on these assemblers.
                 for (int i = startIdx; i < startIdx + count; i++) {
@@ -496,16 +490,15 @@ namespace IngameScript {
                 return;
             }
 
-            // assemblerKeyAssignments[i - startIdx] = list of keys assigned to assembler i.
+            // Deterministic deal: key index i goes to assembler i % count, starting at 0
+            // every tick. Sorted-stable input means a given item key always lands on the
+            // same assembler unless the assigned-set itself changes — no per-tick rotation
+            // pointer, no thrash, no remove-and-re-add cycle.
             List<List<string>> assignments = new List<List<string>>(count);
             for (int i = 0; i < count; i++) assignments.Add(new List<string>());
-            int ptr = rotationPtr % count;
-            if (ptr < 0) ptr += count;
             for (int k = 0; k < keys.Count; k++) {
-                assignments[ptr].Add(keys[k]);
-                ptr = (ptr + 1) % count;
+                assignments[k % count].Add(keys[k]);
             }
-            rotationPtr = ptr;
 
             for (int local = 0; local < count; local++) {
                 int absoluteIdx = startIdx + local;
