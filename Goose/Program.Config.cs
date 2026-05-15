@@ -84,6 +84,13 @@ namespace IngameScript {
             /// <summary>Maximum per-item queue depth the autocraft engine will request on a single
             /// assembler before spilling overflow to the next assembler in rotation.</summary>
             public int AutocraftMaxQueueDepth = 100;
+
+            /// <summary>How many units of every known ingot type the autocraft engine should keep
+            /// staged in each Assembly-mode assembler's <c>InputInventory</c>. The script doesn't
+            /// know recipe ingredient lists at runtime, so it tops every ingot type up to this
+            /// buffer when a queue is non-empty; the assembler consumes what its current item
+            /// needs, leftover ingots stay until the mode flips (and are then drained).</summary>
+            public int AutocraftAssemblerIngotKeep = 50;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -130,6 +137,15 @@ namespace IngameScript {
                     + autocraftDepthClamped + " (was " + autocraftDepthRaw + ")");
             }
             _config.AutocraftMaxQueueDepth = autocraftDepthClamped;
+
+            int ingotKeepRaw = _ini.Get("Goose", "autocraftAssemblerIngotKeep").ToInt32(50);
+            int ingotKeepClamped = ingotKeepRaw < 1 ? 1 : (ingotKeepRaw > 10000 ? 10000 : ingotKeepRaw);
+            if (ingotKeepRaw != ingotKeepClamped) {
+                LogWarningOnce("autocraft:bad-ingotkeep",
+                    "[Goose] autocraftAssemblerIngotKeep must be 1-10000; clamped to "
+                    + ingotKeepClamped + " (was " + ingotKeepRaw + ")");
+            }
+            _config.AutocraftAssemblerIngotKeep = ingotKeepClamped;
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
@@ -329,6 +345,14 @@ namespace IngameScript {
                 _ini.SetComment("Goose", "autocraftMaxQueueDepth",
                     "Per-item queue depth the autocraft engine will request on a single assembler before " +
                     "spilling overflow to the next assembler in rotation. 1-100000.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "autocraftAssemblerIngotKeep")) {
+                _ini.Set("Goose", "autocraftAssemblerIngotKeep", 50);
+                _ini.SetComment("Goose", "autocraftAssemblerIngotKeep",
+                    "Units of every known ingot type the autocraft engine keeps staged in each " +
+                    "Assembly-mode assembler's input. Buffer so the assembler can find whichever " +
+                    "ingot the current recipe needs without recipe-data lookup. 1-10000.");
                 changed = true;
             }
             if (changed) {

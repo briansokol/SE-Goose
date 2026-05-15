@@ -385,6 +385,10 @@ namespace IngameScript {
                 _autocraftDisassembleKeys, assembleCount, disassembleCount,
                 MyAssemblerMode.Disassembly, maxDepth);
             yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded()) yield return YieldReason.BudgetHit;
+
+            Autocraft_FeedAssemblers();
+            yield return YieldReason.ChunkBoundary;
         }
 
         /// <summary>Refreshes <see cref="_assemblers"/> by filtering <see cref="_productionBlocks"/>
@@ -666,6 +670,199 @@ namespace IngameScript {
 
         /// <summary>Resolves the rendering surface for the status table. Multi-surface providers
         /// route to surface 0 for v1; plain <see cref="IMyTextPanel"/> uses itself.</summary>
+        /// <summary>Scratch buffer for walking assembler input inventories during feed/drain.</summary>
+        List<MyInventoryItem> _autocraftInputItemsScratch = new List<MyInventoryItem>();
+
+        /// <summary>Per-assembler input feeder. For each managed assembler:
+        /// <list type="bullet">
+        ///   <item>Drains items that don't belong in the current mode (e.g. ingots left over after
+        ///   a flip to Disassembly, or components left over after a flip to Assembly).</item>
+        ///   <item>If <c>Assembly</c> + non-empty queue: tops every known ingot type up to
+        ///   <see cref="GooseConfig.AutocraftAssemblerIngotKeep"/> units. The recipe-data API isn't
+        ///   in the PB allowlist, so we stage a small buffer of everything and let the assembler
+        ///   consume whatever its current item needs.</item>
+        ///   <item>If <c>Disassembly</c> + non-empty queue: tops each queued blueprint's matching
+        ///   item type up to the queued amount so the disassembler has the components to break down.</item>
+        ///   <item>If queue is empty: drains everything from the input back to category routes so
+        ///   ingots aren't stranded after the engine stops requesting work.</item>
+        /// </list>
+        /// Ingots/components inside their "expected for current mode" set are never pulled out
+        /// while the queue is non-empty — once the assembler is staging the right material, the
+        /// feeder is a no-op.</summary>
+        void Autocraft_FeedAssemblers() {
+            int ingotKeep = Math.Max(1, _config.AutocraftAssemblerIngotKeep);
+            List<MyItemType> ingotTypes = Autocraft_CollectIngotTypes();
+
+            for (int ai = 0; ai < _assemblers.Count; ai++) {
+                IMyAssembler asm = _assemblers[ai];
+                if (asm == null || !ValidateBlock(asm)) continue;
+                IMyInventory input = asm.InputInventory;
+                if (input == null) continue;
+
+                bool assemblyMode = asm.Mode == MyAssemblerMode.Assembly;
+                bool queueEmpty = asm.IsQueueEmpty;
+
+                Autocraft_DrainMismatchedInputs(input, assemblyMode, queueEmpty);
+                if (BudgetExceeded()) return;
+                if (queueEmpty) continue;
+
+                if (assemblyMode) {
+                    for (int t = 0; t < ingotTypes.Count; t++) {
+                        MyItemType type = ingotTypes[t];
+                        long current = GetCurrentAmount(input, type);
+                        if (current >= ingotKeep) continue;
+                        Autocraft_PullItemIntoInventory(input, type, ingotKeep - current);
+                        if (BudgetExceeded()) return;
+                    }
+                } else {
+                    _autocraftQueueScratch.Clear();
+                    asm.GetQueue(_autocraftQueueScratch);
+                    for (int q = 0; q < _autocraftQueueScratch.Count; q++) {
+                        MyDefinitionId bp = _autocraftQueueScratch[q].BlueprintId;
+                        MyItemType type;
+                        if (!Autocraft_TryFindItemTypeForBlueprint(bp, out type)) continue;
+                        long want = (long)_autocraftQueueScratch[q].Amount;
+                        long current = GetCurrentAmount(input, type);
+                        if (current >= want) continue;
+                        Autocraft_PullItemIntoInventory(input, type, want - current);
+                        if (BudgetExceeded()) return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Returns every item type the catalog classifies as <see cref="ItemCategory.Ingots"/>.
+        /// Allocated fresh each tick to keep the per-assembler loop above stable against catalog growth.</summary>
+        List<MyItemType> Autocraft_CollectIngotTypes() {
+            List<MyItemType> result = new List<MyItemType>();
+            foreach (var kv in _knownItems) {
+                if (Classify(kv.Value) == ItemCategory.Ingots) result.Add(kv.Value);
+            }
+            return result;
+        }
+
+        /// <summary>Drains items from an assembler input that don't belong for the current mode:
+        /// <list type="bullet">
+        ///   <item><c>Assembly</c> mode keeps <see cref="ItemCategory.Ingots"/>; everything else is drained.</item>
+        ///   <item><c>Disassembly</c> mode keeps <see cref="ItemCategory.Components"/> and
+        ///   <see cref="ItemCategory.Tools"/>; everything else is drained.</item>
+        ///   <item>Queue empty (any mode): everything is drained.</item>
+        /// </list>
+        /// Drained items are pushed via category routes; if no route exists they stay put.</summary>
+        void Autocraft_DrainMismatchedInputs(IMyInventory input, bool assemblyMode, bool queueEmpty) {
+            _autocraftInputItemsScratch.Clear();
+            input.GetItems(_autocraftInputItemsScratch);
+            for (int i = _autocraftInputItemsScratch.Count - 1; i >= 0; i--) {
+                MyInventoryItem item = _autocraftInputItemsScratch[i];
+                if (!queueEmpty) {
+                    ItemCategory cat = Classify(item.Type);
+                    if (assemblyMode && cat == ItemCategory.Ingots) continue;
+                    if (!assemblyMode && (cat == ItemCategory.Components || cat == ItemCategory.Tools)) continue;
+                }
+                Autocraft_DrainSingleItem(input, item.Type, item.Amount, i);
+                if (BudgetExceeded()) return;
+            }
+        }
+
+        /// <summary>Transfers a single stack out of an assembler input to the first category route
+        /// (or general inventory) that can accept it. No-op when nothing is willing/able to receive.</summary>
+        void Autocraft_DrainSingleItem(IMyInventory src, MyItemType type, MyFixedPoint amount, int srcIdx) {
+            ItemCategory cat = Classify(type);
+            List<ContainerEntry> routes;
+            if (_containersByCategory.TryGetValue(cat, out routes)) {
+                for (int r = 0; r < routes.Count; r++) {
+                    ContainerEntry dst = routes[r];
+                    if (!ValidateBlock(dst.Block) || dst.Inventory == null) continue;
+                    if (dst.Inventory == src) continue;
+                    if (!src.CanTransferItemTo(dst.Inventory, type)) continue;
+                    if (!dst.Inventory.CanItemsBeAdded(amount, type)) continue;
+                    if (src.TransferItemTo(dst.Inventory, srcIdx, null, true, amount)) {
+                        if (_config.DebugLogging) LogAction("autocraft-drain " + amount + "x" + type.SubtypeId + " ->" + dst.Block.CustomName);
+                        return;
+                    }
+                }
+            }
+            for (int b = 0; b < _allInventoryBlocks.Count; b++) {
+                IMyTerminalBlock block = _allInventoryBlocks[b];
+                if (!ValidateBlock(block)) continue;
+                IMyInventory dstInv = GetSortableInventory(block);
+                if (dstInv == null || dstInv == src) continue;
+                if (!src.CanTransferItemTo(dstInv, type)) continue;
+                if (!dstInv.CanItemsBeAdded(amount, type)) continue;
+                if (src.TransferItemTo(dstInv, srcIdx, null, true, amount)) return;
+            }
+        }
+
+        /// <summary>Pulls up to <paramref name="need"/> units of <paramref name="type"/> into
+        /// <paramref name="dst"/>, sourcing in priority order:
+        /// <list type="number">
+        ///   <item>Stock containers with surplus of <paramref name="type"/>.</item>
+        ///   <item>Category-routed containers for the type's category.</item>
+        ///   <item>Any other in-scope inventory block.</item>
+        /// </list>
+        /// Returns the amount actually moved (may be less than <paramref name="need"/>).</summary>
+        long Autocraft_PullItemIntoInventory(IMyInventory dst, MyItemType type, long need) {
+            if (dst == null || need <= 0) return 0;
+            long remaining = need;
+
+            for (int i = 0; i < _stockContainers.Count && remaining > 0; i++) {
+                ContainerEntry src = _stockContainers[i];
+                if (!ValidateBlock(src.Block) || src.Inventory == null) continue;
+                if (src.Inventory == dst) continue;
+                if (!src.Inventory.CanTransferItemTo(dst, type)) continue;
+                remaining -= TryMove(src.Inventory, dst, type, remaining, "autocraft-feed");
+                if (BudgetExceeded()) return need - remaining;
+            }
+
+            ItemCategory cat = Classify(type);
+            List<ContainerEntry> routes;
+            if (remaining > 0 && _containersByCategory.TryGetValue(cat, out routes)) {
+                for (int i = 0; i < routes.Count && remaining > 0; i++) {
+                    ContainerEntry src = routes[i];
+                    if (src.IsStock) continue;
+                    if (!ValidateBlock(src.Block) || src.Inventory == null) continue;
+                    if (src.Inventory == dst) continue;
+                    if (!src.Inventory.CanTransferItemTo(dst, type)) continue;
+                    remaining -= TryMove(src.Inventory, dst, type, remaining, "autocraft-feed");
+                    if (BudgetExceeded()) return need - remaining;
+                }
+            }
+
+            for (int b = 0; b < _allInventoryBlocks.Count && remaining > 0; b++) {
+                IMyTerminalBlock block = _allInventoryBlocks[b];
+                if (!ValidateBlock(block)) continue;
+                ContainerEntry srcEntry;
+                if (_entryByBlock.TryGetValue(block, out srcEntry)) {
+                    if (srcEntry.IsStock) continue;
+                    if (srcEntry.Categories != null && srcEntry.Categories.Count > 0) continue;
+                }
+                IMyInventory srcInv = GetSortableInventory(block);
+                if (srcInv == null || srcInv == dst) continue;
+                if (!srcInv.CanTransferItemTo(dst, type)) continue;
+                remaining -= TryMove(srcInv, dst, type, remaining, "autocraft-feed");
+                if (BudgetExceeded()) return need - remaining;
+            }
+
+            return need - remaining;
+        }
+
+        /// <summary>Reverse-lookup: given a queued blueprint, find the catalog
+        /// <see cref="MyItemType"/> the engine treats as its output. Walks
+        /// <see cref="_blueprintMap"/> for a matching <see cref="MyDefinitionId.SubtypeName"/>
+        /// then resolves the item key through <see cref="_knownItems"/>. Returns <c>false</c>
+        /// when no mapping exists yet (typically during learning).</summary>
+        bool Autocraft_TryFindItemTypeForBlueprint(MyDefinitionId bp, out MyItemType type) {
+            type = default(MyItemType);
+            string bpSub = bp.SubtypeName ?? string.Empty;
+            if (bpSub.Length == 0) return false;
+            foreach (var kv in _blueprintMap) {
+                if ((kv.Value.SubtypeName ?? string.Empty) == bpSub) {
+                    if (_knownItems.TryGetValue(kv.Key, out type)) return true;
+                }
+            }
+            return false;
+        }
+
         IMyTextSurface Autocraft_GetStatusSurface(IMyTerminalBlock block) {
             IMyTextSurfaceProvider provider = block as IMyTextSurfaceProvider;
             if (provider != null && provider.SurfaceCount > 0) {
