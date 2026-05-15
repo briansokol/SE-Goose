@@ -401,6 +401,18 @@ namespace IngameScript {
                 IMyAssembler a = _productionBlocks[i] as IMyAssembler;
                 if (a != null && ValidateBlock(a)) _assemblers.Add(a);
             }
+            _assemblers.Sort(Autocraft_CompareAssemblersByEntityId);
+        }
+
+        /// <summary>Stable per-tick assembler ordering used by the round-robin distributor. Sorting
+        /// by <see cref="IMyTerminalBlock.EntityId"/> avoids churn when block names change and keeps
+        /// queue assignments idempotent across ticks.</summary>
+        static int Autocraft_CompareAssemblersByEntityId(IMyAssembler a, IMyAssembler b) {
+            long ax = a == null ? long.MinValue : a.EntityId;
+            long bx = b == null ? long.MinValue : b.EntityId;
+            if (ax < bx) return -1;
+            if (ax > bx) return 1;
+            return 0;
         }
 
         /// <summary>Snapshots <see cref="_itemTotals"/> into a catalog-key dictionary for
