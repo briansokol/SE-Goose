@@ -360,14 +360,18 @@ namespace IngameScript {
                 _autocraftAssembleKeys.Count, _autocraftDisassembleKeys.Count,
                 out assembleCount, out disassembleCount);
 
+            bool noWork = assembleCount == 0 && disassembleCount == 0;
             for (int i = 0; i < _assemblers.Count; i++) {
                 IMyAssembler a = _assemblers[i];
                 if (a == null) continue;
-                MyAssemblerMode desired = i < assembleCount ? MyAssemblerMode.Assembly : MyAssemblerMode.Disassembly;
+                MyAssemblerMode desired = noWork
+                    ? MyAssemblerMode.Assembly
+                    : (i < assembleCount ? MyAssemblerMode.Assembly : MyAssemblerMode.Disassembly);
                 if (a.Mode != desired) {
                     a.ClearQueue();
                     a.Mode = desired;
                 }
+                if (noWork && !a.IsQueueEmpty) a.ClearQueue();
                 try { a.CooperativeMode = false; } catch (Exception) { /* modded blocks may reject */ }
             }
             yield return YieldReason.ChunkBoundary;
@@ -697,16 +701,25 @@ namespace IngameScript {
                 IMyAssembler asm = _assemblers[ai];
                 if (asm == null || !ValidateBlock(asm)) continue;
                 IMyInventory input = asm.InputInventory;
-                if (input == null) continue;
+                IMyInventory output = asm.OutputInventory;
+                if (input == null || output == null) continue;
 
                 bool assemblyMode = asm.Mode == MyAssemblerMode.Assembly;
                 bool queueEmpty = asm.IsQueueEmpty;
 
-                Autocraft_DrainMismatchedInputs(input, assemblyMode, queueEmpty);
-                if (BudgetExceeded()) return;
-                if (queueEmpty) continue;
+                if (queueEmpty) {
+                    Autocraft_DrainInventory(input, false, null, null);
+                    if (BudgetExceeded()) return;
+                    Autocraft_DrainInventory(output, false, null, null);
+                    if (BudgetExceeded()) return;
+                    continue;
+                }
 
                 if (assemblyMode) {
+                    // Assembly: input holds ingredient ingots, output holds produced components.
+                    // Drain anything non-ingot from input, then top each ingot type up to buffer.
+                    Autocraft_DrainInventory(input, true, null, null);
+                    if (BudgetExceeded()) return;
                     for (int t = 0; t < ingotTypes.Count; t++) {
                         MyItemType type = ingotTypes[t];
                         long current = GetCurrentAmount(input, type);
@@ -714,17 +727,33 @@ namespace IngameScript {
                         Autocraft_PullItemIntoInventory(input, type, ingotKeep - current);
                         if (BudgetExceeded()) return;
                     }
+                    // Output: drain produced components back to category routes.
+                    Autocraft_DrainInventory(output, false, null, null);
+                    if (BudgetExceeded()) return;
                 } else {
+                    // Disassembly: SE consumes from output and produces to input.
+                    // Drain ingots that accumulated in input.
+                    Autocraft_DrainInventory(input, false, null, null);
+                    if (BudgetExceeded()) return;
+                    // Output: collect queued blueprint subtypes; drain anything not assigned, then
+                    // top up the assigned components to match the queued amount.
                     _autocraftQueueScratch.Clear();
                     asm.GetQueue(_autocraftQueueScratch);
+                    HashSet<string> assignedSubtypes = new HashSet<string>(StringComparer.Ordinal);
+                    for (int q = 0; q < _autocraftQueueScratch.Count; q++) {
+                        string sub = _autocraftQueueScratch[q].BlueprintId.SubtypeName ?? string.Empty;
+                        if (sub.Length > 0) assignedSubtypes.Add(sub);
+                    }
+                    Autocraft_DrainInventory(output, false, assignedSubtypes, null);
+                    if (BudgetExceeded()) return;
                     for (int q = 0; q < _autocraftQueueScratch.Count; q++) {
                         MyDefinitionId bp = _autocraftQueueScratch[q].BlueprintId;
                         MyItemType type;
                         if (!Autocraft_TryFindItemTypeForBlueprint(bp, out type)) continue;
                         long want = (long)_autocraftQueueScratch[q].Amount;
-                        long current = GetCurrentAmount(input, type);
+                        long current = GetCurrentAmount(output, type);
                         if (current >= want) continue;
-                        Autocraft_PullItemIntoInventory(input, type, want - current);
+                        Autocraft_PullItemIntoInventory(output, type, want - current);
                         if (BudgetExceeded()) return;
                     }
                 }
@@ -749,17 +778,20 @@ namespace IngameScript {
         ///   <item>Queue empty (any mode): everything is drained.</item>
         /// </list>
         /// Drained items are pushed via category routes; if no route exists they stay put.</summary>
-        void Autocraft_DrainMismatchedInputs(IMyInventory input, bool assemblyMode, bool queueEmpty) {
+        void Autocraft_DrainInventory(
+            IMyInventory inv, bool keepIngots,
+            HashSet<string> keepSubtypes,
+            object reservedForFutureUse) {
+            if (inv == null) return;
             _autocraftInputItemsScratch.Clear();
-            input.GetItems(_autocraftInputItemsScratch);
+            inv.GetItems(_autocraftInputItemsScratch);
             for (int i = _autocraftInputItemsScratch.Count - 1; i >= 0; i--) {
                 MyInventoryItem item = _autocraftInputItemsScratch[i];
-                if (!queueEmpty) {
-                    ItemCategory cat = Classify(item.Type);
-                    if (assemblyMode && cat == ItemCategory.Ingots) continue;
-                    if (!assemblyMode && (cat == ItemCategory.Components || cat == ItemCategory.Tools)) continue;
-                }
-                Autocraft_DrainSingleItem(input, item.Type, item.Amount, i);
+                bool keep = false;
+                if (keepIngots && Classify(item.Type) == ItemCategory.Ingots) keep = true;
+                if (!keep && keepSubtypes != null && keepSubtypes.Contains(item.Type.SubtypeId ?? string.Empty)) keep = true;
+                if (keep) continue;
+                Autocraft_DrainSingleItem(inv, item.Type, item.Amount, i);
                 if (BudgetExceeded()) return;
             }
         }
