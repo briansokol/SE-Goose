@@ -96,13 +96,25 @@ namespace IngameScript {
         /// <summary>Hard upper bound on per-item queue depth; the runtime configured value is clamped to this ceiling.</summary>
         internal const int AutocraftMaxQueueDepthCeiling = 100000;
 
-        /// <summary>Parses an autocraft quota value (e.g. <c>5000</c> or <c>10000L</c>). Returns
-        /// <c>false</c> for unrecognized formats or non-positive amounts. <c>M</c>/no-suffix maps to
-        /// <see cref="AutocraftMode.Minimum"/>; <c>L</c> maps to <see cref="AutocraftMode.Limiter"/>.</summary>
-        internal static bool Autocraft_TryParseQuotaValue(string raw, out long amount, out AutocraftMode mode) {
+        /// <summary>Parses an autocraft quota value (e.g. <c>5000</c>, <c>10000L</c>, or <c>x</c>).
+        /// Returns <c>false</c> for unrecognized formats or negative amounts. <c>M</c>/no-suffix maps
+        /// to <see cref="AutocraftMode.Minimum"/>; <c>L</c> maps to <see cref="AutocraftMode.Limiter"/>.
+        /// The literal <c>x</c>/<c>X</c> is recognized as the ignore sentinel — caller should treat
+        /// this as "unmanaged" and skip adding the item to <see cref="_autocraftTargets"/>.</summary>
+        /// <param name="raw">Trimmed value portion of a <c>key=value</c> quota line.</param>
+        /// <param name="amount">Parsed unit count when successful and not ignored; <c>0</c> otherwise.</param>
+        /// <param name="mode">Parsed enforcement mode when successful and not ignored.</param>
+        /// <param name="ignore"><c>true</c> when <paramref name="raw"/> is the <c>x</c>/<c>X</c> sentinel.</param>
+        /// <returns><c>true</c> when the value is well-formed (including the ignore sentinel).</returns>
+        internal static bool Autocraft_TryParseQuotaValue(string raw, out long amount, out AutocraftMode mode, out bool ignore) {
             amount = 0;
             mode = AutocraftMode.Minimum;
+            ignore = false;
             if (string.IsNullOrEmpty(raw)) return false;
+            if (raw.Length == 1 && (raw[0] == 'x' || raw[0] == 'X')) {
+                ignore = true;
+                return true;
+            }
             char suffix = raw[raw.Length - 1];
             string numericPart = raw;
             if (suffix == 'L' || suffix == 'l') {
@@ -283,11 +295,13 @@ namespace IngameScript {
                 string raw = kv.Value.Substring(eq + 1).Trim();
                 long amount;
                 AutocraftMode mode;
-                if (!Autocraft_TryParseQuotaValue(raw, out amount, out mode)) {
+                bool ignore;
+                if (!Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore)) {
                     LogWarningOnce("autocraft:bad-quota:" + kv.Key,
-                        "[Goose] Autocraft quota '" + kv.Key + "=" + raw + "' is malformed; expected <count> or <count>L. Skipped.");
+                        "[Goose] Autocraft quota '" + kv.Key + "=" + raw + "' is malformed; expected <count>, <count>L, or x. Skipped.");
                     continue;
                 }
+                if (ignore) continue;
                 _autocraftTargets[kv.Key] = new AutocraftQuota { Amount = amount, Mode = mode };
             }
 

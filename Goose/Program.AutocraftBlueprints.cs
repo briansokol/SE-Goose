@@ -178,7 +178,7 @@ namespace IngameScript {
         /// <summary>Builds the desired CustomData blob for the <c>[GCraft]</c> LCD by merging
         /// <list type="bullet">
         /// <item>active user quotas (preserved verbatim),</item>
-        /// <item>commented catalog hints for items the user hasn't enabled,</item>
+        /// <item>ignore-default lines (<c>key=x</c>) for catalog items the user hasn't managed,</item>
         /// <item>resolved blueprint mappings (auto + user-typed) under
         /// <c>[GCraftBlueprints]</c>.</item>
         /// </list>
@@ -200,11 +200,13 @@ namespace IngameScript {
             sb.Length = 0;
 
             sb.Append(AutocraftQuotaSectionHeader).Append('\n');
-            sb.Append(";Autocraft quotas. Uncomment a line and set its target to manage that item.\n");
-            sb.Append(";Format: <Type>/<Subtype>=<count>[L]   (suffix L = limiter / disassemble above)\n");
+            sb.Append(";Autocraft quotas. Replace the 'x' on any line with a count to manage that item.\n");
+            sb.Append(";Format: <Type>/<Subtype>=<count>[L|M]   (suffix L = limiter / disassemble above; M = minimum, default)\n");
+            sb.Append(";Special value: x  (ignore — leave the item unmanaged; this is the default)\n");
             sb.Append(";Examples:\n");
             sb.Append(";  Component/SteelPlate=5000\n");
-            sb.Append(";  Component/Construction=10000L\n\n");
+            sb.Append(";  Component/Construction=10000L\n");
+            sb.Append(";  Component/MotorComponent=x\n\n");
             sb.Append("; --- Manage Items Below ---\n");
 
             HashSet<string> mergedKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -227,7 +229,7 @@ namespace IngameScript {
                     if (activeQuotaLines != null && activeQuotaLines.TryGetValue(key, out active)) {
                         sb.Append(active).Append('\n');
                     } else {
-                        sb.Append("; ").Append(key).Append("=0\n");
+                        sb.Append(key).Append("=x\n");
                     }
                 }
             }

@@ -219,11 +219,12 @@ namespace Goose.Tests {
                     reusableSB: null);
 
                 output.Should().Contain("Component/SteelPlate=5000");
-                output.Should().Contain("; Component/InteriorPlate=0");
+                output.Should().Contain("Component/InteriorPlate=x");
+                output.Should().NotContain("; Component/InteriorPlate=");
             }
 
             [Fact]
-            public void Appends_new_catalog_items_as_commented_hints() {
+            public void Appends_new_catalog_items_as_ignore_defaults() {
                 Dictionary<string, string> quotas = new Dictionary<string, string>(StringComparer.Ordinal);
                 List<string> catalog = new List<string> {
                     "Component/Computer", "Component/SteelPlate", "Component/Construction"
@@ -232,12 +233,13 @@ namespace Goose.Tests {
                 string output = Program.Autocraft_BuildGCraftCustomData(
                     null, null, quotas, catalog, null);
 
-                int posComputer     = output.IndexOf("; Component/Computer=0", StringComparison.Ordinal);
-                int posConstruction = output.IndexOf("; Component/Construction=0", StringComparison.Ordinal);
-                int posSteel        = output.IndexOf("; Component/SteelPlate=0", StringComparison.Ordinal);
+                int posComputer     = output.IndexOf("Component/Computer=x", StringComparison.Ordinal);
+                int posConstruction = output.IndexOf("Component/Construction=x", StringComparison.Ordinal);
+                int posSteel        = output.IndexOf("Component/SteelPlate=x", StringComparison.Ordinal);
                 posComputer.Should().BeGreaterThan(0);
                 posConstruction.Should().BeGreaterThan(posComputer);
                 posSteel.Should().BeGreaterThan(posConstruction);
+                output.Should().NotContain("; Component/Computer=");
             }
 
             [Fact]
@@ -291,6 +293,22 @@ namespace Goose.Tests {
                 posAlpha.Should().BeGreaterThan(0);
                 posMiddle.Should().BeGreaterThan(posAlpha);
                 posZeta.Should().BeGreaterThan(posMiddle);
+            }
+
+            [Fact]
+            public void Active_x_line_is_preserved_verbatim() {
+                Dictionary<string, string> quotas = new Dictionary<string, string>(StringComparer.Ordinal) {
+                    { "Component/SteelPlate", "Component/SteelPlate=x" },
+                    { "Component/Construction", "Component/Construction=10000L" },
+                };
+                List<string> catalog = new List<string> { "Component/SteelPlate", "Component/Construction", "Component/Motor" };
+
+                string output = Program.Autocraft_BuildGCraftCustomData(
+                    null, null, quotas, catalog, null);
+
+                output.Should().Contain("Component/SteelPlate=x");
+                output.Should().Contain("Component/Construction=10000L");
+                output.Should().Contain("Component/Motor=x");
             }
         }
     }

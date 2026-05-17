@@ -16,9 +16,23 @@ namespace Goose.Tests {
             public void Parses_well_formed_values(string raw, long expectedAmount, Program.AutocraftMode expectedMode) {
                 long amount;
                 Program.AutocraftMode mode;
-                Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode).Should().BeTrue();
+                bool ignore;
+                Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore).Should().BeTrue();
                 amount.Should().Be(expectedAmount);
                 mode.Should().Be(expectedMode);
+                ignore.Should().BeFalse();
+            }
+
+            [Theory]
+            [InlineData("x")]
+            [InlineData("X")]
+            public void Recognizes_ignore_sentinel(string raw) {
+                long amount;
+                Program.AutocraftMode mode;
+                bool ignore;
+                Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore).Should().BeTrue();
+                ignore.Should().BeTrue();
+                amount.Should().Be(0);
             }
 
             [Theory]
@@ -28,10 +42,14 @@ namespace Goose.Tests {
             [InlineData("-5")]
             [InlineData("L")]
             [InlineData("5LL")]
+            [InlineData("xx")]
+            [InlineData("5x")]
             public void Rejects_malformed_values(string raw) {
                 long amount;
                 Program.AutocraftMode mode;
-                Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode).Should().BeFalse();
+                bool ignore;
+                Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore).Should().BeFalse();
+                ignore.Should().BeFalse();
             }
         }
 
