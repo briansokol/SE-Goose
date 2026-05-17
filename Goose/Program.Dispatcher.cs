@@ -46,7 +46,8 @@ namespace IngameScript {
         static readonly string[] StepLabels = {
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
-            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers"
+            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers",
+            "DiscoverGCraftLCD", "UpdateAutocraftCfg", "RunAutocraftEngine", "RenderGCraftLCD"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -62,7 +63,7 @@ namespace IngameScript {
         IEnumerator<YieldReason> StepRoot() {
             while (true) {
                 ResetOneShotWarnings();
-                for (int i = 0; i < 10; i++) {
+                for (int i = 0; i < StepLabels.Length; i++) {
                     _stepIndex = i;
                     _subStep = 0;
                     _stepLabel = StepLabels[i];
@@ -91,6 +92,10 @@ namespace IngameScript {
                 case 7: return StepSortGenericCargo();
                 case 8: return StepBalanceConsumers();
                 case 9: return StepBalanceSameRoleContainers();
+                case 10: return StepDiscoverGCraftLCD();
+                case 11: return StepUpdateAutocraftCfg();
+                case 12: return StepRunAutocraftEngine();
+                case 13: return StepRenderGCraftLCD();
                 default: return NoOpStep();
             }
         }
