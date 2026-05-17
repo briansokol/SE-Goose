@@ -27,7 +27,4 @@
     <AdditionalFiles Include="Instructions.readme" />
     <AdditionalFiles Include="thumb.png" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Goose.Tests\Goose.Tests.csproj" />
-  </ItemGroup>
 </Project>
