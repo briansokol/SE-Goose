@@ -1,0 +1,221 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is a **Space Engineers Programmable Block Script** for **inventory management**. The script runs on an in-game programmable block and is intended to monitor, organize, and report on item inventories across connected cargo containers, refineries, assemblers, connectors, and other inventory-bearing blocks on a grid.
+
+The project uses the Malware Development Kit (MDK2) framework to develop, build, and deploy the script into Space Engineers.
+
+## Design Documentation
+
+Authoritative design documentation for this project lives in the GitHub wiki. **Consult these documents before making architectural or feature-level decisions.** They represent the intended design of the script and its features.
+
+Current design documents:
+
+- **Technical Architecture** — overall technical architecture of the script — https://github.com/briansokol/SE-Goose/wiki/Technical-Architecture-Design
+- **Inventory Sorter (Functional Design)** — functional design of the inventory sorting feature — https://github.com/briansokol/SE-Goose/wiki/Inventory-Sorter-%E2%80%90-Functional-Design
+
+This list will grow as additional features are planned; more documents will be added here over time.
+
+**Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
+
+## Technology Stack
+
+- **Framework**: .NET Framework 4.8 (C# 6.0)
+- **Target Platform**: Space Engineers Programmable Blocks
+- **Build System**: MDK2 (Malware Development Kit 2)
+- **Package Manager**: NuGet
+- **Root Namespace**: `IngameScript`
+- **Entry Point**: `Program.cs` implementing `MyGridProgram`
+
+## CRITICAL: C# 6.0 Language Constraints
+
+**ALL CODE MUST BE COMPATIBLE WITH C# 6.0**. This project is constrained to C# 6.0 syntax and features due to Space Engineers API limitations (see `<LangVersion>6</LangVersion>` in `Goose.csproj`). DO NOT use features from C# 7.0 or later, including:
+
+- **Readonly structs** (C# 7.2) - Use regular structs or const fields instead
+- **Tuple syntax** `(int, string)` (C# 7.0) - Use named classes or structs
+- **Pattern matching** with `is` expressions (C# 7.0)
+- **Out variables** `int.TryParse(s, out var result)` (C# 7.0) - declare the variable first
+- **Expression-bodied constructors/destructors** (C# 7.0)
+- **Local functions** (C# 7.0)
+- **Ref returns and ref locals** (C# 7.0)
+
+**Available C# 6.0 features:**
+
+- Expression-bodied members for properties and methods
+- Auto-property initializers
+- String interpolation `$"text {variable}"`
+- Null-conditional operators `?.` and `?[]`
+- `nameof` expressions
+- Exception filters in catch blocks
+
+## General Guidance
+
+**When there isn't a clear ideal solution to a problem, ASK QUESTIONS.** Don't make assumptions about implementation details, design preferences, or trade-offs without consulting the user first. Present options when multiple valid approaches exist.
+
+## Code Quality Principles
+
+1. **Avoid Code Duplication**: Always prefer refactoring code into reusable methods rather than duplicating logic. If you find yourself copying similar code blocks, extract them into a shared method.
+
+2. **Clarify Before Acting**: If a user's request is ambiguous or lacks necessary details, ask clarifying questions before proceeding with implementation. It's better to understand the requirements fully than to make incorrect assumptions.
+
+3. **Present Options**: When multiple valid approaches exist (different algorithms, architectures, or trade-offs), present the options to the user with pros and cons, and let them choose the direction. Don't arbitrarily pick one approach when the ideal solution isn't clear.
+
+## Code Documentation
+
+**Always add C#/.NET-style XML documentation comments (docblocks) above every function, method, class, struct, enum, property, and class field.** Use the standard `/// <summary>`, `/// <param>`, and `/// <returns>` tags. Keep summaries concise — one short sentence is usually enough. Use `<param>` and `<returns>` only when they add information that isn't obvious from the parameter or return type.
+
+Example:
+
+```csharp
+/// <summary>Classifies an item into one of the configured categories.</summary>
+/// <param name="type">Item type to classify.</param>
+/// <returns>The matched category, or <c>Misc</c> if unrecognized.</returns>
+ItemCategory Classify(MyItemType type) { ... }
+```
+
+**Keep inline comments minimal.** Only add an inline comment when the _why_ is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, or behavior that would surprise a reader. Avoid comments that:
+
+- Describe _what_ the code does when the code is already self-explanatory.
+- Reference the version, change, or task that introduced a method (e.g., `// v1: ...`, `// NEW: shared helper introduced by the plan refactor`). That history belongs in the commit log, not the code.
+- Restate the docblock.
+
+If a comment would be useful as documentation rather than as a margin note, fold it into the XML docblock instead.
+
+## Custom Data System
+
+Space Engineers blocks expose a per-block custom data string. Use it for configuration:
+
+- Store configuration in INI format via `MyIni` (from `VRage.Game.ModAPI.Ingame.Utilities`).
+- Use a consistent section header for this project (suggested: `[Goose]`).
+- Parse and validate custom data on each update cycle, or only when the block is (re)discovered — weigh cost against flexibility.
+
+## Block Group System
+
+Operate on blocks within a named group configured via the Programmable Block's custom data:
+
+- Groups the relevant inventory blocks for coordinated management.
+- Automatically discover and categorize blocks within the group.
+- Support hot-swapping of blocks without script restart by re-scanning when groups change.
+
+## Update Frequency
+
+- Typical cadence: every 100 game ticks (~1.67 seconds at normal sim speed) for monitoring scripts.
+- Set via `Runtime.UpdateFrequency = UpdateFrequency.Update100;` in the constructor.
+- Heavy inventory scans may justify spreading work across `Update10` ticks instead of doing everything at once.
+
+## Build Commands
+
+```bash
+# Build the project (Debug configuration)
+dotnet build "Goose.csproj" -c Debug
+
+# Build for Release
+dotnet build "Goose.csproj" -c Release
+
+# Build solution file
+dotnet build "SE-Goose.sln"
+```
+
+**Always build after code changes** to verify the script compiles cleanly. Build errors here mean the script won't load in-game.
+
+## MDK2 Configuration
+
+Build behavior is controlled by:
+
+- `mdk.ini`: Project-specific MDK settings (in source control).
+- `mdk.local.ini`: Local development overrides (not in source control).
+
+### Script Minification
+
+Configured in `mdk.ini`:
+
+- `minify=none`: No optimization (default for development)
+- Other options: `trim`, `stripcomments`, `lite`, `full`
+
+### File Exclusions
+
+Files matching these patterns are excluded from the packaged script:
+
+- `Goose/obj/**/*`
+- `Goose/MDK/**/*`
+- `**/*.debug.cs`
+
+## Branching
+
+**Never commit directly to `main`.** All work — features, refactors, docs, even one-line fixes — lands on `main` through pull requests from a topic branch.
+
+**Before every commit, check the current branch.** Run `git rev-parse --abbrev-ref HEAD` (or read `git status`'s first line) and confirm it's not `main`. Don't make a commit on `main` even if the change is small or tests pass; the rule is no exceptions.
+
+If you find yourself on `main` and about to commit, **stop and ask the user** whether to create a new branch (and what to call it). Don't auto-name a branch and proceed silently. Suggested naming follows the existing convention in this repo:
+
+- `feat/<short-name>` — new features
+- `fix/<short-name>` — bug fixes
+- `refactor/<short-name>` — code restructuring
+- `chore/<short-name>` — tooling, deps, process notes
+- `docs/<short-name>` — documentation-only changes
+- `test/<short-name>` — test additions
+
+If you've already accidentally committed to `main`, recover by creating a branch from the current `main` HEAD, then resetting `main` back to its upstream (`git reset --hard origin/main`). Verify the working tree's uncommitted changes survive (stash first if needed). Always confirm with the user before running `git reset --hard`.
+
+## Git Commits
+
+**All commits must use the [Conventional Commits](https://www.conventionalcommits.org/) format:**
+
+```
+<type>[optional scope]: <short description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:**
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation changes only |
+| `style` | Formatting, whitespace — no logic change |
+| `refactor` | Code restructuring without behavior change |
+| `test` | Adding or updating tests |
+| `chore` | Build process, tooling, config, dependencies |
+| `perf` | Performance improvements |
+
+**Examples:**
+
+```
+feat(sorting): add category-based item priority sorting
+
+fix(discovery): handle null inventory on newly placed blocks
+
+docs: update wiki links in CLAUDE.md
+
+refactor(dispatcher): extract shared block-scan helper method
+
+chore: update MDK2 to latest version
+```
+
+**Rules:**
+- Use lowercase for type and description.
+- Keep the subject line under 72 characters.
+- Use an imperative, present-tense verb ("add", "fix", "update" — not "added", "fixes").
+- Add a body when the "why" needs explanation; leave it out when the subject line is sufficient.
+
+## Communication
+
+- Be clear about what you're doing and why.
+- Explain trade-offs when they exist.
+- Ask questions when requirements are unclear.
+- Confirm understanding of complex or unusual requests before implementing.
+
+## Key Space Engineers API Documentation
+
+- **PB API Reference**: https://malforge.github.io/spaceengineers/pbapi/
+    - Look up any class by its full namespace + `.html` (e.g., `IMyCargoContainer` → https://malforge.github.io/spaceengineers/pbapi/SpaceEngineers.Game.ModAPI.Ingame.IMyCargoContainer.html).
+- Inventory-relevant interfaces to know: `IMyInventory`, `IMyInventoryItem`, `MyItemType`, `IMyCargoContainer`, `IMyRefinery`, `IMyAssembler`, `IMyShipConnector`, `IMyShipController`, `IMyTerminalBlock.HasInventory`.
+
+When implementing against an unfamiliar API, fetch the current docs first rather than guessing — the PB API is a restricted subset of the full Space Engineers API and method availability shifts between game versions.
