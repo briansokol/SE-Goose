@@ -8,11 +8,11 @@ namespace Goose.Tests {
         public class TryParseQuotaValue_Tests {
             [Theory]
             [InlineData("5000", 5000L, Program.AutocraftMode.Minimum)]
-            [InlineData("5000M", 5000L, Program.AutocraftMode.Minimum)]
-            [InlineData("5000m", 5000L, Program.AutocraftMode.Minimum)]
-            [InlineData("10000L", 10000L, Program.AutocraftMode.Limiter)]
-            [InlineData("10000l", 10000L, Program.AutocraftMode.Limiter)]
             [InlineData("0", 0L, Program.AutocraftMode.Minimum)]
+            [InlineData("10000E", 10000L, Program.AutocraftMode.Exact)]
+            [InlineData("10000e", 10000L, Program.AutocraftMode.Exact)]
+            [InlineData("10000L", 10000L, Program.AutocraftMode.Exact)]
+            [InlineData("10000l", 10000L, Program.AutocraftMode.Exact)]
             public void Parses_well_formed_values(string raw, long expectedAmount, Program.AutocraftMode expectedMode) {
                 long amount;
                 Program.AutocraftMode mode;
@@ -40,8 +40,13 @@ namespace Goose.Tests {
             [InlineData("")]
             [InlineData("abc")]
             [InlineData("-5")]
+            [InlineData("E")]
+            [InlineData("e")]
             [InlineData("L")]
             [InlineData("5LL")]
+            [InlineData("5EE")]
+            [InlineData("5000M")]
+            [InlineData("5000m")]
             [InlineData("xx")]
             [InlineData("5x")]
             public void Rejects_malformed_values(string raw) {
@@ -50,6 +55,35 @@ namespace Goose.Tests {
                 bool ignore;
                 Program.Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore).Should().BeFalse();
                 ignore.Should().BeFalse();
+            }
+        }
+
+
+        public class CeilFixedPointToLong_Tests {
+            [Theory]
+            [InlineData(0L, 0L)]
+            [InlineData(1L, 1L)]
+            [InlineData(5L, 5L)]
+            [InlineData(100L, 100L)]
+            public void Whole_values_pass_through(long input, long expected) {
+                VRage.MyFixedPoint v = VRage.MyFixedPoint.DeserializeStringSafe(input.ToString());
+                Program.Autocraft_CeilFixedPointToLong(v).Should().Be(expected);
+            }
+
+            [Theory]
+            [InlineData("0.0001", 1L)]
+            [InlineData("0.5",    1L)]
+            [InlineData("4.5",    5L)]
+            [InlineData("4.9",    5L)]
+            [InlineData("99.999", 100L)]
+            public void Fractional_remainder_rounds_up(string serialized, long expected) {
+                VRage.MyFixedPoint v = VRage.MyFixedPoint.DeserializeStringSafe(serialized);
+                Program.Autocraft_CeilFixedPointToLong(v).Should().Be(expected);
+            }
+
+            [Fact]
+            public void Zero_returns_zero() {
+                Program.Autocraft_CeilFixedPointToLong(VRage.MyFixedPoint.Zero).Should().Be(0);
             }
         }
 
@@ -136,9 +170,9 @@ namespace Goose.Tests {
             }
 
             [Fact]
-            public void Limiter_quota_renders_count_with_L_suffix() {
-                Program.AutocraftQuota q = new Program.AutocraftQuota { Amount = 10000, Mode = Program.AutocraftMode.Limiter };
-                Program.Autocraft_FormatTargetColumn(q).Should().Be("10000L");
+            public void Exact_quota_renders_count_with_E_suffix() {
+                Program.AutocraftQuota q = new Program.AutocraftQuota { Amount = 10000, Mode = Program.AutocraftMode.Exact };
+                Program.Autocraft_FormatTargetColumn(q).Should().Be("10000E");
             }
 
             [Fact]

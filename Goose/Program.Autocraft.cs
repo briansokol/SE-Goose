@@ -12,19 +12,19 @@ namespace IngameScript {
     public partial class Program : MyGridProgram {
         /// <summary>How an autocraft quota's target amount is enforced.</summary>
         public enum AutocraftMode {
-            /// <summary>Crafts up to <see cref="AutocraftQuota.Amount"/> when actual count is below the target.</summary>
+            /// <summary>Crafts up to <see cref="AutocraftQuota.Amount"/> when actual count is below the target. Allows surplus.</summary>
             Minimum,
-            /// <summary>Disassembles down to <see cref="AutocraftQuota.Amount"/> when actual count is above the target.</summary>
-            Limiter
+            /// <summary>Maintains grid total at exactly <see cref="AutocraftQuota.Amount"/> — crafts when below, disassembles when above.</summary>
+            Exact
         }
 
         /// <summary>The reason an item is or is not being worked on by the autocraft engine.</summary>
         public enum AutocraftStatus {
             /// <summary>Item is within tolerance for its quota — no queue action.</summary>
             OK,
-            /// <summary>Item is below its Minimum target and assembly is queued/in-progress.</summary>
+            /// <summary>Item is below its Minimum or Exact target and assembly is queued/in-progress.</summary>
             Crafting,
-            /// <summary>Item is above its Limiter target and disassembly is queued/in-progress.</summary>
+            /// <summary>Item is above its Exact target and disassembly is queued/in-progress.</summary>
             Disassembling,
             /// <summary>Resolver could not find a blueprint; user must queue one of the item manually so observation can capture the mapping.</summary>
             BlockedNeedsLearn,
@@ -39,7 +39,7 @@ namespace IngameScript {
         public class AutocraftQuota {
             /// <summary>Target unit count.</summary>
             public long Amount;
-            /// <summary>How the target is enforced (Minimum = craft up, Limiter = disassemble down).</summary>
+            /// <summary>How the target is enforced (Minimum = craft up, allow surplus; Exact = hold at this number, both directions).</summary>
             public AutocraftMode Mode;
         }
 
@@ -96,11 +96,30 @@ namespace IngameScript {
         /// <summary>Hard upper bound on per-item queue depth; the runtime configured value is clamped to this ceiling.</summary>
         internal const int AutocraftMaxQueueDepthCeiling = 100000;
 
-        /// <summary>Parses an autocraft quota value (e.g. <c>5000</c>, <c>10000L</c>, or <c>x</c>).
-        /// Returns <c>false</c> for unrecognized formats or negative amounts. <c>M</c>/no-suffix maps
-        /// to <see cref="AutocraftMode.Minimum"/>; <c>L</c> maps to <see cref="AutocraftMode.Limiter"/>.
-        /// The literal <c>x</c>/<c>X</c> is recognized as the ignore sentinel — caller should treat
-        /// this as "unmanaged" and skip adding the item to <see cref="_autocraftTargets"/>.</summary>
+        /// <summary>Reduces a <see cref="MyFixedPoint"/> queue-amount accumulator to a whole-unit
+        /// <see cref="long"/>, rounding any fractional remainder UP. Used by the autocraft
+        /// reconciler so that an in-progress craft (which SE represents as a fractional remainder
+        /// on <see cref="MyProductionItem.Amount"/>) counts as one full pending unit. Truncating
+        /// the cast caused an off-by-one where the engine queued one extra unit, settling the grid
+        /// at <c>target ± 1</c>.</summary>
+        /// <param name="v">Fixed-point queue accumulator (sum of in-flight queue entries).</param>
+        /// <returns>The ceiling of <paramref name="v"/> as a non-negative long. Negative inputs
+        /// (not expected in practice) return their floor.</returns>
+        internal static long Autocraft_CeilFixedPointToLong(MyFixedPoint v) {
+            decimal d = (decimal)v;
+            long whole = (long)d;
+            if (d > whole) whole++;
+            return whole;
+        }
+
+        /// <summary>Parses an autocraft quota value (e.g. <c>5000</c>, <c>10000E</c>, or <c>x</c>).
+        /// Returns <c>false</c> for unrecognized formats or negative amounts. No suffix maps to
+        /// <see cref="AutocraftMode.Minimum"/>; <c>E</c>/<c>e</c> maps to <see cref="AutocraftMode.Exact"/>.
+        /// The legacy <c>L</c>/<c>l</c> suffix is silently accepted as an alias for <c>E</c> so user
+        /// configs written against the prior one-direction "Limiter" semantics keep parsing (and now
+        /// gain bidirectional behavior). The literal <c>x</c>/<c>X</c> is the ignore sentinel — caller
+        /// should treat this as "unmanaged" and skip adding the item to
+        /// <see cref="_autocraftTargets"/>.</summary>
         /// <param name="raw">Trimmed value portion of a <c>key=value</c> quota line.</param>
         /// <param name="amount">Parsed unit count when successful and not ignored; <c>0</c> otherwise.</param>
         /// <param name="mode">Parsed enforcement mode when successful and not ignored.</param>
@@ -117,11 +136,8 @@ namespace IngameScript {
             }
             char suffix = raw[raw.Length - 1];
             string numericPart = raw;
-            if (suffix == 'L' || suffix == 'l') {
-                mode = AutocraftMode.Limiter;
-                numericPart = raw.Substring(0, raw.Length - 1);
-            } else if (suffix == 'M' || suffix == 'm') {
-                mode = AutocraftMode.Minimum;
+            if (suffix == 'E' || suffix == 'e' || suffix == 'L' || suffix == 'l') {
+                mode = AutocraftMode.Exact;
                 numericPart = raw.Substring(0, raw.Length - 1);
             }
             if (!long.TryParse(numericPart, out amount)) return false;
@@ -215,7 +231,7 @@ namespace IngameScript {
         /// plain integer for minimums.</summary>
         internal static string Autocraft_FormatTargetColumn(AutocraftQuota quota) {
             if (quota == null) return "-";
-            if (quota.Mode == AutocraftMode.Limiter) return quota.Amount + "L";
+            if (quota.Mode == AutocraftMode.Exact) return quota.Amount + "E";
             return quota.Amount.ToString();
         }
 
@@ -298,7 +314,7 @@ namespace IngameScript {
                 bool ignore;
                 if (!Autocraft_TryParseQuotaValue(raw, out amount, out mode, out ignore)) {
                     LogWarningOnce("autocraft:bad-quota:" + kv.Key,
-                        "[Goose] Autocraft quota '" + kv.Key + "=" + raw + "' is malformed; expected <count>, <count>L, or x. Skipped.");
+                        "[Goose] Autocraft quota '" + kv.Key + "=" + raw + "' is malformed; expected <count>, <count>E, or x. Skipped.");
                     continue;
                 }
                 if (ignore) continue;
@@ -354,8 +370,8 @@ namespace IngameScript {
                     if (deficit > 0) _autocraftAssembleKeys.Add(itemKey);
                     else _autocraftItemStatus[itemKey] = AutocraftStatus.OK;
                 } else {
-                    long surplus = actual - quota.Amount;
-                    if (surplus > 0) _autocraftDisassembleKeys.Add(itemKey);
+                    if (actual < quota.Amount) _autocraftAssembleKeys.Add(itemKey);
+                    else if (actual > quota.Amount) _autocraftDisassembleKeys.Add(itemKey);
                     else _autocraftItemStatus[itemKey] = AutocraftStatus.OK;
                 }
             }
@@ -584,14 +600,15 @@ namespace IngameScript {
 
                 MyFixedPoint already;
                 alreadyQueued.TryGetValue(blueprintId.SubtypeName ?? string.Empty, out already);
-                long topUp = demand - (long)already;
+                long alreadyWhole = Autocraft_CeilFixedPointToLong(already);
+                long topUp = demand - alreadyWhole;
                 if (topUp > 0) {
                     asm.AddQueueItem(blueprintId, (decimal)topUp);
                 }
 
                 long queuedRunning;
                 _autocraftQueuedAmount.TryGetValue(itemKey, out queuedRunning);
-                _autocraftQueuedAmount[itemKey] = queuedRunning + Math.Max((long)already, topUp > 0 ? demand : (long)already);
+                _autocraftQueuedAmount[itemKey] = queuedRunning + Math.Max(alreadyWhole, topUp > 0 ? demand : alreadyWhole);
                 _autocraftItemStatus[itemKey] = mode == MyAssemblerMode.Assembly
                     ? AutocraftStatus.Crafting
                     : AutocraftStatus.Disassembling;

@@ -201,12 +201,13 @@ namespace IngameScript {
 
             sb.Append(AutocraftQuotaSectionHeader).Append('\n');
             sb.Append(";Autocraft quotas. Replace the 'x' on any line with a count to manage that item.\n");
-            sb.Append(";Format: <Type>/<Subtype>=<count>[L|M]   (suffix L = limiter / disassemble above; M = minimum, default)\n");
+            sb.Append(";Format: <Type>/<Subtype>=<count>[E]   (no suffix = minimum: craft up to N, allow surplus)\n");
+            sb.Append(";                                       (E = exact: hold grid total at N — craft if below, disassemble if above)\n");
             sb.Append(";Special value: x  (ignore — leave the item unmanaged; this is the default)\n");
             sb.Append(";Examples:\n");
-            sb.Append(";  Component/SteelPlate=5000\n");
-            sb.Append(";  Component/Construction=10000L\n");
-            sb.Append(";  Component/MotorComponent=x\n\n");
+            sb.Append(";  Component/SteelPlate=5000           (minimum, craft up to 5000)\n");
+            sb.Append(";  Component/Construction=10000E       (exact, hold at 10000)\n");
+            sb.Append(";  Component/MotorComponent=x          (ignore)\n\n");
             sb.Append("; --- Manage Items Below ---\n");
 
             HashSet<string> mergedKeys = new HashSet<string>(StringComparer.Ordinal);
