@@ -30,6 +30,10 @@ namespace IngameScript {
             BlockedNeedsLearn,
             /// <summary>No assemblers are present in the pool.</summary>
             BlockedNoAssembler,
+            /// <summary>A blueprint resolved but no assembler currently in the pool can build it
+            /// (e.g. a Computer quota on a grid with only a Basic Assembler). Distinct from
+            /// <see cref="BlockedNeedsLearn"/>: the user fix is to add a capable assembler subtype.</summary>
+            BlockedNoCapableAsm,
             /// <summary>Autocraft is disabled via <c>enableAutocraft</c>.</summary>
             Disabled
         }
@@ -58,6 +62,24 @@ namespace IngameScript {
 
         /// <summary>Subset of <see cref="_productionBlocks"/> that are assemblers; refreshed during rescan.</summary>
         List<IMyAssembler> _assemblers = new List<IMyAssembler>();
+
+        /// <summary>Per-assembler blueprint capability cache: <c>entityId → blueprintId → canUse</c>.
+        /// Lazily populated by <see cref="Autocraft_AsmCanUse"/>; invalidated wholesale on pool
+        /// divergence in <see cref="Autocraft_RefreshAssemblerPool"/>.</summary>
+        Dictionary<long, Dictionary<MyDefinitionId, bool>> _capabilityCache = new Dictionary<long, Dictionary<MyDefinitionId, bool>>();
+
+        /// <summary>EntityId snapshot of <see cref="_assemblers"/> (sorted) used to detect pool
+        /// churn cheaply during refresh; mismatch triggers a <see cref="_capabilityCache"/> reset.</summary>
+        List<long> _capabilityCacheShadow = new List<long>();
+
+        /// <summary>EntityId of the assembler currently held under the assemble-side reservation,
+        /// or 0 when no reservation is active. Honored across ticks for hysteresis (see
+        /// <see cref="Autocraft_ReservationStillValid"/>).</summary>
+        long _autocraftReservedAsmEntityId;
+
+        /// <summary>Per-tick set of assemblers that could not flip mode this tick because their
+        /// queue was non-empty in the opposite direction. Excluded from this tick's distribution.</summary>
+        HashSet<long> _modeLockedThisTick = new HashSet<long>();
 
         /// <summary>Discovered <c>[GCraft]</c> LCD block, or <c>null</c> when none is present.</summary>
         IMyTerminalBlock _gcraftLcd;
@@ -95,6 +117,12 @@ namespace IngameScript {
 
         /// <summary>Hard upper bound on per-item queue depth; the runtime configured value is clamped to this ceiling.</summary>
         internal const int AutocraftMaxQueueDepthCeiling = 100000;
+
+
+        /// <summary>Hardcoded minimum per-asm deficit before the dispatcher spreads across the
+        /// capable pool. Below this threshold, the entire deficit lands on a single capable
+        /// assembler (lowest entityId). Locked in the multi-assembler dispatch design.</summary>
+        internal const int AutocraftSplitMinBatch = 5;
 
         /// <summary>Reduces a <see cref="MyFixedPoint"/> queue-amount accumulator to a whole-unit
         /// <see cref="long"/>, rounding any fractional remainder UP. Used by the autocraft
@@ -194,6 +222,157 @@ namespace IngameScript {
             disassembleCount = disassemble;
         }
 
+
+        /// <summary>Splits a deficit across a fixed number of capable assemblers using an
+        /// even-share rule with a minimum batch threshold.
+        /// <list type="bullet">
+        ///   <item><paramref name="capableCount"/> <c>&lt;= 0</c> → empty array.</item>
+        ///   <item><paramref name="deficit"/> <c>&lt;= 0</c> → length-<paramref name="capableCount"/> all-zero array.</item>
+        ///   <item><paramref name="deficit"/> <c>&lt; minBatch</c> → entire deficit on slot 0; remaining slots 0.</item>
+        ///   <item>Else: slots <c>0..N-2</c> get <c>ceil(D/N)</c>; the last slot absorbs the remainder.</item>
+        /// </list>
+        /// Sum of the returned shares equals <paramref name="deficit"/> exactly when
+        /// <paramref name="deficit"/> &gt; 0 and <paramref name="capableCount"/> &gt; 0.</summary>
+        /// <param name="deficit">Total amount to spread.</param>
+        /// <param name="capableCount">Number of assemblers that can build this item.</param>
+        /// <param name="minBatch">Below this deficit, do not split — entire amount on slot 0.</param>
+        /// <returns>Per-slot share array of length <paramref name="capableCount"/> (or empty).</returns>
+        internal static int[] Autocraft_SplitDeficit(long deficit, int capableCount, int minBatch) {
+            if (capableCount <= 0) return new int[0];
+            int[] shares = new int[capableCount];
+            if (deficit <= 0) return shares;
+            if (deficit < minBatch) {
+                shares[0] = (int)deficit;
+                return shares;
+            }
+            long perSlot = (deficit + capableCount - 1) / capableCount;
+            long sumPrefix = 0;
+            for (int i = 0; i < capableCount - 1; i++) {
+                shares[i] = (int)perSlot;
+                sumPrefix += perSlot;
+            }
+            shares[capableCount - 1] = (int)(deficit - sumPrefix);
+            return shares;
+        }
+
+        /// <summary>Picks the index of the assembler best suited to hold the assemble-side
+        /// reservation: the one whose entityId appears in the most capability sets across the
+        /// current pending assemble work. Ties resolve to the lowest entityId. Returns
+        /// <c>-1</c> when reservation is meaningless (pool ≤ 1, empty work-set, or no
+        /// assembler can build any pending item).</summary>
+        /// <param name="assemblerIds">EntityIds of the assembler pool (expected sorted ascending).</param>
+        /// <param name="capableAssemblersPerAssembleKey">Per-assemble-key set of capable entityIds.</param>
+        /// <returns>Index into <paramref name="assemblerIds"/>, or <c>-1</c>.</returns>
+        internal static int Autocraft_PickReservedAssemblerIndex(
+            IList<long> assemblerIds,
+            IList<HashSet<long>> capableAssemblersPerAssembleKey) {
+            if (assemblerIds == null || assemblerIds.Count <= 1) return -1;
+            if (capableAssemblersPerAssembleKey == null || capableAssemblersPerAssembleKey.Count == 0) return -1;
+            int bestIdx = -1;
+            int bestCount = -1;
+            long bestEntity = long.MaxValue;
+            for (int i = 0; i < assemblerIds.Count; i++) {
+                long entity = assemblerIds[i];
+                int count = 0;
+                for (int k = 0; k < capableAssemblersPerAssembleKey.Count; k++) {
+                    HashSet<long> set = capableAssemblersPerAssembleKey[k];
+                    if (set != null && set.Contains(entity)) count++;
+                }
+                if (count > bestCount || (count == bestCount && entity < bestEntity)) {
+                    bestCount = count;
+                    bestIdx = i;
+                    bestEntity = entity;
+                }
+            }
+            if (bestCount <= 0) return -1;
+            return bestIdx;
+        }
+
+        /// <summary>Wraps <see cref="Autocraft_ComputePoolSplit"/> with assemble-side reservation
+        /// semantics. When <paramref name="reserveEnabled"/> is true, the pool size is &gt; 1,
+        /// and both sides have work, one assembler is held back from the proportional split for
+        /// the assemble side (caller picks which one). Otherwise this delegates to the unreserved
+        /// split unchanged.</summary>
+        /// <param name="poolSize">Total assemblers in the pool.</param>
+        /// <param name="assemblePending">Count of items needing assembly.</param>
+        /// <param name="disassemblePending">Count of items needing disassembly.</param>
+        /// <param name="reserveEnabled">Reservation feature toggle from the caller.</param>
+        /// <param name="assembleCount">Number of assemblers assigned to assemble side (includes the reserved slot when active).</param>
+        /// <param name="disassembleCount">Number of assemblers assigned to disassemble side.</param>
+        /// <param name="reservedActive">True when the reservation is in effect this tick.</param>
+        internal static void Autocraft_ComputePoolSplitWithReservation(
+            int poolSize,
+            int assemblePending,
+            int disassemblePending,
+            bool reserveEnabled,
+            out int assembleCount,
+            out int disassembleCount,
+            out bool reservedActive) {
+            reservedActive = false;
+            bool bothSidesHaveWork = assemblePending > 0 && disassemblePending > 0;
+            bool activate = reserveEnabled && poolSize > 1 && bothSidesHaveWork;
+            if (!activate) {
+                Autocraft_ComputePoolSplit(poolSize, assemblePending, disassemblePending,
+                    out assembleCount, out disassembleCount);
+                return;
+            }
+            int reducedAssemble, reducedDisassemble;
+            Autocraft_ComputePoolSplit(poolSize - 1, assemblePending, disassemblePending,
+                out reducedAssemble, out reducedDisassemble);
+            assembleCount = reducedAssemble + 1;
+            disassembleCount = reducedDisassemble;
+            reservedActive = true;
+        }
+
+        /// <summary>Single decision point for mode-lock: an assembler can flip when either the
+        /// desired mode equals its current mode (no change needed) or its queue is empty
+        /// (no in-flight work to wipe).</summary>
+        /// <param name="queueEmpty">Whether the assembler's queue is currently empty.</param>
+        /// <param name="current">Current assembler mode.</param>
+        /// <param name="desired">Desired assembler mode for this tick.</param>
+        internal static bool Autocraft_CanFlipMode(bool queueEmpty, MyAssemblerMode current, MyAssemblerMode desired) {
+            return current == desired || queueEmpty;
+        }
+
+        /// <summary>Computes how many additional units to enqueue on a single assembler for
+        /// one item: <c>min(share, maxDepth) - alreadyQueuedOnThisAsm</c>, clamped to <c>≥ 0</c>.</summary>
+        /// <param name="share">Per-assembler share allocated by <see cref="Autocraft_SplitDeficit"/>.</param>
+        /// <param name="alreadyQueuedOnThisAsm">Whole-unit pending amount already on this assembler for this blueprint.</param>
+        /// <param name="maxDepth">Per-item queue depth ceiling.</param>
+        internal static long Autocraft_PerAssemblerTopUp(long share, long alreadyQueuedOnThisAsm, int maxDepth) {
+            long cap = Math.Min(share, (long)maxDepth);
+            long topUp = cap - alreadyQueuedOnThisAsm;
+            if (topUp < 0) topUp = 0;
+            return topUp;
+        }
+
+        /// <summary>Surplus amount to trim when a per-assembler share shrunk between ticks and
+        /// the queue currently holds more than the new share allows. Returns
+        /// <c>max(0, alreadyQueuedOnThisAsm - share)</c>.</summary>
+        /// <param name="share">Per-assembler share allocated this tick.</param>
+        /// <param name="alreadyQueuedOnThisAsm">Whole-unit pending amount already on this assembler.</param>
+        internal static long Autocraft_ComputeShareSurplus(long share, long alreadyQueuedOnThisAsm) {
+            long surplus = alreadyQueuedOnThisAsm - share;
+            return surplus > 0 ? surplus : 0;
+        }
+
+        /// <summary>Hysteresis check for reservation: returns <c>true</c> when the currently
+        /// reserved assembler is still capable of building at least one item in the current
+        /// pending assemble work-set. Releases the reservation slot only when that ceases.</summary>
+        /// <param name="currentReservedId">EntityId of the current reservation holder (0 = none).</param>
+        /// <param name="capableSetsForCurrentWorkSet">Per-assemble-key capable entityId sets.</param>
+        internal static bool Autocraft_ReservationStillValid(
+            long currentReservedId,
+            IList<HashSet<long>> capableSetsForCurrentWorkSet) {
+            if (currentReservedId == 0) return false;
+            if (capableSetsForCurrentWorkSet == null || capableSetsForCurrentWorkSet.Count == 0) return false;
+            for (int i = 0; i < capableSetsForCurrentWorkSet.Count; i++) {
+                HashSet<long> set = capableSetsForCurrentWorkSet[i];
+                if (set != null && set.Contains(currentReservedId)) return true;
+            }
+            return false;
+        }
+
         /// <summary>Renders one status row for the <c>[GCraft]</c> LCD using fixed-width columns.</summary>
         /// <param name="sb">Buffer to append to.</param>
         /// <param name="itemSubtype">Display name (typically the item subtype).</param>
@@ -245,6 +424,7 @@ namespace IngameScript {
                     return queued > 0 ? "Disassembling (" + queued + " queued)" : "Disassembling";
                 case AutocraftStatus.BlockedNeedsLearn: return "Blocked: NeedsLearn";
                 case AutocraftStatus.BlockedNoAssembler: return "Blocked: NoAssembler";
+                case AutocraftStatus.BlockedNoCapableAsm: return "Blocked: NoCapableAsm";
                 case AutocraftStatus.Disabled: return "Disabled";
                 default: return "?";
             }
@@ -385,23 +565,92 @@ namespace IngameScript {
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded()) yield return YieldReason.BudgetHit;
 
-            int assembleCount, disassembleCount;
-            Autocraft_ComputePoolSplit(_assemblers.Count,
-                _autocraftAssembleKeys.Count, _autocraftDisassembleKeys.Count,
-                out assembleCount, out disassembleCount);
+            Dictionary<string, HashSet<long>> capableByKey =
+                new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
+            List<HashSet<long>> capableSetsList = new List<HashSet<long>>(_autocraftAssembleKeys.Count);
+            for (int k = 0; k < _autocraftAssembleKeys.Count; k++) {
+                string itemKey = _autocraftAssembleKeys[k];
+                MyDefinitionId bpId;
+                if (!_blueprintMap.TryGetValue(itemKey, out bpId)) continue;
+                HashSet<long> set = new HashSet<long>();
+                Autocraft_GetCapableAssemblerIds(bpId, _assemblers, set);
+                capableByKey[itemKey] = set;
+                capableSetsList.Add(set);
+            }
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded()) yield return YieldReason.BudgetHit;
 
-            bool noWork = assembleCount == 0 && disassembleCount == 0;
+            bool reserveEnabled = _assemblers.Count > 1
+                && _autocraftDisassembleKeys.Count > 0
+                && _autocraftAssembleKeys.Count > 0;
+            int assembleCount, disassembleCount;
+            bool reservedActive;
+            Autocraft_ComputePoolSplitWithReservation(_assemblers.Count,
+                _autocraftAssembleKeys.Count, _autocraftDisassembleKeys.Count,
+                reserveEnabled,
+                out assembleCount, out disassembleCount, out reservedActive);
+
+            if (reservedActive) {
+                bool keep = _autocraftReservedAsmEntityId != 0
+                    && Autocraft_ReservationStillValid(_autocraftReservedAsmEntityId, capableSetsList);
+                if (keep) {
+                    bool foundInPool = false;
+                    for (int i = 0; i < _assemblers.Count; i++) {
+                        if (_assemblers[i].EntityId == _autocraftReservedAsmEntityId) { foundInPool = true; break; }
+                    }
+                    keep = foundInPool;
+                }
+                if (!keep) {
+                    List<long> entityIds = new List<long>(_assemblers.Count);
+                    for (int i = 0; i < _assemblers.Count; i++) entityIds.Add(_assemblers[i].EntityId);
+                    int pickedIdx = Autocraft_PickReservedAssemblerIndex(entityIds, capableSetsList);
+                    _autocraftReservedAsmEntityId = pickedIdx >= 0 ? _assemblers[pickedIdx].EntityId : 0;
+                }
+                if (_autocraftReservedAsmEntityId == 0) {
+                    reservedActive = false;
+                    Autocraft_ComputePoolSplitWithReservation(_assemblers.Count,
+                        _autocraftAssembleKeys.Count, _autocraftDisassembleKeys.Count,
+                        false,
+                        out assembleCount, out disassembleCount, out reservedActive);
+                }
+            } else {
+                _autocraftReservedAsmEntityId = 0;
+            }
+
+            MyAssemblerMode[] desiredMode = new MyAssemblerMode[_assemblers.Count];
+            int reservedIdx = -1;
+            if (reservedActive && _autocraftReservedAsmEntityId != 0) {
+                for (int i = 0; i < _assemblers.Count; i++) {
+                    if (_assemblers[i].EntityId == _autocraftReservedAsmEntityId) { reservedIdx = i; break; }
+                }
+            }
+            int nonReservedAssembleSlots = reservedActive ? assembleCount - 1 : assembleCount;
+            int placed = 0;
+            for (int i = 0; i < _assemblers.Count; i++) {
+                if (i == reservedIdx) continue;
+                if (placed < nonReservedAssembleSlots) {
+                    desiredMode[i] = MyAssemblerMode.Assembly;
+                    placed++;
+                } else {
+                    desiredMode[i] = MyAssemblerMode.Disassembly;
+                }
+            }
+            if (reservedIdx >= 0) desiredMode[reservedIdx] = MyAssemblerMode.Assembly;
+
+            if (_assemblers.Count == 2 && reservedActive && _autocraftAssembleKeys.Count == 0 && reservedIdx >= 0) {
+                desiredMode[reservedIdx] = MyAssemblerMode.Disassembly;
+            }
+
+            _modeLockedThisTick.Clear();
             for (int i = 0; i < _assemblers.Count; i++) {
                 IMyAssembler a = _assemblers[i];
                 if (a == null) continue;
-                MyAssemblerMode desired = noWork
-                    ? MyAssemblerMode.Assembly
-                    : (i < assembleCount ? MyAssemblerMode.Assembly : MyAssemblerMode.Disassembly);
-                if (a.Mode != desired) {
-                    a.ClearQueue();
-                    a.Mode = desired;
+                MyAssemblerMode desired = desiredMode[i];
+                if (Autocraft_CanFlipMode(a.IsQueueEmpty, a.Mode, desired)) {
+                    if (a.Mode != desired) a.Mode = desired;
+                } else {
+                    _modeLockedThisTick.Add(a.EntityId);
                 }
-                if (noWork && !a.IsQueueEmpty) a.ClearQueue();
                 try { a.CooperativeMode = false; } catch (Exception) { /* modded blocks may reject */ }
             }
             yield return YieldReason.ChunkBoundary;
@@ -409,14 +658,24 @@ namespace IngameScript {
 
             int maxDepth = Math.Min(AutocraftMaxQueueDepthCeiling, Math.Max(1, _config.AutocraftMaxQueueDepth));
 
+            List<IMyAssembler> assembleSlice = new List<IMyAssembler>(_assemblers.Count);
+            List<IMyAssembler> disassembleSlice = new List<IMyAssembler>(_assemblers.Count);
+            for (int i = 0; i < _assemblers.Count; i++) {
+                IMyAssembler a = _assemblers[i];
+                if (a == null) continue;
+                if (_modeLockedThisTick.Contains(a.EntityId)) continue;
+                if (a.Mode == MyAssemblerMode.Assembly) assembleSlice.Add(a);
+                else disassembleSlice.Add(a);
+            }
+
             Autocraft_DistributeAndReconcile(
-                _autocraftAssembleKeys, 0, assembleCount,
+                assembleSlice, _autocraftAssembleKeys, capableByKey,
                 MyAssemblerMode.Assembly, maxDepth);
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded()) yield return YieldReason.BudgetHit;
 
             Autocraft_DistributeAndReconcile(
-                _autocraftDisassembleKeys, assembleCount, disassembleCount,
+                disassembleSlice, _autocraftDisassembleKeys, null,
                 MyAssemblerMode.Disassembly, maxDepth);
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded()) yield return YieldReason.BudgetHit;
@@ -434,6 +693,95 @@ namespace IngameScript {
                 if (a != null && ValidateBlock(a)) _assemblers.Add(a);
             }
             _assemblers.Sort(Autocraft_CompareAssemblersByEntityId);
+
+            bool divergent = _assemblers.Count != _capabilityCacheShadow.Count;
+            if (!divergent) {
+                for (int i = 0; i < _assemblers.Count; i++) {
+                    if (_assemblers[i].EntityId != _capabilityCacheShadow[i]) { divergent = true; break; }
+                }
+            }
+            if (divergent) {
+                _capabilityCache.Clear();
+                _capabilityCacheShadow.Clear();
+                for (int i = 0; i < _assemblers.Count; i++) _capabilityCacheShadow.Add(_assemblers[i].EntityId);
+            }
+
+            if (_autocraftReservedAsmEntityId != 0) {
+                bool stillPresent = false;
+                for (int i = 0; i < _assemblers.Count; i++) {
+                    if (_assemblers[i].EntityId == _autocraftReservedAsmEntityId) { stillPresent = true; break; }
+                }
+                if (!stillPresent) _autocraftReservedAsmEntityId = 0;
+            }
+        }
+
+
+        /// <summary>Lazy per-assembler capability probe with caching. On cache miss, calls
+        /// <see cref="IMyAssembler.CanUseBlueprint"/> and stores the result in
+        /// <see cref="_capabilityCache"/>. Modded assemblers that throw on unknown definitions
+        /// are recorded as <c>false</c>.</summary>
+        /// <param name="entityId">EntityId of the assembler (used as cache key).</param>
+        /// <param name="bpId">Blueprint definition being probed.</param>
+        /// <param name="asm">The assembler block (must match <paramref name="entityId"/>).</param>
+        bool Autocraft_AsmCanUse(long entityId, MyDefinitionId bpId, IMyAssembler asm) {
+            Dictionary<MyDefinitionId, bool> perBp;
+            if (!_capabilityCache.TryGetValue(entityId, out perBp)) {
+                perBp = new Dictionary<MyDefinitionId, bool>();
+                _capabilityCache[entityId] = perBp;
+            }
+            bool cached;
+            if (perBp.TryGetValue(bpId, out cached)) return cached;
+            bool result = false;
+            if (asm != null) {
+                try { result = asm.CanUseBlueprint(bpId); }
+                catch (Exception) { result = false; }
+            }
+            perBp[bpId] = result;
+            return result;
+        }
+
+        /// <summary>Populates <paramref name="outIds"/> with the entityIds of every assembler in
+        /// <paramref name="pool"/> that can build <paramref name="bpId"/>. Sibling to
+        /// <see cref="Autocraft_AnyAssemblerCanUse"/> — returns the full capable set rather than
+        /// a boolean. Caller owns the output buffer.</summary>
+        /// <param name="bpId">Blueprint definition being probed.</param>
+        /// <param name="pool">Assembler pool to walk.</param>
+        /// <param name="outIds">Output set, cleared before population.</param>
+        void Autocraft_GetCapableAssemblerIds(MyDefinitionId bpId, List<IMyAssembler> pool, HashSet<long> outIds) {
+            outIds.Clear();
+            if (pool == null) return;
+            for (int i = 0; i < pool.Count; i++) {
+                IMyAssembler asm = pool[i];
+                if (asm == null) continue;
+                if (Autocraft_AsmCanUse(asm.EntityId, bpId, asm)) outIds.Add(asm.EntityId);
+            }
+        }
+
+        /// <summary>Removes up to <paramref name="surplus"/> whole units of a given blueprint from
+        /// an assembler's queue, walking back-to-front. Used by
+        /// <see cref="Autocraft_ReconcileAssembler"/> when an assembler's per-item share shrinks
+        /// between ticks (e.g. the reservation moves) and the queue currently overshoots the new
+        /// share. Fractional in-progress entries (<c>amount &lt; 1</c>) are skipped to avoid
+        /// cancelling an active build.</summary>
+        /// <param name="asm">Assembler to trim.</param>
+        /// <param name="bpId">Blueprint definition to match against queue entries.</param>
+        /// <param name="surplus">Whole-unit surplus to remove (no-op when <c>≤ 0</c>).</param>
+        void Autocraft_TrimAssemblerQueueItem(IMyAssembler asm, MyDefinitionId bpId, long surplus) {
+            if (surplus <= 0 || asm == null) return;
+            _autocraftQueueScratch.Clear();
+            asm.GetQueue(_autocraftQueueScratch);
+            string targetSubtype = bpId.SubtypeName ?? string.Empty;
+            for (int q = _autocraftQueueScratch.Count - 1; q >= 0 && surplus > 0; q--) {
+                MyProductionItem prod = _autocraftQueueScratch[q];
+                string sub = prod.BlueprintId.SubtypeName ?? string.Empty;
+                if (sub != targetSubtype) continue;
+                decimal entryAmt = (decimal)prod.Amount;
+                long entryWhole = (long)entryAmt;
+                if (entryWhole <= 0) continue;
+                long removeWhole = entryWhole < surplus ? entryWhole : surplus;
+                asm.RemoveQueueItem(q, (MyFixedPoint)((decimal)removeWhole));
+                surplus -= removeWhole;
+            }
         }
 
         /// <summary>Stable per-tick assembler ordering used by the round-robin distributor. Sorting
@@ -515,36 +863,78 @@ namespace IngameScript {
         /// each assembler's queue toward the per-item demand. Tracks the per-item queued amount
         /// for the status LCD.</summary>
         void Autocraft_DistributeAndReconcile(
-            List<string> keys, int startIdx, int count,
-            MyAssemblerMode mode, int maxDepth) {
-            if (count <= 0 || keys.Count == 0) {
-                // Still need to clear leftover queue entries on these assemblers.
-                for (int i = startIdx; i < startIdx + count; i++) {
-                    if (i >= 0 && i < _assemblers.Count) {
-                        IMyAssembler a = _assemblers[i];
-                        if (a != null && !a.IsQueueEmpty) a.ClearQueue();
+            IList<IMyAssembler> slice,
+            IList<string> keys,
+            Dictionary<string, HashSet<long>> capableByKey,
+            MyAssemblerMode mode,
+            int maxDepth) {
+            Dictionary<long, List<KeyValuePair<string, long>>> perAsm =
+                new Dictionary<long, List<KeyValuePair<string, long>>>();
+            if (slice != null) {
+                for (int i = 0; i < slice.Count; i++) {
+                    IMyAssembler a = slice[i];
+                    if (a != null) perAsm[a.EntityId] = new List<KeyValuePair<string, long>>();
+                }
+            }
+
+            if (keys != null && slice != null && slice.Count > 0) {
+                for (int k = 0; k < keys.Count; k++) {
+                    string itemKey = keys[k];
+                    AutocraftQuota quota;
+                    if (!_autocraftTargets.TryGetValue(itemKey, out quota)) continue;
+                    long actual;
+                    _autocraftTotalsScratch.TryGetValue(itemKey, out actual);
+                    long demand = mode == MyAssemblerMode.Assembly
+                        ? Math.Max(0, quota.Amount - actual)
+                        : Math.Max(0, actual - quota.Amount);
+                    if (demand <= 0) continue;
+
+                    HashSet<long> capableSet = null;
+                    bool capabilityFiltered = capableByKey != null;
+                    if (capabilityFiltered) capableByKey.TryGetValue(itemKey, out capableSet);
+
+                    List<IMyAssembler> capableInSlice = new List<IMyAssembler>(slice.Count);
+                    for (int i = 0; i < slice.Count; i++) {
+                        IMyAssembler a = slice[i];
+                        if (a == null) continue;
+                        if (!capabilityFiltered || (capableSet != null && capableSet.Contains(a.EntityId))) {
+                            capableInSlice.Add(a);
+                        }
+                    }
+
+                    if (capableInSlice.Count == 0) {
+                        if (capabilityFiltered) {
+                            _autocraftItemStatus[itemKey] = AutocraftStatus.BlockedNoCapableAsm;
+                        }
+                        continue;
+                    }
+
+                    int[] shares = Autocraft_SplitDeficit(demand, capableInSlice.Count, AutocraftSplitMinBatch);
+                    bool anyAssigned = false;
+                    for (int s = 0; s < shares.Length; s++) {
+                        if (shares[s] <= 0) continue;
+                        IMyAssembler target = capableInSlice[s];
+                        perAsm[target.EntityId].Add(new KeyValuePair<string, long>(itemKey, shares[s]));
+                        anyAssigned = true;
+                    }
+                    if (anyAssigned) {
+                        _autocraftItemStatus[itemKey] = mode == MyAssemblerMode.Assembly
+                            ? AutocraftStatus.Crafting
+                            : AutocraftStatus.Disassembling;
                     }
                 }
-                return;
             }
 
-            // Deterministic deal: key index i goes to assembler i % count, starting at 0
-            // every tick. Sorted-stable input means a given item key always lands on the
-            // same assembler unless the assigned-set itself changes — no per-tick rotation
-            // pointer, no thrash, no remove-and-re-add cycle.
-            List<List<string>> assignments = new List<List<string>>(count);
-            for (int i = 0; i < count; i++) assignments.Add(new List<string>());
-            for (int k = 0; k < keys.Count; k++) {
-                assignments[k % count].Add(keys[k]);
-            }
-
-            for (int local = 0; local < count; local++) {
-                int absoluteIdx = startIdx + local;
-                if (absoluteIdx < 0 || absoluteIdx >= _assemblers.Count) continue;
-                IMyAssembler asm = _assemblers[absoluteIdx];
-                if (asm == null) continue;
-
-                Autocraft_ReconcileAssembler(asm, assignments[local], mode, maxDepth);
+            if (slice != null) {
+                for (int i = 0; i < slice.Count; i++) {
+                    IMyAssembler asm = slice[i];
+                    if (asm == null) continue;
+                    List<KeyValuePair<string, long>> assignments;
+                    if (!perAsm.TryGetValue(asm.EntityId, out assignments)) {
+                        assignments = new List<KeyValuePair<string, long>>();
+                    }
+                    Autocraft_ReconcileAssembler(asm, assignments, mode, maxDepth);
+                }
             }
         }
 
@@ -552,23 +942,24 @@ namespace IngameScript {
         /// queue entries that are no longer assigned, and tops up assigned entries to the per-item
         /// demand (clamped at <paramref name="maxDepth"/>).</summary>
         void Autocraft_ReconcileAssembler(
-            IMyAssembler asm, List<string> assignedKeys,
-            MyAssemblerMode mode, int maxDepth) {
-            HashSet<string> assignedSet = new HashSet<string>(StringComparer.Ordinal);
-            for (int i = 0; i < assignedKeys.Count; i++) assignedSet.Add(assignedKeys[i]);
+            IMyAssembler asm,
+            IList<KeyValuePair<string, long>> assignedShares,
+            MyAssemblerMode mode,
+            int maxDepth) {
+            HashSet<string> assignedSubtypes = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < assignedShares.Count; i++) {
+                MyDefinitionId mapped;
+                if (_blueprintMap.TryGetValue(assignedShares[i].Key, out mapped)) {
+                    assignedSubtypes.Add(mapped.SubtypeName ?? string.Empty);
+                }
+            }
 
             _autocraftQueueScratch.Clear();
             asm.GetQueue(_autocraftQueueScratch);
             for (int q = _autocraftQueueScratch.Count - 1; q >= 0; q--) {
                 MyProductionItem prod = _autocraftQueueScratch[q];
                 string bpSubtype = prod.BlueprintId.SubtypeName ?? string.Empty;
-                bool stillAssigned = false;
-                foreach (string assignedKey in assignedKeys) {
-                    MyDefinitionId mapped;
-                    if (!_blueprintMap.TryGetValue(assignedKey, out mapped)) continue;
-                    if (mapped.SubtypeName == bpSubtype) { stillAssigned = true; break; }
-                }
-                if (!stillAssigned) {
+                if (!assignedSubtypes.Contains(bpSubtype)) {
                     asm.RemoveQueueItem(q, prod.Amount);
                 }
             }
@@ -583,35 +974,27 @@ namespace IngameScript {
                 alreadyQueued[sub] = amt + _autocraftQueueScratch[q].Amount;
             }
 
-            for (int i = 0; i < assignedKeys.Count; i++) {
-                string itemKey = assignedKeys[i];
-                AutocraftQuota quota;
-                if (!_autocraftTargets.TryGetValue(itemKey, out quota)) continue;
+            for (int i = 0; i < assignedShares.Count; i++) {
+                string itemKey = assignedShares[i].Key;
+                long share = assignedShares[i].Value;
                 MyDefinitionId blueprintId;
                 if (!_blueprintMap.TryGetValue(itemKey, out blueprintId)) continue;
-
-                long actual;
-                _autocraftTotalsScratch.TryGetValue(itemKey, out actual);
-                long demand = mode == MyAssemblerMode.Assembly
-                    ? Math.Max(0, quota.Amount - actual)
-                    : Math.Max(0, actual - quota.Amount);
-                if (demand <= 0) continue;
-                if (demand > maxDepth) demand = maxDepth;
-
+                string sub = blueprintId.SubtypeName ?? string.Empty;
                 MyFixedPoint already;
-                alreadyQueued.TryGetValue(blueprintId.SubtypeName ?? string.Empty, out already);
+                alreadyQueued.TryGetValue(sub, out already);
                 long alreadyWhole = Autocraft_CeilFixedPointToLong(already);
-                long topUp = demand - alreadyWhole;
-                if (topUp > 0) {
-                    asm.AddQueueItem(blueprintId, (decimal)topUp);
-                }
 
+                long topUp = Autocraft_PerAssemblerTopUp(share, alreadyWhole, maxDepth);
+                if (topUp > 0) asm.AddQueueItem(blueprintId, (decimal)topUp);
+
+                long surplus = Autocraft_ComputeShareSurplus(share, alreadyWhole);
+                if (surplus > 0) Autocraft_TrimAssemblerQueueItem(asm, blueprintId, surplus);
+
+                long contribution = alreadyWhole + topUp - surplus;
+                if (contribution < 0) contribution = 0;
                 long queuedRunning;
                 _autocraftQueuedAmount.TryGetValue(itemKey, out queuedRunning);
-                _autocraftQueuedAmount[itemKey] = queuedRunning + Math.Max(alreadyWhole, topUp > 0 ? demand : alreadyWhole);
-                _autocraftItemStatus[itemKey] = mode == MyAssemblerMode.Assembly
-                    ? AutocraftStatus.Crafting
-                    : AutocraftStatus.Disassembling;
+                _autocraftQueuedAmount[itemKey] = queuedRunning + contribution;
             }
         }
 
