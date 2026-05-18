@@ -956,22 +956,17 @@ namespace IngameScript {
 
             _autocraftQueueScratch.Clear();
             asm.GetQueue(_autocraftQueueScratch);
+            Dictionary<string, MyFixedPoint> alreadyQueued = new Dictionary<string, MyFixedPoint>(StringComparer.Ordinal);
             for (int q = _autocraftQueueScratch.Count - 1; q >= 0; q--) {
                 MyProductionItem prod = _autocraftQueueScratch[q];
                 string bpSubtype = prod.BlueprintId.SubtypeName ?? string.Empty;
                 if (!assignedSubtypes.Contains(bpSubtype)) {
                     asm.RemoveQueueItem(q, prod.Amount);
+                    continue;
                 }
-            }
-
-            _autocraftQueueScratch.Clear();
-            asm.GetQueue(_autocraftQueueScratch);
-            Dictionary<string, MyFixedPoint> alreadyQueued = new Dictionary<string, MyFixedPoint>(StringComparer.Ordinal);
-            for (int q = 0; q < _autocraftQueueScratch.Count; q++) {
-                string sub = _autocraftQueueScratch[q].BlueprintId.SubtypeName ?? string.Empty;
                 MyFixedPoint amt;
-                alreadyQueued.TryGetValue(sub, out amt);
-                alreadyQueued[sub] = amt + _autocraftQueueScratch[q].Amount;
+                alreadyQueued.TryGetValue(bpSubtype, out amt);
+                alreadyQueued[bpSubtype] = amt + prod.Amount;
             }
 
             for (int i = 0; i < assignedShares.Count; i++) {
@@ -1119,38 +1114,17 @@ namespace IngameScript {
                 if (input == null || output == null) continue;
 
                 bool assemblyMode = asm.Mode == MyAssemblerMode.Assembly;
-                bool queueEmpty = asm.IsQueueEmpty;
-
-                if (queueEmpty) {
-                    Autocraft_DrainInventory(input, false, null, null);
-                    if (BudgetExceeded()) return;
-                    Autocraft_DrainInventory(output, false, null, null);
-                    if (BudgetExceeded()) return;
+                if (asm.IsQueueEmpty) {
+                    if (!Autocraft_StageInventory(input, false, null, null, 0)) return;
+                    if (!Autocraft_StageInventory(output, false, null, null, 0)) return;
                     continue;
                 }
 
                 if (assemblyMode) {
-                    // Assembly: input holds ingredient ingots, output holds produced components.
-                    // Drain anything non-ingot from input, then top each ingot type up to buffer.
-                    Autocraft_DrainInventory(input, true, null, null);
-                    if (BudgetExceeded()) return;
-                    for (int t = 0; t < ingotTypes.Count; t++) {
-                        MyItemType type = ingotTypes[t];
-                        long current = GetCurrentAmount(input, type);
-                        if (current >= ingotKeep) continue;
-                        Autocraft_PullItemIntoInventory(input, type, ingotKeep - current);
-                        if (BudgetExceeded()) return;
-                    }
-                    // Output: drain produced components back to category routes.
-                    Autocraft_DrainInventory(output, false, null, null);
-                    if (BudgetExceeded()) return;
+                    if (!Autocraft_StageInventory(input, true, null, ingotTypes, ingotKeep)) return;
+                    if (!Autocraft_StageInventory(output, false, null, null, 0)) return;
                 } else {
-                    // Disassembly: SE consumes from output and produces to input.
-                    // Drain ingots that accumulated in input.
-                    Autocraft_DrainInventory(input, false, null, null);
-                    if (BudgetExceeded()) return;
-                    // Output: collect queued blueprint subtypes; drain anything not assigned, then
-                    // top up the assigned components to match the queued amount.
+                    if (!Autocraft_StageInventory(input, false, null, null, 0)) return;
                     _autocraftQueueScratch.Clear();
                     asm.GetQueue(_autocraftQueueScratch);
                     HashSet<string> assignedSubtypes = new HashSet<string>(StringComparer.Ordinal);
@@ -1158,8 +1132,7 @@ namespace IngameScript {
                         string sub = _autocraftQueueScratch[q].BlueprintId.SubtypeName ?? string.Empty;
                         if (sub.Length > 0) assignedSubtypes.Add(sub);
                     }
-                    Autocraft_DrainInventory(output, false, assignedSubtypes, null);
-                    if (BudgetExceeded()) return;
+                    if (!Autocraft_StageInventory(output, false, assignedSubtypes, null, 0)) return;
                     for (int q = 0; q < _autocraftQueueScratch.Count; q++) {
                         MyDefinitionId bp = _autocraftQueueScratch[q].BlueprintId;
                         MyItemType type;
@@ -1172,6 +1145,30 @@ namespace IngameScript {
                     }
                 }
             }
+        }
+
+        /// <summary>Drains an inventory of items that don't match the keep filter, then optionally
+        /// tops up each type in <paramref name="topUpTypes"/> to <paramref name="topUpTarget"/>.
+        /// Returns <c>false</c> if the instruction budget tripped mid-call (caller should return).</summary>
+        /// <param name="inv">Target inventory.</param>
+        /// <param name="keepIngotsOnly">Forwarded to <see cref="Autocraft_DrainInventory"/>.</param>
+        /// <param name="keepSubtypes">Forwarded to <see cref="Autocraft_DrainInventory"/>.</param>
+        /// <param name="topUpTypes">Item types to top up; <c>null</c> skips the top-up phase.</param>
+        /// <param name="topUpTarget">Per-type target amount.</param>
+        bool Autocraft_StageInventory(IMyInventory inv, bool keepIngotsOnly, HashSet<string> keepSubtypes,
+                IList<MyItemType> topUpTypes, long topUpTarget) {
+            Autocraft_DrainInventory(inv, keepIngotsOnly, keepSubtypes, null);
+            if (BudgetExceeded()) return false;
+            if (topUpTypes != null) {
+                for (int t = 0; t < topUpTypes.Count; t++) {
+                    MyItemType type = topUpTypes[t];
+                    long current = GetCurrentAmount(inv, type);
+                    if (current >= topUpTarget) continue;
+                    Autocraft_PullItemIntoInventory(inv, type, topUpTarget - current);
+                    if (BudgetExceeded()) return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>Returns every item type the catalog classifies as <see cref="ItemCategory.Ingots"/>.

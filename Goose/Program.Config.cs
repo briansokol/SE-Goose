@@ -70,13 +70,6 @@ namespace IngameScript {
             /// <summary>Master kill-switch for connector federation. When false, <c>[Federate]</c>-tagged connectors are ignored.</summary>
             public bool EnableConnectorFederation = true;
 
-            /// <summary>
-            /// When true, redistributes items across non-Stock category-tagged containers so each
-            /// <c>[P:NN]</c> tier holds an equal share per item type. Higher-priority tiers fill first;
-            /// overflow lands in lower tiers. Off by default.
-            /// </summary>
-            public bool EnableSameRoleBalancing = false;
-
             /// <summary>Master kill-switch for the autocrafting engine. When false, the <c>[GCraft]</c>
             /// LCD is ignored and no assembler queues are touched.</summary>
             public bool EnableAutocraft = true;
@@ -125,7 +118,6 @@ namespace IngameScript {
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
-            _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
             _config.EnableAutocraft = _ini.Get("Goose", "enableAutocraft").ToBoolean(true);
 
             int autocraftDepthRaw = _ini.Get("Goose", "autocraftMaxQueueDepth").ToInt32(100);

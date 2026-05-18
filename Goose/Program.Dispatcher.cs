@@ -46,7 +46,7 @@ namespace IngameScript {
         static readonly string[] StepLabels = {
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
-            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers",
+            "SortGenericCargo", "BalanceConsumers",
             "DiscoverGCraftLCD", "UpdateAutocraftCfg", "RunAutocraftEngine", "RenderGCraftLCD"
         };
 
@@ -91,11 +91,10 @@ namespace IngameScript {
                 case 6: return StepFulfillStockQuotas();
                 case 7: return StepSortGenericCargo();
                 case 8: return StepBalanceConsumers();
-                case 9: return StepBalanceSameRoleContainers();
-                case 10: return StepDiscoverGCraftLCD();
-                case 11: return StepUpdateAutocraftCfg();
-                case 12: return StepRunAutocraftEngine();
-                case 13: return StepRenderGCraftLCD();
+                case 9: return StepDiscoverGCraftLCD();
+                case 10: return StepUpdateAutocraftCfg();
+                case 11: return StepRunAutocraftEngine();
+                case 12: return StepRenderGCraftLCD();
                 default: return NoOpStep();
             }
         }
