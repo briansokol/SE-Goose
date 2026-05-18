@@ -46,8 +46,7 @@ namespace IngameScript {
         static readonly string[] StepLabels = {
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
-            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers",
-            "DiscoverGCraftLCD", "UpdateAutocraftCfg", "RunAutocraftEngine", "RenderGCraftLCD"
+            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -92,10 +91,6 @@ namespace IngameScript {
                 case 7: return StepSortGenericCargo();
                 case 8: return StepBalanceConsumers();
                 case 9: return StepBalanceSameRoleContainers();
-                case 10: return StepDiscoverGCraftLCD();
-                case 11: return StepUpdateAutocraftCfg();
-                case 12: return StepRunAutocraftEngine();
-                case 13: return StepRenderGCraftLCD();
                 default: return NoOpStep();
             }
         }
