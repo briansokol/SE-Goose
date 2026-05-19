@@ -82,7 +82,12 @@ runs:
         }
 
         $content = "[mdk]`noutput=auto`nbinarypath=$binPath`ninteractive=ShowNotification`n"
-        $targets = @('Goose\mdk.local.ini', 'Goose.Tests\mdk.local.ini')
+        $targets = @(
+          'Goose\mdk.local.ini',
+          'Goose.Tests\mdk.local.ini',
+          'Crane\mdk.local.ini',
+          'Crane.Tests\mdk.local.ini'
+        )
         foreach ($target in $targets) {
           $mdkLocal = Join-Path $env:GITHUB_WORKSPACE $target
           Set-Content -Path $mdkLocal -Value $content -Encoding utf8
