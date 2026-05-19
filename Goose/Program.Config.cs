@@ -76,21 +76,6 @@ namespace IngameScript {
             /// overflow lands in lower tiers. Off by default.
             /// </summary>
             public bool EnableSameRoleBalancing = false;
-
-            /// <summary>Master kill-switch for the autocrafting engine. When false, the <c>[GCraft]</c>
-            /// LCD is ignored and no assembler queues are touched.</summary>
-            public bool EnableAutocraft = true;
-
-            /// <summary>Maximum per-item queue depth the autocraft engine will request on a single
-            /// assembler before spilling overflow to the next assembler in rotation.</summary>
-            public int AutocraftMaxQueueDepth = 100;
-
-            /// <summary>How many units of every known ingot type the autocraft engine should keep
-            /// staged in each Assembly-mode assembler's <c>InputInventory</c>. The script doesn't
-            /// know recipe ingredient lists at runtime, so it tops every ingot type up to this
-            /// buffer when a queue is non-empty; the assembler consumes what its current item
-            /// needs, leftover ingots stay until the mode flips (and are then drained).</summary>
-            public int AutocraftAssemblerIngotKeep = 50;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -126,26 +111,6 @@ namespace IngameScript {
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
             _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
-            _config.EnableAutocraft = _ini.Get("Goose", "enableAutocraft").ToBoolean(true);
-
-            int autocraftDepthRaw = _ini.Get("Goose", "autocraftMaxQueueDepth").ToInt32(100);
-            int autocraftDepthClamped = autocraftDepthRaw < 1 ? 1
-                : (autocraftDepthRaw > AutocraftMaxQueueDepthCeiling ? AutocraftMaxQueueDepthCeiling : autocraftDepthRaw);
-            if (autocraftDepthRaw != autocraftDepthClamped) {
-                LogWarningOnce("autocraft:bad-depth:autocraftMaxQueueDepth",
-                    "[Goose] autocraftMaxQueueDepth must be 1-" + AutocraftMaxQueueDepthCeiling + "; clamped to "
-                    + autocraftDepthClamped + " (was " + autocraftDepthRaw + ")");
-            }
-            _config.AutocraftMaxQueueDepth = autocraftDepthClamped;
-
-            int ingotKeepRaw = _ini.Get("Goose", "autocraftAssemblerIngotKeep").ToInt32(50);
-            int ingotKeepClamped = ingotKeepRaw < 1 ? 1 : (ingotKeepRaw > 10000 ? 10000 : ingotKeepRaw);
-            if (ingotKeepRaw != ingotKeepClamped) {
-                LogWarningOnce("autocraft:bad-ingotkeep",
-                    "[Goose] autocraftAssemblerIngotKeep must be 1-10000; clamped to "
-                    + ingotKeepClamped + " (was " + ingotKeepRaw + ")");
-            }
-            _config.AutocraftAssemblerIngotKeep = ingotKeepClamped;
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
@@ -332,27 +297,6 @@ namespace IngameScript {
                     "When true, redistributes items inside non-Stock category-tagged containers so each " +
                     "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
                     "overflow lands in lower tiers. false (default) disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "enableAutocraft")) {
-                _ini.Set("Goose", "enableAutocraft", true);
-                _ini.SetComment("Goose", "enableAutocraft",
-                    "When true, the autocraft engine manages assembler queues against the quotas in the [GCraft] LCD's CustomData. false disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "autocraftMaxQueueDepth")) {
-                _ini.Set("Goose", "autocraftMaxQueueDepth", 100);
-                _ini.SetComment("Goose", "autocraftMaxQueueDepth",
-                    "Per-item queue depth the autocraft engine will request on a single assembler before " +
-                    "spilling overflow to the next assembler in rotation. 1-100000.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "autocraftAssemblerIngotKeep")) {
-                _ini.Set("Goose", "autocraftAssemblerIngotKeep", 50);
-                _ini.SetComment("Goose", "autocraftAssemblerIngotKeep",
-                    "Units of every known ingot type the autocraft engine keeps staged in each " +
-                    "Assembly-mode assembler's input. Buffer so the assembler can find whichever " +
-                    "ingot the current recipe needs without recipe-data lookup. 1-10000.");
                 changed = true;
             }
             if (changed) {

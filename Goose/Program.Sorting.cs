@@ -233,11 +233,6 @@ namespace IngameScript {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
                 if (!ValidateBlock(block)) continue;
                 if (IsStockTagged(block)) continue;
-                // Assemblers are managed end-to-end by the autocraft engine (input + output
-                // staging, mode-aware drain). Skipping them here keeps the sorter from
-                // ripping disassembly-staged components out of the assembler's Output side
-                // before the assembler can consume them.
-                if (block is IMyAssembler) continue;
 
                 ContainerEntry srcEntry;
                 _entryByBlock.TryGetValue(block, out srcEntry);
