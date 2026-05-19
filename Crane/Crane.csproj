@@ -27,4 +27,14 @@
     <AdditionalFiles Include="Instructions.readme" />
     <AdditionalFiles Include="thumb.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Ini\**\*.cs" LinkBase="Shared\Ini" />
+    <Compile Include="..\Shared\Blocks\**\*.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\Shared\Scope\**\*.cs" LinkBase="Shared\Scope" />
+    <Compile Include="..\Shared\Items\**\*.cs" LinkBase="Shared\Items" />
+    <Compile Include="..\Shared\Inventory\**\*.cs" LinkBase="Shared\Inventory" />
+    <Compile Include="..\Shared\Logging\**\*.cs" LinkBase="Shared\Logging" />
+    <Compile Include="..\Shared\Dispatcher\**\*.cs" LinkBase="Shared\Dispatcher" />
+    <Compile Include="..\Shared\Autocraft\**\*.cs" LinkBase="Shared\Autocraft" />
+  </ItemGroup>
 </Project>
