@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Goose", "Goose\Goose.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Goose.Tests", "Goose.Tests\Goose.Tests.csproj", "{E13BFB1F-CBBC-40CF-9391-FA4C788C0B7E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crane", "Crane\Crane.csproj", "{C4122F1A-5607-4F0A-9CDA-7BBB98514485}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crane.Tests", "Crane.Tests\Crane.Tests.csproj", "{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +24,14 @@ Global
 		{E13BFB1F-CBBC-40CF-9391-FA4C788C0B7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E13BFB1F-CBBC-40CF-9391-FA4C788C0B7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E13BFB1F-CBBC-40CF-9391-FA4C788C0B7E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4122F1A-5607-4F0A-9CDA-7BBB98514485}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4122F1A-5607-4F0A-9CDA-7BBB98514485}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4122F1A-5607-4F0A-9CDA-7BBB98514485}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4122F1A-5607-4F0A-9CDA-7BBB98514485}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

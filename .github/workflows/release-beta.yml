@@ -23,10 +23,13 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore Goose/Goose.csproj
+        run: dotnet restore SE-Goose.sln
 
-      - name: Build (Release)
+      - name: Build Goose (Release)
         run: dotnet build Goose/Goose.csproj -c Release --no-restore
+
+      - name: Build Crane (Release)
+        run: dotnet build Crane/Crane.csproj -c Release --no-restore
 
       - name: Compute UTC timestamp
         id: ts
@@ -36,17 +39,28 @@ jobs:
           "stamp=$stamp"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=beta-$stamp"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Locate built script and rename to .txt
-        id: script
+      - name: Locate built scripts and rename to .txt
+        id: scripts
         shell: pwsh
         run: |
-          $src = Join-Path $env:APPDATA 'SpaceEngineers\IngameScripts\local\Goose\script.cs'
-          if (-not (Test-Path $src)) {
-            throw "Expected packaged script not found at: $src"
+          $stagingDir = Join-Path $env:RUNNER_TEMP 'release-assets'
+          New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+
+          $scripts = @(
+            @{ Name = 'Goose'; SourceDir = 'Goose' },
+            @{ Name = 'Crane'; SourceDir = 'Crane' }
+          )
+
+          foreach ($s in $scripts) {
+            $src = Join-Path $env:APPDATA "SpaceEngineers\IngameScripts\local\$($s.SourceDir)\script.cs"
+            if (-not (Test-Path $src)) {
+              throw "Expected packaged script not found at: $src"
+            }
+            $dst = Join-Path $stagingDir "$($s.Name.ToLower())-script.txt"
+            Copy-Item -Path $src -Destination $dst -Force
           }
-          $dst = Join-Path (Split-Path $src) 'script.txt'
-          Move-Item -Path $src -Destination $dst -Force
-          "path=$dst" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          "dir=$stagingDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -54,5 +68,7 @@ jobs:
           tag_name: ${{ steps.ts.outputs.tag }}
           name: ${{ steps.ts.outputs.tag }}
           prerelease: true
-          files: ${{ steps.script.outputs.path }}
+          files: |
+            ${{ steps.scripts.outputs.dir }}/goose-script.txt
+            ${{ steps.scripts.outputs.dir }}/crane-script.txt
           fail_on_unmatched_files: true

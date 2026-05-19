@@ -14,8 +14,9 @@ Authoritative design documentation for this project lives in the GitHub wiki. **
 
 Current design documents:
 
-- **Technical Architecture** — overall technical architecture of the script — https://github.com/briansokol/SE-Goose/wiki/Technical-Architecture-Design
-- **Inventory Sorter (Functional Design)** — functional design of the inventory sorting feature — https://github.com/briansokol/SE-Goose/wiki/Inventory-Sorter-%E2%80%90-Functional-Design
+- **Technical Architecture** — overall technical architecture of the Goose script — https://github.com/briansokol/SE-Goose/wiki/Technical-Architecture-Design
+- **Inventory Sorter (Functional Design)** — functional design of Goose's inventory sorting feature — https://github.com/briansokol/SE-Goose/wiki/Inventory-Sorter-%E2%80%90-Functional-Design
+- **Production Management (Functional Design)** — functional design of the Crane companion script (autocrafting and refinery management) — https://github.com/briansokol/SE-Goose/wiki/Production-Management-%E2%80%90-Functional-Design
 
 This list will grow as additional features are planned; more documents will be added here over time.
 

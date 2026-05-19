@@ -25,5 +25,8 @@ jobs:
       - name: Build (Release)
         run: dotnet build SE-Goose.sln -c Release --no-restore
 
-      - name: Test
+      - name: Test (Goose)
         run: dotnet test Goose.Tests/Goose.Tests.csproj -c Release --no-build --verbosity normal --logger "console;verbosity=detailed"
+
+      - name: Test (Crane)
+        run: dotnet test Crane.Tests/Crane.Tests.csproj -c Release --no-build --verbosity normal --logger "console;verbosity=detailed"
