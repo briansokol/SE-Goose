@@ -228,6 +228,7 @@ namespace IngameScript
                 if (surface != null)
                 {
                     surface.ContentType = ContentType.TEXT_AND_IMAGE;
+                    surface.Font = "Debug";
                     surface.WriteText(text, false);
                 }
             }
@@ -267,6 +268,7 @@ namespace IngameScript
                 if (surface != null)
                 {
                     surface.ContentType = ContentType.TEXT_AND_IMAGE;
+                    surface.Font = "Debug";
                     surface.WriteText(text, false);
                 }
             }
