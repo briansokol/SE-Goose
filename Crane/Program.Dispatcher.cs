@@ -64,9 +64,14 @@ namespace IngameScript
             new List<VRage.Game.ModAPI.Ingame.MyInventoryItem>();
 
         /// <summary>Builds <see cref="_itemTotals"/> via shared <see cref="ItemTotalsBuilder"/>. Records new types in <see cref="_catalog"/>.</summary>
+        /// <summary>Builds <see cref="_itemTotals"/> via shared <see cref="ItemTotalsBuilder"/>, draining its coroutine so per-block <see cref="YieldReason.ChunkBoundary"/> / <see cref="YieldReason.BudgetHit"/> yields propagate up to the dispatcher pump. Records new types in <see cref="_catalog"/>.</summary>
         private IEnumerator<YieldReason> StepScanInventories()
         {
-            ItemTotalsBuilder.BuildItemTotals(_allManagedBlocks, _itemTotals, _catalog, _itemBuffer);
+            foreach (YieldReason r in ItemTotalsBuilder.BuildItemTotals(
+                _allManagedBlocks, _itemTotals, _catalog, _itemBuffer, BudgetExceeded))
+            {
+                yield return r;
+            }
             yield return YieldReason.ChunkBoundary;
         }
 

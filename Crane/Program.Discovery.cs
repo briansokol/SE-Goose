@@ -180,6 +180,11 @@ namespace IngameScript
                 && asm.CubeGrid != null
                 && _scopeGrids.Contains(asm.CubeGrid.EntityId)
                 && !BlockNameTags.HasIgnoreTag(asm.CustomName));
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
 
             for (int i = 0; i < _assemblers.Count; i++)
             {
@@ -201,6 +206,11 @@ namespace IngameScript
                 return BlockNameTags.NameHasTag(tb.CustomName, "[CCraft]")
                     || BlockNameTags.NameHasTag(tb.CustomName, "[CError]");
             });
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
 
             for (int i = 0; i < _surfaceProviderScratch.Count; i++)
             {

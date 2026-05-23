@@ -1,20 +1,31 @@
+using System;
 using System.Collections.Generic;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame;
 
 namespace IngameScript
 {
-    /// <summary>Builds per-item-type totals across a set of managed blocks. Single-shot variant for tests; iterator variant for in-game use with budget yields.</summary>
+    /// <summary>Builds per-item-type totals across a set of managed blocks. Iterator yields between blocks so the host dispatcher can stop pumping mid-walk when the per-tick instruction budget is exhausted.</summary>
     public static class ItemTotalsBuilder
     {
-        /// <summary>Accumulates totals across all inventories on <paramref name="blocks"/> (every <see cref="IMyTerminalBlock.GetInventory(int)"/> from index 0 to <see cref="IMyTerminalBlock.InventoryCount"/>-1) into <paramref name="totals"/>. Records each observed type in <paramref name="catalog"/> when non-null.</summary>
-        public static void BuildItemTotals(
+        /// <summary>Number of blocks scanned per <see cref="YieldReason.ChunkBoundary"/> yield. Matches the cadence used by Goose's inline scan.</summary>
+        private const int BlocksPerChunk = 10;
+
+        /// <summary>Accumulates totals across all inventories on <paramref name="blocks"/> (every <see cref="IMyTerminalBlock.GetInventory(int)"/> from index 0 to <see cref="IMyTerminalBlock.InventoryCount"/>-1) into <paramref name="totals"/>. Records each observed type in <paramref name="catalog"/> when non-null. Yields <see cref="YieldReason.ChunkBoundary"/> every <see cref="BlocksPerChunk"/> blocks and <see cref="YieldReason.BudgetHit"/> when <paramref name="budgetExceeded"/> returns true so the host dispatcher can stop pumping for this tick.</summary>
+        /// <param name="blocks">Pre-filtered, in-scope blocks to scan. Null entries are skipped.</param>
+        /// <param name="totals">Output map; cleared at the start of the walk.</param>
+        /// <param name="catalog">Optional catalog to record each observed <see cref="MyItemType"/> in.</param>
+        /// <param name="buffer">Scratch list reused for each inventory's items.</param>
+        /// <param name="budgetExceeded">Optional callback queried after each block. May be null in tests, which still drain via foreach but ignore the yields.</param>
+        public static IEnumerable<YieldReason> BuildItemTotals(
             IEnumerable<IMyTerminalBlock> blocks,
             Dictionary<MyItemType, long> totals,
             ItemCatalog catalog,
-            List<MyInventoryItem> buffer)
+            List<MyInventoryItem> buffer,
+            Func<bool> budgetExceeded)
         {
             totals.Clear();
+            int counter = 0;
             foreach (IMyTerminalBlock block in blocks)
             {
                 if (block == null)
@@ -43,6 +54,17 @@ namespace IngameScript
                             catalog.RecordItem(item.Type);
                         }
                     }
+                }
+
+                counter++;
+                if (counter % BlocksPerChunk == 0)
+                {
+                    yield return YieldReason.ChunkBoundary;
+                }
+
+                if (budgetExceeded != null && budgetExceeded())
+                {
+                    yield return YieldReason.BudgetHit;
                 }
             }
         }
