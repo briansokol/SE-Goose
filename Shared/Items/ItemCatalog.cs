@@ -10,9 +10,7 @@ namespace IngameScript {
         int _version;
 
         /// <summary>Map of un-prefixed <c>Type/Subtype</c> keys to their resolved <see cref="MyItemType"/>.</summary>
-        public IReadOnlyDictionary<string, MyItemType> KnownItems {
-            get { return new System.Collections.ObjectModel.ReadOnlyDictionary<string, MyItemType>(_knownItems); }
-        }
+        public IReadOnlyDictionary<string, MyItemType> KnownItems { get { return _knownItems; } }
 
         /// <summary>Monotonic counter bumped whenever a new key is added.</summary>
         public int Version { get { return _version; } }

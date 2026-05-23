@@ -118,8 +118,6 @@ namespace IngameScript {
         public IEnumerable<string> ActionLog { get { return _actionLog; } }
 
         /// <summary>Exposes the warnings map for tests and host-script status surfaces.</summary>
-        public IReadOnlyDictionary<string, int> Warnings {
-            get { return new System.Collections.ObjectModel.ReadOnlyDictionary<string, int>(_warnings); }
-        }
+        public IReadOnlyDictionary<string, int> Warnings { get { return _warnings; } }
     }
 }
