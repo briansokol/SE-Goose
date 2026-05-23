@@ -37,7 +37,7 @@ namespace IngameScript
             _dispatcher = new WorkDispatcher(CraneStepLabels, StepFor, BudgetExceeded,
                 () => _logger.ResetOneShotWarnings(),
                 (ctx, ex) => _logger.LogError(ctx, ex));
-            Runtime.UpdateFrequency = UpdateFrequency.Update100;
+            Runtime.UpdateFrequency = UpdateFrequency.Update10;
             InitCommands();
             _logger.LogAction("Crane v1 initialized");
         }
