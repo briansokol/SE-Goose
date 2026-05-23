@@ -3,19 +3,23 @@ using FluentAssertions;
 using IngameScript;
 using Xunit;
 
-namespace Shared.Tests {
+namespace Shared.Tests
+{
     /// <summary>Tests for <see cref="ScopeBuilder"/>.</summary>
-    public class ScopeBuilderTests {
+    public class ScopeBuilderTests
+    {
         [Fact]
-        public void Root_only_when_no_edges() {
-            HashSet<long> output = new HashSet<long>();
+        public void Root_only_when_no_edges()
+        {
+            var output = new HashSet<long>();
             ScopeBuilder.BuildScope(1, new List<MechanicalEdge>(), new List<ConnectorEdge>(), true, output);
             output.Should().BeEquivalentTo(new long[] { 1 });
         }
 
         [Fact]
-        public void Mechanical_edges_extend_scope_when_attached() {
-            HashSet<long> output = new HashSet<long>();
+        public void Mechanical_edges_extend_scope_when_attached()
+        {
+            var output = new HashSet<long>();
             var mech = new List<MechanicalEdge> {
                 new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = true },
                 new MechanicalEdge { BaseGridId = 2, TopGridId = 3, Attached = true }
@@ -25,8 +29,9 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Detached_edges_do_not_extend() {
-            HashSet<long> output = new HashSet<long>();
+        public void Detached_edges_do_not_extend()
+        {
+            var output = new HashSet<long>();
             var mech = new List<MechanicalEdge> {
                 new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = false }
             };
@@ -35,8 +40,9 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void NoSubgrid_tag_blocks_traversal() {
-            HashSet<long> output = new HashSet<long>();
+        public void NoSubgrid_tag_blocks_traversal()
+        {
+            var output = new HashSet<long>();
             var mech = new List<MechanicalEdge> {
                 new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = true, NoSubgridTag = true }
             };
@@ -45,8 +51,9 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Federate_connector_crosses_when_connected_and_tagged() {
-            HashSet<long> output = new HashSet<long>();
+        public void Federate_connector_crosses_when_connected_and_tagged()
+        {
+            var output = new HashSet<long>();
             var conn = new List<ConnectorEdge> {
                 new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true }
             };
@@ -55,8 +62,9 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Federation_disabled_ignores_connectors() {
-            HashSet<long> output = new HashSet<long>();
+        public void Federation_disabled_ignores_connectors()
+        {
+            var output = new HashSet<long>();
             var conn = new List<ConnectorEdge> {
                 new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true }
             };
@@ -65,8 +73,9 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Untagged_or_disconnected_connector_does_not_cross() {
-            HashSet<long> output = new HashSet<long>();
+        public void Untagged_or_disconnected_connector_does_not_cross()
+        {
+            var output = new HashSet<long>();
             var conn = new List<ConnectorEdge> {
                 new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = false, FederateTag = true },
                 new ConnectorEdge { OwnerGridId = 1, OtherGridId = 8, Connected = true, FederateTag = false }
@@ -76,7 +85,8 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Drift_hash_stable_under_reorder() {
+        public void Drift_hash_stable_under_reorder()
+        {
             var mech1 = new List<MechanicalEdge> {
                 new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = true },
                 new MechanicalEdge { BaseGridId = 2, TopGridId = 3, Attached = true }
@@ -90,7 +100,8 @@ namespace Shared.Tests {
         }
 
         [Fact]
-        public void Drift_hash_changes_on_attach_flip() {
+        public void Drift_hash_changes_on_attach_flip()
+        {
             var mech1 = new List<MechanicalEdge> {
                 new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = true }
             };

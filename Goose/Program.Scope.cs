@@ -1,33 +1,35 @@
+using System.Collections.Generic;
 using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
-using System.Collections.Generic;
 using VRage.Game.ModAPI.Ingame;
 
-namespace IngameScript {
-    public partial class Program : MyGridProgram {
+namespace IngameScript
+{
+    public partial class Program : MyGridProgram
+    {
         /// <summary>EntityIds of grids currently in management scope. Recomputed by <see cref="StepRebuildScopeIfDue"/>; consulted by <see cref="IsManaged"/> and <see cref="ValidateBlock"/>.</summary>
-        readonly HashSet<long> _scopeGrids = new HashSet<long>();
+        private readonly HashSet<long> _scopeGrids = new HashSet<long>();
 
         /// <summary>Reusable buffer for raw mechanical-connection block enumeration during <see cref="RebuildScope"/>.</summary>
-        readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
+        private readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
 
         /// <summary>Reusable buffer for projected mechanical edges fed to <see cref="BuildScope"/>.</summary>
-        readonly List<MechanicalEdge> _scopeMechBuf = new List<MechanicalEdge>();
+        private readonly List<MechanicalEdge> _scopeMechBuf = new List<MechanicalEdge>();
 
         /// <summary>Reusable buffer for projected connector edges fed to <see cref="BuildScope"/>.</summary>
-        readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
+        private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
 
         /// <summary>Reusable buffer for raw connector enumeration during <see cref="RebuildScope"/>. Holds every <see cref="IMyShipConnector"/> visible to GTS, not just in-scope ones — federation is what brings new connectors into scope.</summary>
-        readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
+        private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
 
         /// <summary>Snapshot of mechanical edges from the most recent <see cref="RebuildScope"/>; consulted by the drift check.</summary>
-        readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
+        private readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
 
         /// <summary>Snapshot of connector edges from the most recent <see cref="RebuildScope"/>; consulted by the drift check.</summary>
-        readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
+        private readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
 
         /// <summary>Rolling hash of (mechanical attach state + connector dock state + scope-affecting tags). Differs across ticks when scope inputs change; equal otherwise.</summary>
-        ulong _scopeDriftHash;
+        private ulong _scopeDriftHash;
 
         /// <summary>Name-tag on a rotor/piston/hinge base that excludes its TopGrid (and everything past it) from scope.</summary>
         internal const string NoSubgridTag = "[NoSubgrid]";
@@ -36,7 +38,8 @@ namespace IngameScript {
         internal const string FederateTag = "[Federate]";
 
         /// <summary>POCO projection of <see cref="IMyMechanicalConnectionBlock"/> attachment state, used so the BFS core can be unit-tested without SE runtime.</summary>
-        internal struct MechanicalEdge {
+        internal struct MechanicalEdge
+        {
             /// <summary>EntityId of the grid hosting the base/stator side of this connection.</summary>
             public long BaseGridId;
             /// <summary>EntityId of the grid hosting the top side of this connection (0 when detached or not yet known).</summary>
@@ -48,7 +51,8 @@ namespace IngameScript {
         }
 
         /// <summary>POCO projection of <see cref="IMyShipConnector"/> docking state, used so the BFS core can be unit-tested without SE runtime.</summary>
-        internal struct ConnectorEdge {
+        internal struct ConnectorEdge
+        {
             /// <summary>EntityId of the grid hosting the local side of this connector.</summary>
             public long OwnerGridId;
             /// <summary>EntityId of the grid hosting the remote (docked) connector (0 when undocked).</summary>
@@ -70,33 +74,77 @@ namespace IngameScript {
             IList<MechanicalEdge> mechEdges,
             IList<ConnectorEdge> connEdges,
             bool enableFederation,
-            HashSet<long> output) {
+            HashSet<long> output)
+        {
             output.Clear();
             output.Add(rootGridId);
-            Queue<long> frontier = new Queue<long>();
+            var frontier = new Queue<long>();
             frontier.Enqueue(rootGridId);
 
-            if (enableFederation && connEdges != null) {
-                for (int i = 0; i < connEdges.Count; i++) {
+            if (enableFederation && connEdges != null)
+            {
+                for (int i = 0; i < connEdges.Count; i++)
+                {
                     ConnectorEdge c = connEdges[i];
-                    if (c.OwnerGridId != rootGridId) continue;
-                    if (!c.Connected) continue;
-                    if (!c.FederateTag) continue;
-                    if (c.OtherGridId == 0) continue;
-                    if (output.Add(c.OtherGridId)) frontier.Enqueue(c.OtherGridId);
+                    if (c.OwnerGridId != rootGridId)
+                    {
+                        continue;
+                    }
+
+                    if (!c.Connected)
+                    {
+                        continue;
+                    }
+
+                    if (!c.FederateTag)
+                    {
+                        continue;
+                    }
+
+                    if (c.OtherGridId == 0)
+                    {
+                        continue;
+                    }
+
+                    if (output.Add(c.OtherGridId))
+                    {
+                        frontier.Enqueue(c.OtherGridId);
+                    }
                 }
             }
 
-            while (frontier.Count > 0) {
+            while (frontier.Count > 0)
+            {
                 long gridId = frontier.Dequeue();
-                if (mechEdges != null) {
-                    for (int i = 0; i < mechEdges.Count; i++) {
+                if (mechEdges != null)
+                {
+                    for (int i = 0; i < mechEdges.Count; i++)
+                    {
                         MechanicalEdge e = mechEdges[i];
-                        if (e.BaseGridId != gridId) continue;
-                        if (!e.Attached) continue;
-                        if (e.NoSubgridTag) continue;
-                        if (e.TopGridId == 0) continue;
-                        if (output.Add(e.TopGridId)) frontier.Enqueue(e.TopGridId);
+                        if (e.BaseGridId != gridId)
+                        {
+                            continue;
+                        }
+
+                        if (!e.Attached)
+                        {
+                            continue;
+                        }
+
+                        if (e.NoSubgridTag)
+                        {
+                            continue;
+                        }
+
+                        if (e.TopGridId == 0)
+                        {
+                            continue;
+                        }
+
+                        if (output.Add(e.TopGridId))
+                        {
+                            frontier.Enqueue(e.TopGridId);
+                        }
                     }
                 }
             }
@@ -105,10 +153,13 @@ namespace IngameScript {
         /// <summary>Cheap rolling hash over mechanical and connector edges. Differs whenever any input that affects scope changes.</summary>
         /// <param name="mech">Mechanical edges to mix into the hash.</param>
         /// <param name="conn">Connector edges to mix into the hash.</param>
-        internal static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn) {
+        internal static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn)
+        {
             ulong h = 1469598103934665603UL;
-            if (mech != null) {
-                for (int i = 0; i < mech.Count; i++) {
+            if (mech != null)
+            {
+                for (int i = 0; i < mech.Count; i++)
+                {
                     MechanicalEdge e = mech[i];
                     h ^= (ulong)e.BaseGridId;
                     h ^= ((ulong)e.TopGridId) << 1;
@@ -117,8 +168,10 @@ namespace IngameScript {
                     h *= 1099511628211UL;
                 }
             }
-            if (conn != null) {
-                for (int i = 0; i < conn.Count; i++) {
+            if (conn != null)
+            {
+                for (int i = 0; i < conn.Count; i++)
+                {
                     ConnectorEdge c = conn[i];
                     h ^= (ulong)c.OwnerGridId;
                     h ^= ((ulong)c.OtherGridId) << 1;
@@ -133,11 +186,17 @@ namespace IngameScript {
 
         /// <summary>Computes the scope drift hash directly from the live raw block lists, avoiding a full edge-cache rebuild on stable ticks.</summary>
         /// <remarks>The bit composition must remain identical to <see cref="ComputeScopeDriftHash"/> so the two hashes are interchangeable.</remarks>
-        ulong ComputeScopeDriftHashFromRaw() {
+        private ulong ComputeScopeDriftHashFromRaw()
+        {
             ulong h = 1469598103934665603UL;
-            for (int i = 0; i < _scopeMechRaw.Count; i++) {
+            for (int i = 0; i < _scopeMechRaw.Count; i++)
+            {
                 IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
-                if (m.Closed) continue;
+                if (m.Closed)
+                {
+                    continue;
+                }
+
                 long baseId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
                 long topId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
                 h ^= (ulong)baseId;
@@ -146,9 +205,14 @@ namespace IngameScript {
                 h ^= NameHasTag(m.CustomName, NoSubgridTag) ? 0x2UL : 0x0UL;
                 h *= 1099511628211UL;
             }
-            for (int i = 0; i < _scopeConnRaw.Count; i++) {
+            for (int i = 0; i < _scopeConnRaw.Count; i++)
+            {
                 IMyShipConnector c = _scopeConnRaw[i];
-                if (c.Closed) continue;
+                if (c.Closed)
+                {
+                    continue;
+                }
+
                 long ownerId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
                 IMyShipConnector other = c.OtherConnector;
                 long otherId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
@@ -162,11 +226,13 @@ namespace IngameScript {
         }
 
         /// <summary>Projects live mechanical-connection blocks into POCOs and runs <see cref="BuildScope"/> to refresh <see cref="_scopeGrids"/>.</summary>
-        void RebuildScope() {
+        private void RebuildScope()
+        {
             _scopeMechRaw.Clear();
             GridTerminalSystem.GetBlocksOfType(_scopeMechRaw, m => !m.Closed);
             _scopeMechBuf.Clear();
-            for (int i = 0; i < _scopeMechRaw.Count; i++) {
+            for (int i = 0; i < _scopeMechRaw.Count; i++)
+            {
                 IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
                 MechanicalEdge edge;
                 edge.BaseGridId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
@@ -179,7 +245,8 @@ namespace IngameScript {
             _scopeConnRaw.Clear();
             GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
             _scopeConnBuf.Clear();
-            for (int i = 0; i < _scopeConnRaw.Count; i++) {
+            for (int i = 0; i < _scopeConnRaw.Count; i++)
+            {
                 IMyShipConnector c = _scopeConnRaw[i];
                 ConnectorEdge edge;
                 edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
@@ -202,21 +269,25 @@ namespace IngameScript {
         }
 
         /// <summary>Rebuilds <see cref="_scopeGrids"/> when a rescan is pending, on first run, or once the rescan interval elapses; otherwise yields cheaply.</summary>
-        IEnumerator<YieldReason> StepRebuildScopeIfDue() {
+        private IEnumerator<YieldReason> StepRebuildScopeIfDue()
+        {
             bool needs = _rescanRequested
                       || _scopeGrids.Count == 0
                       || _ticksSinceRescan >= _config.RescanIntervalTicks;
 
-            if (!needs && _scopeGrids.Count > 0) {
+            if (!needs && _scopeGrids.Count > 0)
+            {
                 ulong currentHash = ComputeScopeDriftHashFromRaw();
-                if (currentHash != _scopeDriftHash) {
+                if (currentHash != _scopeDriftHash)
+                {
                     LogAction("Scope drift detected");
                     _rescanRequested = true;
                     needs = true;
                 }
             }
 
-            if (!needs) {
+            if (!needs)
+            {
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }

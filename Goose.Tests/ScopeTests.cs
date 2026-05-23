@@ -3,17 +3,21 @@ using FluentAssertions;
 using IngameScript;
 using Xunit;
 
-namespace Goose.Tests {
+namespace Goose.Tests
+{
     /// <summary>Tests for the pure BFS in <c>Program.Scope.cs</c>. Uses the POCO edge inputs so we never touch the SE runtime.</summary>
-    public class ScopeTests {
-        const long RootId = 1;
-        const long MidId = 2;
-        const long LeafId = 3;
-        const long RemoteId = 5;
-        const long RemoteTopId = 6;
+    public class ScopeTests
+    {
+        private const long RootId = 1;
+        private const long MidId = 2;
+        private const long LeafId = 3;
+        private const long RemoteId = 5;
+        private const long RemoteTopId = 6;
 
-        static Program.MechanicalEdge Mech(long baseId, long topId, bool attached = true, bool noSubgridTag = false) {
-            return new Program.MechanicalEdge {
+        private static Program.MechanicalEdge Mech(long baseId, long topId, bool attached = true, bool noSubgridTag = false)
+        {
+            return new Program.MechanicalEdge
+            {
                 BaseGridId = baseId,
                 TopGridId = topId,
                 Attached = attached,
@@ -21,8 +25,10 @@ namespace Goose.Tests {
             };
         }
 
-        static Program.ConnectorEdge Conn(long ownerId, long otherId, bool connected = true, bool federateTag = true) {
-            return new Program.ConnectorEdge {
+        private static Program.ConnectorEdge Conn(long ownerId, long otherId, bool connected = true, bool federateTag = true)
+        {
+            return new Program.ConnectorEdge
+            {
                 OwnerGridId = ownerId,
                 OtherGridId = otherId,
                 Connected = connected,
@@ -30,32 +36,37 @@ namespace Goose.Tests {
             };
         }
 
-        static HashSet<long> Run(IList<Program.MechanicalEdge> mech) {
+        private static HashSet<long> Run(IList<Program.MechanicalEdge> mech)
+        {
             var output = new HashSet<long>();
             Program.BuildScope(RootId, mech, new List<Program.ConnectorEdge>(), false, output);
             return output;
         }
 
-        static HashSet<long> RunFull(IList<Program.MechanicalEdge> mech, IList<Program.ConnectorEdge> conn, bool enableFederation = true) {
+        private static HashSet<long> RunFull(IList<Program.MechanicalEdge> mech, IList<Program.ConnectorEdge> conn, bool enableFederation = true)
+        {
             var output = new HashSet<long>();
             Program.BuildScope(RootId, mech, conn, enableFederation, output);
             return output;
         }
 
         [Fact]
-        public void Bare_grid_with_no_edges_returns_root_only() {
+        public void Bare_grid_with_no_edges_returns_root_only()
+        {
             Run(new List<Program.MechanicalEdge>())
                 .Should().BeEquivalentTo(new[] { RootId });
         }
 
         [Fact]
-        public void Single_attached_rotor_includes_top_grid() {
+        public void Single_attached_rotor_includes_top_grid()
+        {
             Run(new List<Program.MechanicalEdge> { Mech(RootId, MidId) })
                 .Should().BeEquivalentTo(new[] { RootId, MidId });
         }
 
         [Fact]
-        public void Two_step_chain_includes_every_grid() {
+        public void Two_step_chain_includes_every_grid()
+        {
             Run(new List<Program.MechanicalEdge> {
                 Mech(RootId, MidId),
                 Mech(MidId, LeafId)
@@ -63,13 +74,15 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Detached_rotor_does_not_extend_scope() {
+        public void Detached_rotor_does_not_extend_scope()
+        {
             Run(new List<Program.MechanicalEdge> { Mech(RootId, MidId, attached: false) })
                 .Should().BeEquivalentTo(new[] { RootId });
         }
 
         [Fact]
-        public void Mechanical_cycle_terminates() {
+        public void Mechanical_cycle_terminates()
+        {
             Run(new List<Program.MechanicalEdge> {
                 Mech(RootId, MidId),
                 Mech(MidId, RootId)
@@ -77,14 +90,16 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void NoSubgrid_tag_blocks_extension_past_the_rotor() {
+        public void NoSubgrid_tag_blocks_extension_past_the_rotor()
+        {
             Run(new List<Program.MechanicalEdge> {
                 Mech(RootId, MidId, noSubgridTag: true)
             }).Should().BeEquivalentTo(new[] { RootId });
         }
 
         [Fact]
-        public void NoSubgrid_mid_chain_cuts_off_descendants() {
+        public void NoSubgrid_mid_chain_cuts_off_descendants()
+        {
             Run(new List<Program.MechanicalEdge> {
                 Mech(RootId, MidId),
                 Mech(MidId, LeafId, noSubgridTag: true)
@@ -92,7 +107,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Disconnected_federate_connector_does_not_extend_scope() {
+        public void Disconnected_federate_connector_does_not_extend_scope()
+        {
             RunFull(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId, connected: false) }
@@ -100,7 +116,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Connected_federate_connector_admits_remote_grid() {
+        public void Connected_federate_connector_admits_remote_grid()
+        {
             RunFull(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) }
@@ -108,7 +125,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Connected_connector_without_federate_tag_is_ignored() {
+        public void Connected_connector_without_federate_tag_is_ignored()
+        {
             RunFull(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId, federateTag: false) }
@@ -116,7 +134,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void EnableFederation_disabled_overrides_tag() {
+        public void EnableFederation_disabled_overrides_tag()
+        {
             RunFull(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) },
@@ -125,7 +144,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Federated_grid_mechanical_subgrid_is_transitively_included() {
+        public void Federated_grid_mechanical_subgrid_is_transitively_included()
+        {
             RunFull(
                 new List<Program.MechanicalEdge> { Mech(RemoteId, RemoteTopId) },
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) }
@@ -133,7 +153,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Federation_does_not_chain_through_a_remote_grid() {
+        public void Federation_does_not_chain_through_a_remote_grid()
+        {
             RunFull(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> {
@@ -144,7 +165,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void Cycle_through_federated_connector_terminates() {
+        public void Cycle_through_federated_connector_terminates()
+        {
             RunFull(
                 new List<Program.MechanicalEdge> { Mech(RemoteId, RootId) },
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) }
@@ -153,7 +175,8 @@ namespace Goose.Tests {
 
 
         [Fact]
-        public void DriftHash_is_seed_for_empty_inputs() {
+        public void DriftHash_is_seed_for_empty_inputs()
+        {
             ulong h = Program.ComputeScopeDriftHash(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge>());
@@ -161,7 +184,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void DriftHash_is_stable_across_equal_inputs() {
+        public void DriftHash_is_stable_across_equal_inputs()
+        {
             var mech = new List<Program.MechanicalEdge> { Mech(RootId, MidId), Mech(MidId, LeafId, attached: false) };
             var conn = new List<Program.ConnectorEdge> { Conn(RootId, RemoteId), Conn(RootId, RemoteTopId, federateTag: false) };
             Program.ComputeScopeDriftHash(mech, conn)
@@ -169,7 +193,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void DriftHash_changes_when_any_mech_field_changes() {
+        public void DriftHash_changes_when_any_mech_field_changes()
+        {
             ulong baseline = Program.ComputeScopeDriftHash(
                 new List<Program.MechanicalEdge> { Mech(RootId, MidId) },
                 new List<Program.ConnectorEdge>());
@@ -192,7 +217,8 @@ namespace Goose.Tests {
         }
 
         [Fact]
-        public void DriftHash_changes_when_any_connector_field_changes() {
+        public void DriftHash_changes_when_any_connector_field_changes()
+        {
             ulong baseline = Program.ComputeScopeDriftHash(
                 new List<Program.MechanicalEdge>(),
                 new List<Program.ConnectorEdge> { Conn(RootId, RemoteId) });

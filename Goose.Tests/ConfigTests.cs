@@ -2,17 +2,21 @@ using FluentAssertions;
 using IngameScript;
 using Xunit;
 
-namespace Goose.Tests {
+namespace Goose.Tests
+{
     /// <summary>Tests for the pure helpers in Program.Config.cs.</summary>
-    public class ConfigTests {
-        public class TryParseQuotaKeyShape_Tests {
+    public class ConfigTests
+    {
+        public class TryParseQuotaKeyShape_Tests
+        {
             [Theory]
             [InlineData("Ingot/Iron", "MyObjectBuilder_Ingot", "Iron")]
             [InlineData("Component/SteelPlate", "MyObjectBuilder_Component", "SteelPlate")]
             [InlineData("Ore/Stone", "MyObjectBuilder_Ore", "Stone")]
             [InlineData("MyObjectBuilder_Ingot/Iron", "MyObjectBuilder_Ingot", "Iron")]
             [InlineData("MyObjectBuilder_AmmoMagazine/NATO_25x184mm", "MyObjectBuilder_AmmoMagazine", "NATO_25x184mm")]
-            public void Parses_valid_keys(string key, string expectedType, string expectedSubtype) {
+            public void Parses_valid_keys(string key, string expectedType, string expectedSubtype)
+            {
                 string typeIdWithPrefix, subtypeId;
                 Program.TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId).Should().BeTrue();
                 typeIdWithPrefix.Should().Be(expectedType);
@@ -26,13 +30,15 @@ namespace Goose.Tests {
             [InlineData("/Iron")]
             [InlineData("Ingot/")]
             [InlineData("/")]
-            public void Returns_false_for_malformed_keys(string key) {
+            public void Returns_false_for_malformed_keys(string key)
+            {
                 string typeIdWithPrefix, subtypeId;
                 Program.TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId).Should().BeFalse();
             }
         }
 
-        public class TryParseQuotaValue_Tests {
+        public class TryParseQuotaValue_Tests
+        {
             [Theory]
             [InlineData("0", 0L, Program.QuotaMode.Exact)]
             [InlineData("1", 1L, Program.QuotaMode.Exact)]
@@ -46,7 +52,8 @@ namespace Goose.Tests {
             [InlineData("All", 0L, Program.QuotaMode.All)]
             [InlineData("all", 0L, Program.QuotaMode.All)]
             [InlineData("ALL", 0L, Program.QuotaMode.All)]
-            public void Parses_valid_values(string raw, long expectedAmount, Program.QuotaMode expectedMode) {
+            public void Parses_valid_values(string raw, long expectedAmount, Program.QuotaMode expectedMode)
+            {
                 long amount;
                 Program.QuotaMode mode;
                 Program.TryParseQuotaValue(raw, out amount, out mode).Should().BeTrue();
@@ -62,16 +69,18 @@ namespace Goose.Tests {
             [InlineData("L")]
             [InlineData("100x")]
             [InlineData("1.5")]
-            public void Returns_false_for_malformed_values(string raw) {
+            public void Returns_false_for_malformed_values(string raw)
+            {
                 long amount;
                 Program.QuotaMode mode;
                 Program.TryParseQuotaValue(raw, out amount, out mode).Should().BeFalse();
             }
         }
 
-        
 
-        public class ClampPercent_Tests {
+
+        public class ClampPercent_Tests
+        {
             [Theory]
             [InlineData(0, 0)]
             [InlineData(50, 50)]
@@ -82,7 +91,8 @@ namespace Goose.Tests {
             [InlineData(200, 100)]
             [InlineData(int.MaxValue, 100)]
             [InlineData(int.MinValue, 0)]
-            public void Clamps_to_zero_through_one_hundred(int raw, int expected) {
+            public void Clamps_to_zero_through_one_hundred(int raw, int expected)
+            {
                 Program.ClampPercent(raw).Should().Be(expected);
             }
         }

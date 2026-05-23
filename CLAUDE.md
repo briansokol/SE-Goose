@@ -120,6 +120,8 @@ dotnet build "Goose.csproj" -c Release
 dotnet build "SE-Goose.sln"
 ```
 
+**Always run `dotnet format SE-Goose.sln` before every build** to apply the project's C# style rules from `.editorconfig`.
+
 **Always build after code changes** to verify the script compiles cleanly. Build errors here mean the script won't load in-game.
 
 ## MDK2 Configuration

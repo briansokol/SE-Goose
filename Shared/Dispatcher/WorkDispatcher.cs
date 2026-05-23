@@ -1,16 +1,18 @@
 using System;
 using System.Collections.Generic;
 
-namespace IngameScript {
+namespace IngameScript
+{
     /// <summary>Composable pipeline dispatcher. Caller registers step labels + factories; the dispatcher pumps each step iterator and yields on budget hits. Exception handling routes faults to a caller-supplied logger.</summary>
-    public class WorkDispatcher {
-        readonly Func<int, IEnumerator<YieldReason>> _stepFactory;
-        readonly Func<bool> _budgetExceeded;
-        readonly string[] _stepLabels;
-        readonly Action _onCycleStart;
-        readonly Action<string, Exception> _onError;
+    public class WorkDispatcher
+    {
+        private readonly Func<int, IEnumerator<YieldReason>> _stepFactory;
+        private readonly Func<bool> _budgetExceeded;
+        private readonly string[] _stepLabels;
+        private readonly Action _onCycleStart;
+        private readonly Action<string, Exception> _onError;
 
-        IEnumerator<YieldReason> _workIterator;
+        private IEnumerator<YieldReason> _workIterator;
 
         /// <summary>Index of the currently executing step.</summary>
         public int StepIndex { get; private set; }
@@ -27,7 +29,8 @@ namespace IngameScript {
         /// <param name="budgetExceeded">Returns true when the per-tick instruction budget has been exhausted.</param>
         /// <param name="onCycleStart">Invoked once at the top of each pipeline cycle (typically to reset one-shot warning state).</param>
         /// <param name="onError">Invoked when a step iterator throws.</param>
-        public WorkDispatcher(string[] stepLabels, Func<int, IEnumerator<YieldReason>> stepFactory, Func<bool> budgetExceeded, Action onCycleStart, Action<string, Exception> onError) {
+        public WorkDispatcher(string[] stepLabels, Func<int, IEnumerator<YieldReason>> stepFactory, Func<bool> budgetExceeded, Action onCycleStart, Action<string, Exception> onError)
+        {
             _stepLabels = stepLabels ?? new string[0];
             _stepFactory = stepFactory;
             _budgetExceeded = budgetExceeded;
@@ -37,16 +40,23 @@ namespace IngameScript {
         }
 
         /// <summary>Pumps the work iterator repeatedly within a single tick until the budget trips or the iterator finishes, restarting the pipeline on completion or fault.</summary>
-        public void RunOneTick() {
-            try {
-                do {
-                    if (_workIterator == null || !_workIterator.MoveNext()) {
+        public void RunOneTick()
+        {
+            try
+            {
+                do
+                {
+                    if (_workIterator == null || !_workIterator.MoveNext())
+                    {
                         _workIterator = StepRoot();
                         break;
                     }
                 } while (!(_budgetExceeded != null && _budgetExceeded()));
-            } catch (Exception ex) {
-                if (_onError != null) {
+            }
+            catch (Exception ex)
+            {
+                if (_onError != null)
+                {
                     _onError("step " + StepIndex + "." + SubStep + " " + StepLabel, ex);
                 }
                 _workIterator = StepRoot();
@@ -54,20 +64,33 @@ namespace IngameScript {
         }
 
         /// <summary>Resets the work iterator so the pipeline restarts on the next tick.</summary>
-        public void Restart() {
+        public void Restart()
+        {
             _workIterator = StepRoot();
         }
 
-        IEnumerator<YieldReason> StepRoot() {
-            while (true) {
-                if (_onCycleStart != null) _onCycleStart();
-                for (int i = 0; i < _stepLabels.Length; i++) {
+        private IEnumerator<YieldReason> StepRoot()
+        {
+            while (true)
+            {
+                if (_onCycleStart != null)
+                {
+                    _onCycleStart();
+                }
+
+                for (int i = 0; i < _stepLabels.Length; i++)
+                {
                     StepIndex = i;
                     SubStep = 0;
                     StepLabel = _stepLabels[i];
                     IEnumerator<YieldReason> step = _stepFactory != null ? _stepFactory(i) : NoOpStep();
-                    if (step == null) step = NoOpStep();
-                    while (step.MoveNext()) {
+                    if (step == null)
+                    {
+                        step = NoOpStep();
+                    }
+
+                    while (step.MoveNext())
+                    {
                         yield return step.Current;
                     }
                     yield return YieldReason.ChunkBoundary;
@@ -75,7 +98,8 @@ namespace IngameScript {
             }
         }
 
-        static IEnumerator<YieldReason> NoOpStep() {
+        private static IEnumerator<YieldReason> NoOpStep()
+        {
             yield return YieldReason.ChunkBoundary;
         }
     }

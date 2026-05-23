@@ -1,13 +1,13 @@
-using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI.Ingame;
-using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Sandbox.Game.EntityComponents;
+using Sandbox.ModAPI.Ingame;
+using Sandbox.ModAPI.Interfaces;
+using SpaceEngineers.Game.ModAPI.Ingame;
 using VRage;
 using VRage.Collections;
 using VRage.Game;
@@ -18,41 +18,77 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 
-namespace IngameScript {
-    public partial class Program : MyGridProgram {
+namespace IngameScript
+{
+    public partial class Program : MyGridProgram
+    {
         /// <summary>All inventory-bearing blocks Goose currently manages.</summary>
-        List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
+        private readonly List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
 
         /// <summary>Cargo containers in scope, including unmanaged ones.</summary>
-        List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
+        private readonly List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
 
         /// <summary>Ship connectors in scope.</summary>
-        List<IMyShipConnector> _connectors = new List<IMyShipConnector>();
+        private readonly List<IMyShipConnector> _connectors = new List<IMyShipConnector>();
 
         /// <summary>Refineries, assemblers, and other production blocks in scope.</summary>
-        List<IMyProductionBlock> _productionBlocks = new List<IMyProductionBlock>();
+        private readonly List<IMyProductionBlock> _productionBlocks = new List<IMyProductionBlock>();
 
         /// <summary>Ticks elapsed since the last rescan; initialized high to force a first-cycle rescan.</summary>
-        int _ticksSinceRescan = int.MaxValue;
+        private int _ticksSinceRescan = int.MaxValue;
 
         /// <summary>Set by the <c>rescan</c> command to trigger an immediate rescan on the next cycle.</summary>
-        bool _rescanRequested = false;
+        private bool _rescanRequested = false;
 
         /// <summary>Predicate for blocks Goose should manage: in scope, has inventory, not ignored.</summary>
-        bool IsManaged(IMyTerminalBlock block) {
-            if (block == null) return false;
-            if (block.Closed) return false;
-            if (block.CubeGrid == null) return false;
-            if (!_scopeGrids.Contains(block.CubeGrid.EntityId)) return false;
-            if (!block.HasInventory) return false;
-            if (block == Me) return false;
-            if (block is IMyShipController) return false;
-            if (HasIgnoreTag(block.CustomName)) return false;
+        private bool IsManaged(IMyTerminalBlock block)
+        {
+            if (block == null)
+            {
+                return false;
+            }
+
+            if (block.Closed)
+            {
+                return false;
+            }
+
+            if (block.CubeGrid == null)
+            {
+                return false;
+            }
+
+            if (!_scopeGrids.Contains(block.CubeGrid.EntityId))
+            {
+                return false;
+            }
+
+            if (!block.HasInventory)
+            {
+                return false;
+            }
+
+            if (block == Me)
+            {
+                return false;
+            }
+
+            if (block is IMyShipController)
+            {
+                return false;
+            }
+
+            if (HasIgnoreTag(block.CustomName))
+            {
+                return false;
+            }
+
             return true;
         }
 
         /// <summary>Returns true when a previously discovered block is still alive and in scope.</summary>
-        bool ValidateBlock(IMyTerminalBlock block) {
+        private bool ValidateBlock(IMyTerminalBlock block)
+        {
             return block != null
                 && !block.Closed
                 && block.CubeGrid != null
@@ -60,8 +96,13 @@ namespace IngameScript {
         }
 
         /// <summary>Returns true when a block name carries an opt-out tag (<c>[Ignore]</c> or <c>[Locked]</c>).</summary>
-        bool HasIgnoreTag(string name) {
-            if (string.IsNullOrEmpty(name)) return false;
+        private bool HasIgnoreTag(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
             return name.IndexOf("[Ignore]", StringComparison.Ordinal) >= 0
                 || name.IndexOf("[Locked]", StringComparison.Ordinal) >= 0;
         }
@@ -70,8 +111,10 @@ namespace IngameScript {
         /// Re-discovers managed blocks when the rescan interval elapses or a rescan is requested,
         /// also marking the configuration dirty so any name-tag changes take effect.
         /// </summary>
-        IEnumerator<YieldReason> StepRescanIfDue() {
-            if (!_rescanRequested && _ticksSinceRescan < _config.RescanIntervalTicks) {
+        private IEnumerator<YieldReason> StepRescanIfDue()
+        {
+            if (!_rescanRequested && _ticksSinceRescan < _config.RescanIntervalTicks)
+            {
                 _ticksSinceRescan++;
                 yield return YieldReason.ChunkBoundary;
                 yield break;
@@ -83,7 +126,10 @@ namespace IngameScript {
             _allInventoryBlocks.Clear();
             GridTerminalSystem.GetBlocksOfType(_allInventoryBlocks, IsManaged);
             yield return YieldReason.ChunkBoundary;
-            if (BudgetExceeded()) yield return YieldReason.BudgetHit;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
 
             _cargoContainers.Clear();
             GridTerminalSystem.GetBlocksOfType(_cargoContainers, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));

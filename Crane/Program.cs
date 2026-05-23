@@ -3,32 +3,35 @@ using System.Collections.Generic;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 
-namespace IngameScript {
+namespace IngameScript
+{
     /// <summary>
     /// Crane: companion script to Goose. Handles autocrafting across a configured block group.
     /// Designed to run alongside Goose on a separate programmable block.
     /// </summary>
-    public partial class Program : MyGridProgram {
+    public partial class Program : MyGridProgram
+    {
         /// <summary>Shared runtime logger (action log, warnings, Echo status).</summary>
-        RuntimeLogger _logger;
+        private readonly RuntimeLogger _logger;
 
         /// <summary>Shared observed-item catalog.</summary>
-        readonly ItemCatalog _catalog = new ItemCatalog();
+        private readonly ItemCatalog _catalog = new ItemCatalog();
 
         /// <summary>Shared pipeline dispatcher.</summary>
-        WorkDispatcher _dispatcher;
+        private readonly WorkDispatcher _dispatcher;
 
         /// <summary>True while the script is paused via the <c>pause</c> command.</summary>
-        bool _paused;
+        private bool _paused;
 
         /// <summary>Reusable parser for arguments passed to <see cref="Main"/>.</summary>
-        readonly MyCommandLine _cmd = new MyCommandLine();
+        private readonly MyCommandLine _cmd = new MyCommandLine();
 
         /// <summary>Map of command verb to handler, populated by <see cref="InitCommands"/>.</summary>
-        Dictionary<string, Action<MyCommandLine>> _commands;
+        private Dictionary<string, Action<MyCommandLine>> _commands;
 
         /// <summary>Sets the update cadence, wires up commands, and primes the work iterator.</summary>
-        public Program() {
+        public Program()
+        {
             _logger = new RuntimeLogger(Echo, "Crane v1");
             _catalog.LoadFromStorage(Storage);
             _dispatcher = new WorkDispatcher(CraneStepLabels, StepFor, BudgetExceeded,
@@ -40,20 +43,27 @@ namespace IngameScript {
         }
 
         /// <summary>Persists the observed-item catalog so quota templates survive recompile.</summary>
-        public void Save() {
+        public void Save()
+        {
             Storage = _catalog.BuildStorageBlob();
         }
 
         /// <summary>Entry point invoked by the programmable block on every update tick.</summary>
-        public void Main(string argument, UpdateType updateSource) {
-            try {
-                if (!string.IsNullOrEmpty(argument)) {
+        public void Main(string argument, UpdateType updateSource)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(argument))
+                {
                     DispatchCommand(argument);
                 }
-                if ((updateSource & UpdateType.Update100) != 0 && !_paused) {
+                if ((updateSource & UpdateType.Update100) != 0 && !_paused)
+                {
                     _dispatcher.RunOneTick();
                 }
-            } catch (Exception ex) {
+            }
+            catch (Exception ex)
+            {
                 _logger.LogError("Main", ex);
             }
             _logger.RenderEchoStatus(_paused, _dispatcher.StepIndex, _dispatcher.SubStep,
@@ -62,7 +72,8 @@ namespace IngameScript {
         }
 
         /// <summary>Builds the command verb dispatch table.</summary>
-        void InitCommands() {
+        private void InitCommands()
+        {
             _commands = new Dictionary<string, Action<MyCommandLine>>(StringComparer.OrdinalIgnoreCase) {
                 { "rescan", c => { _rescanRequested = true; _configDirty = true; _logger.LogAction("cmd: rescan"); } },
                 { "pause",  c => { _paused = true;  _logger.LogAction("cmd: pause"); } },
@@ -83,17 +94,26 @@ namespace IngameScript {
         }
 
         /// <summary>Parses <paramref name="argument"/> and routes its verb to the matching handler.</summary>
-        void DispatchCommand(string argument) {
-            if (!_cmd.TryParse(argument)) {
+        private void DispatchCommand(string argument)
+        {
+            if (!_cmd.TryParse(argument))
+            {
                 _logger.LogWarning("Unparseable argument: " + argument);
                 return;
             }
-            if (_cmd.ArgumentCount == 0) return;
+            if (_cmd.ArgumentCount == 0)
+            {
+                return;
+            }
+
             string verb = _cmd.Argument(0);
             Action<MyCommandLine> handler;
-            if (_commands.TryGetValue(verb, out handler)) {
+            if (_commands.TryGetValue(verb, out handler))
+            {
                 handler(_cmd);
-            } else {
+            }
+            else
+            {
                 _logger.LogWarning("Unknown command: " + verb);
             }
         }

@@ -1,6 +1,8 @@
-namespace IngameScript {
+namespace IngameScript
+{
     /// <summary>How an item's stock-quota <c>Amount</c> should be interpreted.</summary>
-    public enum QuotaMode {
+    public enum QuotaMode
+    {
         /// <summary>Pull up to, and push excess above, the target amount.</summary>
         Exact,
         /// <summary>Pull up to the target amount; never push.</summary>
@@ -12,7 +14,8 @@ namespace IngameScript {
     }
 
     /// <summary>A single stock-quota rule parsed from a container's CustomData.</summary>
-    public class StockQuota {
+    public class StockQuota
+    {
         /// <summary>Target item count (ignored when <see cref="Mode"/> is <see cref="QuotaMode.All"/>).</summary>
         public long Amount;
 
