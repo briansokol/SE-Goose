@@ -1,6 +1,8 @@
-namespace IngameScript {
+namespace IngameScript
+{
     /// <summary>POCO projection of a mechanical-connection block's attachment state. Pure data; lets the BFS core be unit-tested without the SE runtime.</summary>
-    public struct MechanicalEdge {
+    public struct MechanicalEdge
+    {
         /// <summary>EntityId of the grid hosting the base/stator side of this connection.</summary>
         public long BaseGridId;
         /// <summary>EntityId of the grid hosting the top side of this connection (0 when detached or unknown).</summary>

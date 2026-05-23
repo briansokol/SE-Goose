@@ -1,13 +1,13 @@
-using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI.Ingame;
-using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Sandbox.Game.EntityComponents;
+using Sandbox.ModAPI.Ingame;
+using Sandbox.ModAPI.Interfaces;
+using SpaceEngineers.Game.ModAPI.Ingame;
 using VRage;
 using VRage.Collections;
 using VRage.Game;
@@ -18,10 +18,13 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 
-namespace IngameScript {
-    public partial class Program : MyGridProgram {
+namespace IngameScript
+{
+    public partial class Program : MyGridProgram
+    {
         /// <summary>How an item's <see cref="StockQuota.Amount"/> should be interpreted.</summary>
-        public enum QuotaMode {
+        public enum QuotaMode
+        {
             /// <summary>Pull up to, and push excess above, the target amount.</summary>
             Exact,
             /// <summary>Pull up to the target amount; never push.</summary>
@@ -33,7 +36,8 @@ namespace IngameScript {
         }
 
         /// <summary>A single stock-quota rule parsed from a <c>[Stock]</c> container's CustomData.</summary>
-        public class StockQuota {
+        public class StockQuota
+        {
             /// <summary>Target item count (ignored when <see cref="Mode"/> is <see cref="QuotaMode.All"/>).</summary>
             public long Amount;
 
@@ -42,7 +46,8 @@ namespace IngameScript {
         }
 
         /// <summary>Tunable runtime configuration parsed from the PB's CustomData.</summary>
-        public class GooseConfig {
+        public class GooseConfig
+        {
             /// <summary>Ticks between automatic rescans of managed blocks.</summary>
             public int RescanIntervalTicks = 600;
 
@@ -79,27 +84,34 @@ namespace IngameScript {
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
-        MyIni _ini = new MyIni();
+        private readonly MyIni _ini = new MyIni();
 
         /// <summary>Active configuration; replaced on each successful parse.</summary>
-        GooseConfig _config = new GooseConfig();
+        private readonly GooseConfig _config = new GooseConfig();
 
         /// <summary>Set when configuration must be reparsed on the next config step.</summary>
-        bool _configDirty = true;
+        private bool _configDirty = true;
 
         /// <summary>CustomData string seen on the previous parse; used for change detection.</summary>
-        string _lastSeenCustomData = null;
+        private string _lastSeenCustomData = null;
 
         /// <summary>Reparses PB CustomData into <see cref="_config"/> when it has changed or a rescan was requested.</summary>
-        IEnumerator<YieldReason> StepParseConfigIfDirty() {
-            if (Me.CustomData != _lastSeenCustomData) _configDirty = true;
-            if (!_configDirty) {
+        private IEnumerator<YieldReason> StepParseConfigIfDirty()
+        {
+            if (Me.CustomData != _lastSeenCustomData)
+            {
+                _configDirty = true;
+            }
+
+            if (!_configDirty)
+            {
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
             _lastSeenCustomData = Me.CustomData;
             MyIniParseResult result;
-            if (!_ini.TryParse(Me.CustomData, out result)) {
+            if (!_ini.TryParse(Me.CustomData, out result))
+            {
                 LogWarning("[Goose] CustomData parse failed: " + result.ToString());
                 yield return YieldReason.ChunkBoundary;
                 yield break;
@@ -114,20 +126,23 @@ namespace IngameScript {
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
-            if (reactorRaw != reactorClamped) {
+            if (reactorRaw != reactorClamped)
+            {
                 LogWarningOnce("balancer:bad-ratio:reactorUraniumIngotsPer1000L",
                     "[Goose] reactorUraniumIngotsPer1000L must be >= 0; clamped to 0 (was " + reactorRaw + ")");
             }
             _config.ReactorUraniumIngotsPer1000L = reactorClamped;
 
-            if (_ini.ContainsKey("Goose", "reactorUraniumFillPercent")) {
+            if (_ini.ContainsKey("Goose", "reactorUraniumFillPercent"))
+            {
                 LogWarningOnce("balancer:deprecated:reactorUraniumFillPercent",
                     "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 10). You can delete the old key from CustomData.");
             }
 
             int gasRaw = _ini.Get("Goose", "gasIceFillPercent").ToInt32(0);
             int gasClamped = ClampPercent(gasRaw);
-            if (gasRaw != gasClamped) {
+            if (gasRaw != gasClamped)
+            {
                 LogWarningOnce("balancer:bad-percent:gasIceFillPercent",
                     "[Goose] gasIceFillPercent must be 0-100; clamped to " + gasClamped + " (was " + gasRaw + ")");
             }
@@ -135,24 +150,33 @@ namespace IngameScript {
 
             int weaponRaw = _ini.Get("Goose", "weaponAmmoFillPercent").ToInt32(0);
             int weaponClamped = ClampPercent(weaponRaw);
-            if (weaponRaw != weaponClamped) {
+            if (weaponRaw != weaponClamped)
+            {
                 LogWarningOnce("balancer:bad-percent:weaponAmmoFillPercent",
                     "[Goose] weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
             }
             _config.WeaponAmmoFillPercent = weaponClamped;
 
             _categoryOverrides.Clear();
-            List<MyIniKey> keys = new List<MyIniKey>();
+            var keys = new List<MyIniKey>();
             _ini.GetKeys("Goose", keys);
-            for (int i = 0; i < keys.Count; i++) {
+            for (int i = 0; i < keys.Count; i++)
+            {
                 string name = keys[i].Name;
-                if (!name.StartsWith("Override.")) continue;
+                if (!name.StartsWith("Override."))
+                {
+                    continue;
+                }
+
                 string fullId = name.Substring("Override.".Length);
                 string val = _ini.Get(keys[i]).ToString();
                 ItemCategory cat;
-                if (Enum.TryParse(val, true, out cat)) {
+                if (Enum.TryParse(val, true, out cat))
+                {
                     _categoryOverrides[fullId] = cat;
-                } else {
+                }
+                else
+                {
                     LogWarning("[Goose] Unknown category '" + val + "' for override " + name);
                 }
             }
@@ -170,12 +194,21 @@ namespace IngameScript {
         /// <param name="typeIdWithPrefix">Full type id including the <c>MyObjectBuilder_</c> prefix.</param>
         /// <param name="subtypeId">Subtype portion of the key.</param>
         /// <returns><c>true</c> when the key has a valid <c>Type/Subtype</c> shape.</returns>
-        internal static bool TryParseQuotaKeyShape(string key, out string typeIdWithPrefix, out string subtypeId) {
+        internal static bool TryParseQuotaKeyShape(string key, out string typeIdWithPrefix, out string subtypeId)
+        {
             typeIdWithPrefix = null;
             subtypeId = null;
-            if (string.IsNullOrEmpty(key)) return false;
+            if (string.IsNullOrEmpty(key))
+            {
+                return false;
+            }
+
             int slash = key.IndexOf('/');
-            if (slash <= 0 || slash >= key.Length - 1) return false;
+            if (slash <= 0 || slash >= key.Length - 1)
+            {
+                return false;
+            }
+
             string typeHalf = key.Substring(0, slash);
             string subHalf = key.Substring(slash + 1);
             typeIdWithPrefix = typeHalf.StartsWith("MyObjectBuilder_", StringComparison.Ordinal)
@@ -187,10 +220,14 @@ namespace IngameScript {
 
         /// <summary>Wraps <see cref="MyItemType.Parse"/> to return a nullable on failure
         /// instead of throwing. Used as the default type resolver in production paths.</summary>
-        internal static MyItemType? ResolveItemTypeViaParse(string fullyQualified) {
-            try {
+        internal static MyItemType? ResolveItemTypeViaParse(string fullyQualified)
+        {
+            try
+            {
                 return MyItemType.Parse(fullyQualified);
-            } catch {
+            }
+            catch
+            {
                 return null;
             }
         }
@@ -202,18 +239,26 @@ namespace IngameScript {
         /// <param name="amount">Parsed amount (0 when <paramref name="mode"/> is <see cref="QuotaMode.All"/>).</param>
         /// <param name="mode">Resolved quota mode.</param>
         /// <returns><c>true</c> when the value parses cleanly.</returns>
-        internal static bool TryParseQuotaValue(string raw, out long amount, out QuotaMode mode) {
+        internal static bool TryParseQuotaValue(string raw, out long amount, out QuotaMode mode)
+        {
             amount = 0;
             mode = QuotaMode.Exact;
-            if (string.IsNullOrEmpty(raw)) return false;
-            if (raw.Equals("All", StringComparison.OrdinalIgnoreCase)) {
+            if (string.IsNullOrEmpty(raw))
+            {
+                return false;
+            }
+
+            if (raw.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
                 mode = QuotaMode.All;
                 return true;
             }
             char suffix = raw[raw.Length - 1];
             string numericPart = raw;
-            if (suffix == 'M' || suffix == 'm') { mode = QuotaMode.Minimum; numericPart = raw.Substring(0, raw.Length - 1); }
-            else if (suffix == 'L' || suffix == 'l') { mode = QuotaMode.Limiter; numericPart = raw.Substring(0, raw.Length - 1); }
+            if (suffix == 'M' || suffix == 'm')
+            { mode = QuotaMode.Minimum; numericPart = raw.Substring(0, raw.Length - 1); }
+            else if (suffix == 'L' || suffix == 'l')
+            { mode = QuotaMode.Limiter; numericPart = raw.Substring(0, raw.Length - 1); }
             return long.TryParse(numericPart, out amount);
         }
 
@@ -221,14 +266,23 @@ namespace IngameScript {
         /// <summary>Clamps a count to be non-negative. Pure helper used by the balancer config parser.</summary>
         /// <param name="raw">Raw integer from CustomData.</param>
         /// <returns><paramref name="raw"/> when non-negative; <c>0</c> otherwise.</returns>
-        
+
 
         /// <summary>Clamps a percent value to the inclusive range 0-100. Pure helper used by the balancer config parser.</summary>
         /// <param name="raw">Raw integer from CustomData.</param>
         /// <returns><paramref name="raw"/> when in range; <c>0</c> when negative; <c>100</c> when greater than 100.</returns>
-        internal static int ClampPercent(int raw) {
-            if (raw < 0) return 0;
-            if (raw > 100) return 100;
+        internal static int ClampPercent(int raw)
+        {
+            if (raw < 0)
+            {
+                return 0;
+            }
+
+            if (raw > 100)
+            {
+                return 100;
+            }
+
             return raw;
         }
 
@@ -239,20 +293,26 @@ namespace IngameScript {
         /// <param name="type">Resolved <see cref="MyItemType"/>.</param>
         /// <param name="quota">Resolved quota when parsing succeeds.</param>
         /// <returns><c>true</c> when both key and value parse cleanly; <c>false</c> otherwise.</returns>
-        bool TryReadStockQuota(string key, string raw, out MyItemType type, out StockQuota quota) {
+        private bool TryReadStockQuota(string key, string raw, out MyItemType type, out StockQuota quota)
+        {
             type = default(MyItemType);
             quota = null;
-            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(raw)) return false;
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(raw))
+            {
+                return false;
+            }
 
             string typeIdWithPrefix, subtypeId;
-            if (!TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId)) {
+            if (!TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId))
+            {
                 LogWarningOnce("stockq:legacy:" + key,
                     "[Goose] Stock quota key '" + key + "' must be fully qualified as Type/Subtype (e.g. Component/SteelPlate). Skipped.");
                 return false;
             }
 
             MyItemType? resolved = ResolveItemTypeViaParse(typeIdWithPrefix + "/" + subtypeId);
-            if (!resolved.HasValue) {
+            if (!resolved.HasValue)
+            {
                 LogWarningOnce("stockq:parse:" + key,
                     "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type.");
                 return false;
@@ -261,16 +321,22 @@ namespace IngameScript {
 
             long amount;
             QuotaMode mode;
-            if (!TryParseQuotaValue(raw, out amount, out mode)) return false;
+            if (!TryParseQuotaValue(raw, out amount, out mode))
+            {
+                return false;
+            }
+
             quota = new StockQuota { Amount = amount, Mode = mode };
             return true;
         }
 
 
         /// <summary>Live-merges the balancer-related keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with their default value and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
-        void EnsureBalancerKeysPopulated() {
+        private void EnsureBalancerKeysPopulated()
+        {
             bool changed = false;
-            if (!_ini.ContainsKey("Goose", "reactorUraniumIngotsPer1000L")) {
+            if (!_ini.ContainsKey("Goose", "reactorUraniumIngotsPer1000L"))
+            {
                 _ini.Set("Goose", "reactorUraniumIngotsPer1000L", 0);
                 _ini.SetComment("Goose", "reactorUraniumIngotsPer1000L",
                     "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 10). 0 disables. " +
@@ -279,19 +345,22 @@ namespace IngameScript {
                     "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
                 changed = true;
             }
-            if (!_ini.ContainsKey("Goose", "gasIceFillPercent")) {
+            if (!_ini.ContainsKey("Goose", "gasIceFillPercent"))
+            {
                 _ini.Set("Goose", "gasIceFillPercent", 0);
                 _ini.SetComment("Goose", "gasIceFillPercent",
                     "Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.");
                 changed = true;
             }
-            if (!_ini.ContainsKey("Goose", "weaponAmmoFillPercent")) {
+            if (!_ini.ContainsKey("Goose", "weaponAmmoFillPercent"))
+            {
                 _ini.Set("Goose", "weaponAmmoFillPercent", 0);
                 _ini.SetComment("Goose", "weaponAmmoFillPercent",
                     "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
                 changed = true;
             }
-            if (!_ini.ContainsKey("Goose", "enableSameRoleBalancing")) {
+            if (!_ini.ContainsKey("Goose", "enableSameRoleBalancing"))
+            {
                 _ini.Set("Goose", "enableSameRoleBalancing", false);
                 _ini.SetComment("Goose", "enableSameRoleBalancing",
                     "When true, redistributes items inside non-Stock category-tagged containers so each " +
@@ -299,7 +368,8 @@ namespace IngameScript {
                     "overflow lands in lower tiers. false (default) disables.");
                 changed = true;
             }
-            if (changed) {
+            if (changed)
+            {
                 Me.CustomData = _ini.ToString();
                 _lastSeenCustomData = Me.CustomData;
             }
