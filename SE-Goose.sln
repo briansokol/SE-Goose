@@ -10,6 +10,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crane", "Crane\Crane.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crane.Tests", "Crane.Tests\Crane.Tests.csproj", "{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "Shared\Shared.csproj", "{5F7A8E2C-3B4D-4E1F-9A0B-1C2D3E4F5A6B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared.Tests", "Shared.Tests\Shared.Tests.csproj", "{6A8B9C2D-4E3F-5A1B-8C9D-2E0F1A3B4C5D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +36,14 @@ Global
 		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CD74B7AC-182F-4E9F-BA87-4D49FED79B8F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F7A8E2C-3B4D-4E1F-9A0B-1C2D3E4F5A6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F7A8E2C-3B4D-4E1F-9A0B-1C2D3E4F5A6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F7A8E2C-3B4D-4E1F-9A0B-1C2D3E4F5A6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F7A8E2C-3B4D-4E1F-9A0B-1C2D3E4F5A6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A8B9C2D-4E3F-5A1B-8C9D-2E0F1A3B4C5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A8B9C2D-4E3F-5A1B-8C9D-2E0F1A3B4C5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A8B9C2D-4E3F-5A1B-8C9D-2E0F1A3B4C5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A8B9C2D-4E3F-5A1B-8C9D-2E0F1A3B4C5D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

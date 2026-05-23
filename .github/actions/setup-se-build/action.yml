@@ -86,7 +86,9 @@ runs:
           'Goose\mdk.local.ini',
           'Goose.Tests\mdk.local.ini',
           'Crane\mdk.local.ini',
-          'Crane.Tests\mdk.local.ini'
+          'Crane.Tests\mdk.local.ini',
+          'Shared\mdk.local.ini',
+          'Shared.Tests\mdk.local.ini'
         )
         foreach ($target in $targets) {
           $mdkLocal = Join-Path $env:GITHUB_WORKSPACE $target
