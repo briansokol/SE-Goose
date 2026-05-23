@@ -8,11 +8,11 @@ namespace IngameScript
         /// <summary>Tunable runtime configuration parsed from the PB's CustomData.</summary>
         public class CraneConfig
         {
-            /// <summary>Name of the block group Crane scans for managed blocks.</summary>
-            public string GroupName = "Crane";
-
             /// <summary>Master kill-switch for autocraft.</summary>
             public bool EnableAutocraft = true;
+
+            /// <summary>When true, [Federate]-tagged connectors on Me.CubeGrid admit the docked remote grid into Crane's management scope.</summary>
+            public bool EnableConnectorFederation = true;
 
             /// <summary>Maximum total queue depth Crane will maintain per (assembler, blueprint) pair.</summary>
             public int AutocraftMaxQueueDepth = 100;
@@ -66,8 +66,8 @@ namespace IngameScript
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            _config.GroupName = MyIniHelpers.GetString(_ini, "Crane", "groupName", _config.GroupName);
             _config.EnableAutocraft = MyIniHelpers.GetBool(_ini, "Crane", "enableAutocraft", true);
+            _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, "Crane", "enableConnectorFederation", true);
             _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, "Crane", "autocraftMaxQueueDepth", 100);
             _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 600);
             _config.BudgetFraction = MyIniHelpers.GetFloat(_ini, "Crane", "budgetFraction", 0.8f);
@@ -88,17 +88,17 @@ namespace IngameScript
         private void EnsureConfigKeysPopulated()
         {
             bool changed = false;
-            if (!_ini.ContainsKey("Crane", "groupName"))
-            {
-                _ini.Set("Crane", "groupName", _config.GroupName);
-                _ini.SetComment("Crane", "groupName",
-                    "Block group Crane will manage. Add assemblers, [CCraft] LCDs, and [CError] LCDs to this group.");
-                changed = true;
-            }
             if (!_ini.ContainsKey("Crane", "enableAutocraft"))
             {
                 _ini.Set("Crane", "enableAutocraft", true);
                 _ini.SetComment("Crane", "enableAutocraft", "Master autocraft kill-switch.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "enableConnectorFederation"))
+            {
+                _ini.Set("Crane", "enableConnectorFederation", true);
+                _ini.SetComment("Crane", "enableConnectorFederation",
+                    "When true, [Federate]-tagged connectors on this grid admit the docked remote grid into Crane's management scope.");
                 changed = true;
             }
             if (!_ini.ContainsKey("Crane", "autocraftMaxQueueDepth"))

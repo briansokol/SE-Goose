@@ -4,9 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Space Engineers Programmable Block Script** for **inventory management**. The script runs on an in-game programmable block and is intended to monitor, organize, and report on item inventories across connected cargo containers, refineries, assemblers, connectors, and other inventory-bearing blocks on a grid.
+This repository contains **two companion Space Engineers Programmable Block Scripts** and a shared code library:
 
-The project uses the Malware Development Kit (MDK2) framework to develop, build, and deploy the script into Space Engineers.
+- **Goose**: inventory management. Monitors, organizes, and reports on item inventories across connected cargo containers, refineries, assemblers, connectors, and other inventory-bearing blocks. Also manages refinery/reactor stocking. INI section: `[Goose]`.
+- **Crane**: production management (autocrafting). Manages assembler queues to maintain user-defined item quotas, with multi-assembler dispatch and capability-aware blueprint resolution. INI section: `[Crane]`.
+
+The two scripts run as separate PBs on the same grid, each with their own CustomData configuration. They do not call each other directly; coordination is implicit (Crane queues items, Goose moves them).
+
+Both scripts use the Malware Development Kit (MDK2) framework for development, build, and deployment into Space Engineers.
+
+### Repository Layout
+
+```
+Goose/          Goose script project (Goose.csproj + Program.*.cs partials)
+Crane/          Crane script project (Crane.csproj + Program.*.cs partials)
+Shared/         Mixin source library, compiled into BOTH scripts via
+                <Compile Include="..\Shared\..." LinkBase="..." /> in each
+                script's .csproj. Holds reusable components: Scope, Ini,
+                Blocks (tag helpers), Items, Inventory, Logging, Dispatcher,
+                Autocraft. Not a referenced assembly; source-level include.
+Goose.Tests/    Goose-only test project.
+Crane.Tests/    Crane-only test project.
+Shared.Tests/   Tests for the shared library (the bulk of the test suite).
+SE-Goose.sln    Solution file containing all of the above.
+```
+
+**Shared discovery model:** Both scripts use the same scope-based block discovery (see "Block Discovery & Scope" below). A change to that model should usually be made in `Shared/Scope/` so both scripts benefit.
 
 ## Design Documentation
 
@@ -33,7 +56,7 @@ This list will grow as additional features are planned; more documents will be a
 
 ## CRITICAL: C# 6.0 Language Constraints
 
-**ALL CODE MUST BE COMPATIBLE WITH C# 6.0**. This project is constrained to C# 6.0 syntax and features due to Space Engineers API limitations (see `<LangVersion>6</LangVersion>` in `Goose.csproj`). DO NOT use features from C# 7.0 or later, including:
+**ALL CODE MUST BE COMPATIBLE WITH C# 6.0**. This project is constrained to C# 6.0 syntax and features due to Space Engineers API limitations (see `<LangVersion>6</LangVersion>` in `Goose.csproj`, `Crane.csproj`, and `Shared.csproj`). The constraint applies to `Shared/` code too, since those sources are compiled directly into both scripts. DO NOT use features from C# 7.0 or later, including:
 
 - **Readonly structs** (C# 7.2) - Use regular structs or const fields instead
 - **Tuple syntax** `(int, string)` (C# 7.0) - Use named classes or structs
@@ -90,16 +113,25 @@ If a comment would be useful as documentation rather than as a margin note, fold
 Space Engineers blocks expose a per-block custom data string. Use it for configuration:
 
 - Store configuration in INI format via `MyIni` (from `VRage.Game.ModAPI.Ingame.Utilities`).
-- Use a consistent section header for this project (suggested: `[Goose]`).
+- Section headers identify the owning script:
+  - **Goose PB**: `[Goose]` section.
+  - **Crane PB**: `[Crane]` section.
+  - Per-block configs (e.g., the `[CCraft]` LCD's quota lines) use the same section as their owning script.
+- Each script lazily auto-populates its recognised keys into the PB CustomData on first parse (`EnsureConfigKeysPopulated`), preserving existing user keys and comments. Add new config keys via that path so users get usable defaults without manual editing.
 - Parse and validate custom data on each update cycle, or only when the block is (re)discovered — weigh cost against flexibility.
 
-## Block Group System
+## Block Discovery & Scope
 
-Operate on blocks within a named group configured via the Programmable Block's custom data:
+Both scripts discover the blocks they manage by building a **scope**: the set of grid EntityIds that count as "in scope" for the PB. Scope construction is shared via `Shared/Scope/ScopeBuilder.cs` and works the same way for Goose and Crane:
 
-- Groups the relevant inventory blocks for coordinated management.
-- Automatically discover and categorize blocks within the group.
-- Support hot-swapping of blocks without script restart by re-scanning when groups change.
+- **Seed grid**: `Me.CubeGrid` (the PB's own grid).
+- **Mechanical edges**: traverses rotor/hinge/piston connections into subgrids by default. A mechanical block whose CustomName carries the `[NoSubgrid]` tag blocks the edge.
+- **Connector edges**: traverses docked connectors **only** when the PB-side connector carries the `[Federate]` tag and the script's `enableConnectorFederation` config flag is true (default true in both scripts).
+- **Drift detection**: a rolling hash of the mechanical + connector edge state is compared each cycle; a change triggers a rescan.
+
+Once scope is built, each script enumerates blocks via `GridTerminalSystem.GetBlocksOfType<T>(list, predicate)`, filtering with `_scopeGrids.Contains(block.CubeGrid.EntityId)` plus any role-specific filters (interface type, name tags such as `[Ignore]` / `[CCraft]` / `[CError]`). Neither script uses a manually configured block group.
+
+Hot-swapping (adding/removing blocks, docking, undocking) is handled automatically by the next rescan, either on the `rescanIntervalTicks` cadence, when scope drift is detected, or when the `rescan` command is issued via the PB.
 
 ## Update Frequency
 
@@ -110,19 +142,23 @@ Operate on blocks within a named group configured via the Programmable Block's c
 ## Build Commands
 
 ```bash
-# Build the project (Debug configuration)
-dotnet build "Goose.csproj" -c Debug
+# Build the whole solution (preferred; covers Goose, Crane, Shared, and all test projects)
+dotnet build SE-Goose.sln -c Debug
 
-# Build for Release
-dotnet build "Goose.csproj" -c Release
+# Build a single script
+dotnet build Goose/Goose.csproj -c Debug
+dotnet build Crane/Crane.csproj -c Debug
 
-# Build solution file
-dotnet build "SE-Goose.sln"
+# Release build
+dotnet build SE-Goose.sln -c Release
+
+# Run all tests
+dotnet test SE-Goose.sln
 ```
 
 **Always run `dotnet format SE-Goose.sln` before every build** to apply the project's C# style rules from `.editorconfig`.
 
-**Always build after code changes** to verify the script compiles cleanly. Build errors here mean the script won't load in-game.
+**Always build after code changes** to verify the scripts compile cleanly. A change to `Shared/` affects both Goose and Crane, so always build the full solution after touching Shared. Build errors mean the script won't load in-game.
 
 ## MDK2 Configuration
 
@@ -140,10 +176,10 @@ Configured in `mdk.ini`:
 
 ### File Exclusions
 
-Files matching these patterns are excluded from the packaged script:
+Files matching these patterns are excluded from the packaged scripts (each script has its own `mdk.ini` that lists exclusions):
 
-- `Goose/obj/**/*`
-- `Goose/MDK/**/*`
+- `{Goose,Crane}/obj/**/*`
+- `{Goose,Crane}/MDK/**/*`
 - `**/*.debug.cs`
 
 ## Branching

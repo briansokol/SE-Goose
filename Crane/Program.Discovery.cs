@@ -10,7 +10,7 @@ namespace IngameScript
         /// <summary>EntityIds of grids currently in management scope.</summary>
         private readonly HashSet<long> _scopeGrids = new HashSet<long>();
 
-        /// <summary>All blocks discovered in <see cref="CraneConfig.GroupName"/> that are eligible for Crane management.</summary>
+        /// <summary>All blocks discovered within Crane's management scope that are eligible for management.</summary>
         private readonly List<IMyTerminalBlock> _allManagedBlocks = new List<IMyTerminalBlock>();
 
         /// <summary>Assemblers in the managed group (filtered to non-survival-kit assemblers via interface).</summary>
@@ -31,8 +31,14 @@ namespace IngameScript
         /// <summary>Snapshot of mechanical edges from the most recent scope build.</summary>
         private readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
 
-        /// <summary>Empty connector list — Crane does not federate via connectors in v1.</summary>
+        /// <summary>Reusable raw connector block buffer (mirror of <see cref="_scopeMechRaw"/>).</summary>
+        private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
+
+        /// <summary>Connector edges fed to <see cref="ScopeBuilder.BuildScope"/> for [Federate]-tagged docking admission.</summary>
         private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
+
+        /// <summary>Snapshot of connector edges from the most recent scope build (mirror of <see cref="_scopeMechCache"/>).</summary>
+        private readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
 
         /// <summary>Rolling hash of the scope inputs.</summary>
         private ulong _scopeDriftHash;
@@ -43,10 +49,10 @@ namespace IngameScript
         /// <summary>Set by the <c>rescan</c> command to trigger an immediate rescan on the next cycle.</summary>
         private bool _rescanRequested = false;
 
-        /// <summary>Reusable scratch list for resolving block-group members.</summary>
-        private readonly List<IMyTerminalBlock> _groupMemberBuffer = new List<IMyTerminalBlock>();
+        /// <summary>Reusable scratch list for in-scope text-surface providers (LCD discovery).</summary>
+        private readonly List<IMyTextSurfaceProvider> _surfaceProviderScratch = new List<IMyTextSurfaceProvider>();
 
-        /// <summary>Rebuilds <see cref="_scopeGrids"/> when due. Crane does not federate via connectors (v1).</summary>
+        /// <summary>Rebuilds <see cref="_scopeGrids"/> when due, including [Federate]-tagged connector edges when enabled.</summary>
         private IEnumerator<YieldReason> StepRebuildScopeIfDue()
         {
             bool needs = _rescanRequested
@@ -90,12 +96,28 @@ namespace IngameScript
                 _scopeMechBuf.Add(edge);
             }
 
+            _scopeConnRaw.Clear();
+            GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
             _scopeConnBuf.Clear();
-            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, false, _scopeGrids);
+            for (int i = 0; i < _scopeConnRaw.Count; i++)
+            {
+                IMyShipConnector c = _scopeConnRaw[i];
+                ConnectorEdge edge;
+                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
+                IMyShipConnector other = c.OtherConnector;
+                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
+                edge.FederateTag = BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag);
+                _scopeConnBuf.Add(edge);
+            }
+
+            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
 
             _scopeMechCache.Clear();
             _scopeMechCache.AddRange(_scopeMechBuf);
-            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechCache, null);
+            _scopeConnCache.Clear();
+            _scopeConnCache.AddRange(_scopeConnBuf);
+            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
             _logger.LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
         }
 
@@ -115,10 +137,26 @@ namespace IngameScript
                 edge.NoSubgridTag = BlockNameTags.NameHasTag(m.CustomName, BlockNameTags.NoSubgridTag);
                 _scopeMechBuf.Add(edge);
             }
-            return ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, null);
+
+            _scopeConnRaw.Clear();
+            GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
+            _scopeConnBuf.Clear();
+            for (int i = 0; i < _scopeConnRaw.Count; i++)
+            {
+                IMyShipConnector c = _scopeConnRaw[i];
+                ConnectorEdge edge;
+                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
+                IMyShipConnector other = c.OtherConnector;
+                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
+                edge.FederateTag = BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag);
+                _scopeConnBuf.Add(edge);
+            }
+
+            return ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
         }
 
-        /// <summary>Rescans the configured block group, classifies blocks (assembler / <c>[CCraft]</c> LCD / <c>[CError]</c> LCD).</summary>
+        /// <summary>Rescans blocks in scope and classifies them (assembler / <c>[CCraft]</c> LCD / <c>[CError]</c> LCD).</summary>
         private IEnumerator<YieldReason> StepRescanIfDue()
         {
             if (!_rescanRequested && _ticksSinceRescan < _config.RescanIntervalTicks)
@@ -136,67 +174,56 @@ namespace IngameScript
             _ccraftLcds.Clear();
             _cerrorLcds.Clear();
 
-            IMyBlockGroup group = GridTerminalSystem.GetBlockGroupWithName(_config.GroupName);
-            if (group == null)
+            GridTerminalSystem.GetBlocksOfType<IMyAssembler>(_assemblers, asm =>
+                asm != null
+                && !asm.Closed
+                && asm.CubeGrid != null
+                && _scopeGrids.Contains(asm.CubeGrid.EntityId)
+                && !BlockNameTags.HasIgnoreTag(asm.CustomName));
+
+            for (int i = 0; i < _assemblers.Count; i++)
             {
-                _logger.LogWarningOnce("group:missing:" + _config.GroupName,
-                    "[Crane] Block group '" + _config.GroupName + "' not found. Create the group and add assemblers + LCDs to it.");
-                yield return YieldReason.ChunkBoundary;
-                yield break;
+                _allManagedBlocks.Add(_assemblers[i]);
             }
 
-            _groupMemberBuffer.Clear();
-            group.GetBlocks(_groupMemberBuffer);
-            for (int i = 0; i < _groupMemberBuffer.Count; i++)
+            _surfaceProviderScratch.Clear();
+            GridTerminalSystem.GetBlocksOfType<IMyTextSurfaceProvider>(_surfaceProviderScratch, b =>
             {
-                IMyTerminalBlock block = _groupMemberBuffer[i];
-                if (block == null || block.Closed)
-                {
-                    continue;
-                }
+                var tb = b as IMyTerminalBlock;
+                if (tb == null || tb.Closed || tb.CubeGrid == null)
+                { return false; }
+                if (!_scopeGrids.Contains(tb.CubeGrid.EntityId))
+                { return false; }
+                if (tb == Me)
+                { return false; }
+                if (BlockNameTags.HasIgnoreTag(tb.CustomName))
+                { return false; }
+                return BlockNameTags.NameHasTag(tb.CustomName, "[CCraft]")
+                    || BlockNameTags.NameHasTag(tb.CustomName, "[CError]");
+            });
 
-                if (block.CubeGrid == null)
+            for (int i = 0; i < _surfaceProviderScratch.Count; i++)
+            {
+                IMyTextSurfaceProvider sp = _surfaceProviderScratch[i];
+                if (sp.SurfaceCount <= 0)
+                { continue; }
+                var tb = (IMyTerminalBlock)sp;
+                if (BlockNameTags.NameHasTag(tb.CustomName, "[CCraft]"))
                 {
-                    continue;
+                    _ccraftLcds.Add(sp.GetSurface(0));
+                    _allManagedBlocks.Add(tb);
                 }
+                else if (BlockNameTags.NameHasTag(tb.CustomName, "[CError]"))
+                {
+                    _cerrorLcds.Add(sp.GetSurface(0));
+                    _allManagedBlocks.Add(tb);
+                }
+            }
 
-                if (!_scopeGrids.Contains(block.CubeGrid.EntityId))
-                {
-                    continue;
-                }
-
-                if (BlockNameTags.HasIgnoreTag(block.CustomName))
-                {
-                    continue;
-                }
-
-                if (block == Me)
-                {
-                    continue;
-                }
-
-                var asm = block as IMyAssembler;
-                if (asm != null)
-                {
-                    _assemblers.Add(asm);
-                    _allManagedBlocks.Add(block);
-                    continue;
-                }
-
-                var surfProvider = block as IMyTextSurfaceProvider;
-                if (surfProvider != null)
-                {
-                    if (BlockNameTags.NameHasTag(block.CustomName, "[CCraft]") && surfProvider.SurfaceCount > 0)
-                    {
-                        _ccraftLcds.Add(surfProvider.GetSurface(0));
-                        _allManagedBlocks.Add(block);
-                    }
-                    else if (BlockNameTags.NameHasTag(block.CustomName, "[CError]") && surfProvider.SurfaceCount > 0)
-                    {
-                        _cerrorLcds.Add(surfProvider.GetSurface(0));
-                        _allManagedBlocks.Add(block);
-                    }
-                }
+            if (_assemblers.Count == 0)
+            {
+                _logger.LogWarningOnce("scope:no-assemblers",
+                    "[Crane] No assemblers found in scope. Add assemblers to this grid (or to a federated grid via a [Federate]-tagged connector).");
             }
 
             _logger.LogAction("Rescan: " + _assemblers.Count + " asm, "
@@ -216,9 +243,9 @@ namespace IngameScript
                 return null;
             }
 
-            for (int i = 0; i < _groupMemberBuffer.Count; i++)
+            for (int i = 0; i < _allManagedBlocks.Count; i++)
             {
-                IMyTerminalBlock block = _groupMemberBuffer[i];
+                IMyTerminalBlock block = _allManagedBlocks[i];
                 if (block == null || block.Closed)
                 {
                     continue;
