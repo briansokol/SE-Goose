@@ -32,8 +32,20 @@ namespace IngameScript
         /// Resolves the inventory Goose may drain on a managed block. For production blocks
         /// this is the output inventory; only finished goods are sorted, never the input feed.
         /// </summary>
-        private IMyInventory GetSortableInventory(IMyTerminalBlock block)
+        /// <summary>Returns the inventory Goose should drain when sorting/balancing this block.
+        /// For assemblers, follows the mode: <c>Assembly</c> drains the output side (finished
+        /// components), <c>Disassembly</c> drains the input side (produced ingots). Other
+        /// production blocks always drain output. Non-production blocks fall back to inventory 0.</summary>
+        internal static IMyInventory GetSortableInventory(IMyTerminalBlock block)
         {
+            var asm = block as IMyAssembler;
+            if (asm != null)
+            {
+                return asm.Mode == MyAssemblerMode.Disassembly
+                    ? asm.InputInventory
+                    : asm.OutputInventory;
+            }
+
             var prod = block as IMyProductionBlock;
             if (prod != null)
             {
