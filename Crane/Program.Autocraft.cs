@@ -78,31 +78,62 @@ namespace IngameScript
         /// <summary>Parses the <c>[Crane]</c> section of the <c>[CCraft]</c> LCD CustomData into <see cref="_autocraftTargets"/> + <see cref="_autocraftActiveQuotaLines"/>, then live-merges the catalog into the CustomData (preserving user comments).</summary>
         private IEnumerator<YieldReason> StepLoadCCraftConfig()
         {
-            _autocraftTargets.Clear();
-            _autocraftActiveQuotaLines.Clear();
             _ccraftConfigHost = FindCCraftConfigHost();
             if (_ccraftConfigHost == null)
+            {
+                _autocraftTargets.Clear();
+                _autocraftActiveQuotaLines.Clear();
+                _lastSeenCCraftCustomData = null;
+                _lastSyncedCatalogVersion = -1;
+                yield return YieldReason.ChunkBoundary;
+                yield break;
+            }
+
+            string current = _ccraftConfigHost.CustomData ?? string.Empty;
+            int catalogVersion = _catalog.Version;
+            if (string.Equals(current, _lastSeenCCraftCustomData, StringComparison.Ordinal)
+                && catalogVersion == _lastSyncedCatalogVersion)
             {
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            ParseCCraftCustomData(_ccraftConfigHost.CustomData);
-            SyncCCraftTemplate(_ccraftConfigHost);
+
+            _autocraftTargets.Clear();
+            _autocraftActiveQuotaLines.Clear();
+            foreach (YieldReason r in ParseCCraftCustomData(current))
+            {
+                yield return r;
+            }
+            foreach (YieldReason r in SyncCCraftTemplate(_ccraftConfigHost))
+            {
+                yield return r;
+            }
+            _lastSeenCCraftCustomData = _ccraftConfigHost.CustomData ?? string.Empty;
+            _lastSyncedCatalogVersion = catalogVersion;
             yield return YieldReason.ChunkBoundary;
         }
 
         /// <summary>Parses the <c>[Crane]</c> section of <paramref name="customData"/>. Skips comment/blank lines; emits warnings for malformed lines.</summary>
-        private void ParseCCraftCustomData(string customData)
+        private IEnumerable<YieldReason> ParseCCraftCustomData(string customData)
         {
             if (string.IsNullOrEmpty(customData))
             {
-                return;
+                yield break;
             }
 
             string[] lines = customData.Split('\n');
             bool inCrane = false;
             for (int i = 0; i < lines.Length; i++)
             {
+                if (i > 0 && i % 25 == 0)
+                {
+                    yield return YieldReason.ChunkBoundary;
+                    if (BudgetExceeded())
+                    {
+                        yield return YieldReason.BudgetHit;
+                    }
+                }
+
                 string trimmed = lines[i].TrimEnd('\r').Trim();
                 if (trimmed.Length == 0)
                 {
@@ -194,8 +225,15 @@ namespace IngameScript
         /// <summary>Reusable builder for the <c>[CCraft]</c> CustomData body.</summary>
         private readonly StringBuilder _ccraftTemplateSB = new StringBuilder(2048);
 
+
+        /// <summary>Last <see cref="IMyTerminalBlock.CustomData"/> seen on the CCraft config host, captured after <see cref="SyncCCraftTemplate"/> ran. Used to skip step 4's parse+sync work when neither the user nor the catalog has changed anything since the previous tick. Null on first tick or after the host disappears.</summary>
+        private string _lastSeenCCraftCustomData = null;
+
+        /// <summary>Last <see cref="ItemCatalog.Version"/> the CCraft template was synced against. Together with <see cref="_lastSeenCCraftCustomData"/> this gates step 4 so it does real work only when the user edited the LCD or new items appeared in the catalog.</summary>
+        private int _lastSyncedCatalogVersion = -1;
+
         /// <summary>Refreshes the <c>[CCraft]</c> LCD CustomData. Preserves user-active quota lines; appends new catalog items as <c>=x</c>; sorts alphabetical by key. Writes only on diff.</summary>
-        private void SyncCCraftTemplate(IMyTerminalBlock host)
+        private IEnumerable<YieldReason> SyncCCraftTemplate(IMyTerminalBlock host)
         {
             string current = host.CustomData ?? string.Empty;
 
@@ -228,8 +266,24 @@ namespace IngameScript
             }
 
             _ccraftSortedKeys.Sort(StringComparer.Ordinal);
+
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
+
             for (int i = 0; i < _ccraftSortedKeys.Count; i++)
             {
+                if (i > 0 && i % 50 == 0)
+                {
+                    yield return YieldReason.ChunkBoundary;
+                    if (BudgetExceeded())
+                    {
+                        yield return YieldReason.BudgetHit;
+                    }
+                }
+
                 string mergedKey = _ccraftSortedKeys[i];
                 string activeLine;
                 if (_autocraftActiveQuotaLines.TryGetValue(mergedKey, out activeLine))

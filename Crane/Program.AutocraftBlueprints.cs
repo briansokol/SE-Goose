@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game;
+using VRage.Game.GUI.TextPanel;
 
 namespace IngameScript
 {
@@ -223,9 +224,12 @@ namespace IngameScript
             string text = sb.ToString();
             for (int i = 0; i < _ccraftLcds.Count; i++)
             {
-                if (_ccraftLcds[i] != null)
+                IMyTextSurface surface = _ccraftLcds[i];
+                if (surface != null)
                 {
-                    _ccraftLcds[i].WriteText(text, false);
+                    surface.ContentType = ContentType.TEXT_AND_IMAGE;
+                    surface.Font = "Debug";
+                    surface.WriteText(text, false);
                 }
             }
         }
@@ -240,22 +244,32 @@ namespace IngameScript
 
             var sb = new StringBuilder();
             sb.Append("=== Crane Errors ===\n");
-            foreach (KeyValuePair<string, int> kv in _logger.Warnings)
+            if (_logger.Warnings.Count == 0)
             {
-                sb.Append(kv.Key);
-                if (kv.Value > 1)
+                sb.Append("(no errors)\n");
+            }
+            else
+            {
+                foreach (KeyValuePair<string, int> kv in _logger.Warnings)
                 {
-                    sb.Append(" (x").Append(kv.Value).Append(')');
-                }
+                    sb.Append(kv.Key);
+                    if (kv.Value > 1)
+                    {
+                        sb.Append(" (x").Append(kv.Value).Append(')');
+                    }
 
-                sb.Append('\n');
+                    sb.Append('\n');
+                }
             }
             string text = sb.ToString();
             for (int i = 0; i < _cerrorLcds.Count; i++)
             {
-                if (_cerrorLcds[i] != null)
+                IMyTextSurface surface = _cerrorLcds[i];
+                if (surface != null)
                 {
-                    _cerrorLcds[i].WriteText(text, false);
+                    surface.ContentType = ContentType.TEXT_AND_IMAGE;
+                    surface.Font = "Debug";
+                    surface.WriteText(text, false);
                 }
             }
         }
