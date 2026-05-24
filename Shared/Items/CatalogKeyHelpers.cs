@@ -22,5 +22,12 @@ namespace IngameScript
         {
             return StripObjectBuilderPrefix(type.TypeId) + "/" + (type.SubtypeId ?? string.Empty);
         }
+
+        /// <summary>Returns true when <paramref name="type"/> is an ingot
+        /// (<c>MyObjectBuilder_Ingot</c>), i.e., the assembler input class.</summary>
+        public static bool IsIngot(MyItemType type)
+        {
+            return string.Equals(type.TypeId, "MyObjectBuilder_Ingot", StringComparison.Ordinal);
+        }
     }
 }
