@@ -17,6 +17,9 @@ namespace IngameScript
             /// <summary>Maximum total queue depth Crane will maintain per (assembler, blueprint) pair.</summary>
             public int AutocraftMaxQueueDepth = 100;
 
+            /// <summary>Per-ingot floor the feeder maintains in each assembler's input inventory while it has assembly work queued.</summary>
+            public float AssemblerIngotKeep = 50f;
+
             /// <summary>Ticks between automatic rescans of managed blocks.</summary>
             public int RescanIntervalTicks = 600;
 
@@ -69,6 +72,7 @@ namespace IngameScript
             _config.EnableAutocraft = MyIniHelpers.GetBool(_ini, "Crane", "enableAutocraft", true);
             _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, "Crane", "enableConnectorFederation", true);
             _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, "Crane", "autocraftMaxQueueDepth", 100);
+            _config.AssemblerIngotKeep = MyIniHelpers.GetFloat(_ini, "Crane", "assemblerIngotKeep", 50f);
             _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 600);
             _config.BudgetFraction = MyIniHelpers.GetFloat(_ini, "Crane", "budgetFraction", 0.8f);
             _config.DebugLogging = MyIniHelpers.GetBool(_ini, "Crane", "debugLogging", false);
@@ -106,6 +110,13 @@ namespace IngameScript
                 _ini.Set("Crane", "autocraftMaxQueueDepth", 100);
                 _ini.SetComment("Crane", "autocraftMaxQueueDepth",
                     "Maximum total queue depth Crane will maintain per (assembler, blueprint) pair.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "assemblerIngotKeep"))
+            {
+                _ini.Set("Crane", "assemblerIngotKeep", 50f);
+                _ini.SetComment("Crane", "assemblerIngotKeep",
+                    "Per-ingot floor the feeder maintains in each assembler's input inventory while it has assembly work queued.");
                 changed = true;
             }
             if (changed)

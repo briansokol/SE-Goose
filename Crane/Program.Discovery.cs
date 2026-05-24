@@ -16,6 +16,12 @@ namespace IngameScript
         /// <summary>Assemblers in the managed group (filtered to non-survival-kit assemblers via interface).</summary>
         private readonly List<IMyAssembler> _assemblers = new List<IMyAssembler>();
 
+        /// <summary>Cargo containers in scope. Used by the feeder as both sources (when pulling
+        /// ingots/components into assembler inventories) and sinks (when draining mismatched
+        /// items out). Populated alongside <see cref="_assemblers"/> during rescan; not added
+        /// to <see cref="_allManagedBlocks"/> because Crane doesn't otherwise manage them.</summary>
+        private readonly List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
+
         /// <summary>LCDs tagged <c>[CCraft]</c> — host quota config (CustomData) and render the status surface.</summary>
         private readonly List<IMyTextSurface> _ccraftLcds = new List<IMyTextSurface>();
 
@@ -171,6 +177,7 @@ namespace IngameScript
 
             _allManagedBlocks.Clear();
             _assemblers.Clear();
+            _cargoContainers.Clear();
             _ccraftLcds.Clear();
             _cerrorLcds.Clear();
 
@@ -189,6 +196,18 @@ namespace IngameScript
             for (int i = 0; i < _assemblers.Count; i++)
             {
                 _allManagedBlocks.Add(_assemblers[i]);
+            }
+
+            GridTerminalSystem.GetBlocksOfType<IMyCargoContainer>(_cargoContainers, cc =>
+                cc != null
+                && !cc.Closed
+                && cc.CubeGrid != null
+                && _scopeGrids.Contains(cc.CubeGrid.EntityId)
+                && !BlockNameTags.HasIgnoreTag(cc.CustomName));
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
             }
 
             _surfaceProviderScratch.Clear();
@@ -237,6 +256,7 @@ namespace IngameScript
             }
 
             _logger.LogAction("Rescan: " + _assemblers.Count + " asm, "
+                + _cargoContainers.Count + " cargo, "
                 + _ccraftLcds.Count + " [CCraft], " + _cerrorLcds.Count + " [CError]");
 
             yield return YieldReason.ChunkBoundary;
