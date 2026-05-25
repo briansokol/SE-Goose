@@ -63,12 +63,6 @@ namespace IngameScript
             }
         }
 
-        /// <summary>Resets the work iterator so the pipeline restarts on the next tick.</summary>
-        public void Restart()
-        {
-            _workIterator = StepRoot();
-        }
-
         private IEnumerator<YieldReason> StepRoot()
         {
             while (true)

@@ -33,9 +33,6 @@ namespace IngameScript
             ExternalWait
         }
 
-        /// <summary>Fallback budget fraction used before configuration is parsed.</summary>
-        private const float DefaultBudgetFraction = 0.8f;
-
         /// <summary>Index of the currently executing top-level step.</summary>
         private int _stepIndex;
 
