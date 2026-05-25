@@ -17,12 +17,14 @@ namespace IngameScript
         /// <param name="catalog">Optional catalog to record each observed <see cref="MyItemType"/> in.</param>
         /// <param name="buffer">Scratch list reused for each inventory's items.</param>
         /// <param name="budgetExceeded">Optional callback queried after each block. May be null in tests, which still drain via foreach but ignore the yields.</param>
+        /// <param name="onNewCatalogKey">Optional callback invoked once per genuinely new catalog key (<see cref="ItemCatalog.RecordItem"/> returned <c>true</c>). Used by the Goose-Crane bridge to announce local catalog growth to the peer.</param>
         public static IEnumerable<YieldReason> BuildItemTotals(
             IEnumerable<IMyTerminalBlock> blocks,
             Dictionary<MyItemType, long> totals,
             ItemCatalog catalog,
             List<MyInventoryItem> buffer,
-            Func<bool> budgetExceeded)
+            Func<bool> budgetExceeded,
+            Action<MyItemType> onNewCatalogKey = null)
         {
             totals.Clear();
             int counter = 0;
@@ -49,9 +51,9 @@ namespace IngameScript
                         long current;
                         totals.TryGetValue(item.Type, out current);
                         totals[item.Type] = current + (long)item.Amount;
-                        if (catalog != null)
+                        if (catalog != null && catalog.RecordItem(item.Type) && onNewCatalogKey != null)
                         {
-                            catalog.RecordItem(item.Type);
+                            onNewCatalogKey(item.Type);
                         }
                     }
                 }
