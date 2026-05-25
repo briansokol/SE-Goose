@@ -132,6 +132,7 @@ namespace IngameScript
             _echoBuffer.Append("Instr: ").Append(Runtime.CurrentInstructionCount)
                 .Append('/').Append(Runtime.MaxInstructionCount).Append('\n');
             _echoBuffer.Append("LastRunMs: ").Append(Runtime.LastRunTimeMs.ToString("F2")).Append('\n');
+            AppendBridgeEchoLine(_echoBuffer);
             if (_actionLog.Count > 0)
             {
                 _echoBuffer.Append("Last:\n");
