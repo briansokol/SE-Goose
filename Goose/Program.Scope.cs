@@ -22,12 +22,6 @@ namespace IngameScript
         /// <summary>Reusable buffer for projected connector edges fed to <see cref="ScopeBuilder.BuildScope"/>.</summary>
         private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
 
-        /// <summary>Snapshot of mechanical edges from the most recent <see cref="RebuildScope"/>; consulted by the drift check.</summary>
-        private readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
-
-        /// <summary>Snapshot of connector edges from the most recent <see cref="RebuildScope"/>; consulted by the drift check.</summary>
-        private readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
-
         /// <summary>Rolling hash of (mechanical attach state + connector dock state + scope-affecting tags). Differs across ticks when scope inputs change; equal otherwise.</summary>
         private ulong _scopeDriftHash;
 
@@ -38,11 +32,7 @@ namespace IngameScript
 
             ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
 
-            _scopeMechCache.Clear();
-            _scopeMechCache.AddRange(_scopeMechBuf);
-            _scopeConnCache.Clear();
-            _scopeConnCache.AddRange(_scopeConnBuf);
-            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
+            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
 
             LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
         }

@@ -34,17 +34,11 @@ namespace IngameScript
         /// <summary>Reusable raw mechanical block buffer.</summary>
         private readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
 
-        /// <summary>Snapshot of mechanical edges from the most recent scope build.</summary>
-        private readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
-
         /// <summary>Reusable raw connector block buffer (mirror of <see cref="_scopeMechRaw"/>).</summary>
         private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
 
         /// <summary>Connector edges fed to <see cref="ScopeBuilder.BuildScope"/> for [Federate]-tagged docking admission.</summary>
         private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
-
-        /// <summary>Snapshot of connector edges from the most recent scope build (mirror of <see cref="_scopeMechCache"/>).</summary>
-        private readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
 
         /// <summary>Rolling hash of the scope inputs.</summary>
         private ulong _scopeDriftHash;
@@ -92,11 +86,7 @@ namespace IngameScript
 
             ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
 
-            _scopeMechCache.Clear();
-            _scopeMechCache.AddRange(_scopeMechBuf);
-            _scopeConnCache.Clear();
-            _scopeConnCache.AddRange(_scopeConnBuf);
-            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
+            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
             _logger.LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
         }
 
