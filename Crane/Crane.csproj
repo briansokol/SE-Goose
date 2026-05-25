@@ -33,6 +33,7 @@
     <Compile Include="..\Shared\Scope\**\*.cs" LinkBase="Shared\Scope" />
     <Compile Include="..\Shared\Items\**\*.cs" LinkBase="Shared\Items" />
     <Compile Include="..\Shared\Inventory\**\*.cs" LinkBase="Shared\Inventory" />
+    <Compile Include="..\Shared\Bridge\**\*.cs" LinkBase="Shared\Bridge" />
     <Compile Include="..\Shared\Dispatcher\YieldReason.cs" LinkBase="Shared\Dispatcher" />
   </ItemGroup>
 </Project>
