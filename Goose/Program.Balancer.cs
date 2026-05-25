@@ -139,25 +139,6 @@ namespace IngameScript
         /// <param name="canAddAnyAmmo">True if the inventory accepts at least one known <c>AmmoMagazine</c> subtype.</param>
         /// <param name="canAddSteelPlate">True if the inventory accepts <c>Component/SteelPlate</c>; identifies generic cargo containers.</param>
         /// <returns>The matched <see cref="ConsumerKind"/>, or <see cref="ConsumerKind.None"/> when the block is a generic container or accepts nothing recognised.</returns>
-        /// <summary>Resolves the <see cref="ConsumerKind"/> for the weapon-detection path from probe results.</summary>
-        /// <remarks>Reactor and Gas are detected by interface check (<see cref="IMyReactor"/> / <see cref="IMyGasGenerator"/>) and do not flow through this helper. Returns <see cref="ConsumerKind.Weapon"/> only when the inventory accepts at least one ammo magazine and rejects steel plate (i.e. it isn't a generic cargo container).</remarks>
-        /// <param name="canAddAnyAmmo">True if the inventory accepts at least one known <c>AmmoMagazine</c> subtype.</param>
-        /// <param name="canAddSteelPlate">True if the inventory accepts <c>Component/SteelPlate</c> (used to gate out generic cargo).</param>
-        /// <returns><see cref="ConsumerKind.Weapon"/> or <see cref="ConsumerKind.None"/>.</returns>
-        internal static ConsumerKind IsWeaponFromProbe(bool canAddAnyAmmo, bool canAddSteelPlate)
-        {
-            if (canAddSteelPlate)
-            {
-                return ConsumerKind.None;
-            }
-
-            if (canAddAnyAmmo)
-            {
-                return ConsumerKind.Weapon;
-            }
-
-            return ConsumerKind.None;
-        }
 
 
         /// <summary>Vanilla ammo magazine subtypes seeded into consumer probing so weapons are detected on a fresh world before any ammo has been observed by the catalog.</summary>

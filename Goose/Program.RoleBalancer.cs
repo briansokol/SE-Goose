@@ -407,43 +407,6 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// Pure helper. Returns the unit count to move from a higher-holder to a lower-holder so
-        /// they converge to the equal split, clamped by destination capacity. Returns 0 when no
-        /// move is sensible (source already at-or-below destination, capacity zero/negative,
-        /// or diff smaller than 2).
-        /// </summary>
-        /// <param name="srcCount">Current units of the type held by the source.</param>
-        /// <param name="dstCount">Current units of the type held by the destination.</param>
-        /// <param name="dstRemainingCapacityForType">Destination's additional capacity for this
-        /// type in units. Caller passes <see cref="long.MaxValue"/> when no constraint is known.</param>
-        internal static long ComputeBalanceTransfer(long srcCount, long dstCount, long dstRemainingCapacityForType)
-        {
-            if (srcCount <= dstCount)
-            {
-                return 0;
-            }
-
-            if (dstRemainingCapacityForType <= 0)
-            {
-                return 0;
-            }
-
-            long diff = srcCount - dstCount;
-            long half = diff / 2;
-            if (half <= 0)
-            {
-                return 0;
-            }
-
-            if (dstRemainingCapacityForType < half)
-            {
-                return dstRemainingCapacityForType;
-            }
-
-            return half;
-        }
-
-        /// <summary>
         /// Pure helper. Water-fills equal-split targets given current holdings and per-container
         /// additional-capacity ceilings. Containers that would receive more than they can hold
         /// are capped at their ceiling and the remainder is redistributed across the still-uncapped

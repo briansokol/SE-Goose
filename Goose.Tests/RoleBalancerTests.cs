@@ -8,65 +8,6 @@ namespace Goose.Tests
     public class RoleBalancerTests
     {
 
-        public class ComputeBalanceTransfer_Tests
-        {
-            [Fact]
-            public void Returns_zero_when_src_equals_dst()
-            {
-                Program.ComputeBalanceTransfer(10, 10, long.MaxValue).Should().Be(0);
-            }
-
-            [Fact]
-            public void Returns_zero_when_src_less_than_dst()
-            {
-                Program.ComputeBalanceTransfer(5, 10, long.MaxValue).Should().Be(0);
-            }
-
-            [Fact]
-            public void Returns_half_diff_when_capacity_unbounded()
-            {
-                Program.ComputeBalanceTransfer(100, 0, long.MaxValue).Should().Be(50);
-            }
-
-            [Fact]
-            public void Rounds_down_on_odd_diff()
-            {
-                Program.ComputeBalanceTransfer(101, 0, long.MaxValue).Should().Be(50);
-            }
-
-            [Fact]
-            public void Clamps_to_capacity_when_capacity_smaller_than_half()
-            {
-                Program.ComputeBalanceTransfer(100, 0, 10).Should().Be(10);
-            }
-
-            [Fact]
-            public void Returns_zero_when_capacity_zero()
-            {
-                Program.ComputeBalanceTransfer(100, 0, 0).Should().Be(0);
-            }
-
-            [Fact]
-            public void Returns_zero_when_src_only_one_more()
-            {
-                // diff=1, half=0 (integer division floor) → no useful single-unit move
-                Program.ComputeBalanceTransfer(11, 10, long.MaxValue).Should().Be(0);
-            }
-
-            [Fact]
-            public void Negative_capacity_treated_as_no_room()
-            {
-                Program.ComputeBalanceTransfer(100, 0, -5).Should().Be(0);
-            }
-
-            [Fact]
-            public void Returns_capacity_when_capacity_equals_half()
-            {
-                // boundary: capacity exactly equal to half — return half (capacity sufficient)
-                Program.ComputeBalanceTransfer(100, 0, 50).Should().Be(50);
-            }
-        }
-
         public class ComputeEqualSplitTargets_Tests
         {
             [Fact]

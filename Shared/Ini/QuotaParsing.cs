@@ -75,22 +75,6 @@ namespace IngameScript
             return long.TryParse(numericPart, out amount);
         }
 
-        /// <summary>Clamps a percent value to the inclusive range 0-100.</summary>
-        public static int ClampPercent(int raw)
-        {
-            if (raw < 0)
-            {
-                return 0;
-            }
-
-            if (raw > 100)
-            {
-                return 100;
-            }
-
-            return raw;
-        }
-
         /// <summary>Returns true when <paramref name="s"/> is a non-empty C-style identifier.</summary>
         public static bool IsIdentifier(string s)
         {
