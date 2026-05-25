@@ -57,7 +57,7 @@ namespace IngameScript
                 {
                     DispatchCommand(argument);
                 }
-                if ((updateSource & UpdateType.Update100) != 0 && !_paused)
+                if ((updateSource & UpdateType.Update10) != 0 && !_paused)
                 {
                     _dispatcher.RunOneTick();
                 }

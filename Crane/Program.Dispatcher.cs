@@ -9,7 +9,7 @@ namespace IngameScript
         private static readonly string[] CraneStepLabels = {
             "ScopeRefresh", "BlockRescan", "ParseConfig", "ScanInventories",
             "LoadCCraftConfig", "QuotaEngine", "AssemblerPool",
-            "DispatchAndReconcile", "RenderStatus", "PersistCatalog"
+            "DispatchAndReconcile", "FeedAssemblers", "RenderStatus", "PersistCatalog"
         };
 
         /// <summary>Returns the iterator for step <paramref name="i"/>.</summary>
@@ -34,8 +34,10 @@ namespace IngameScript
                 case 7:
                     return StepDispatchAndReconcile();
                 case 8:
-                    return StepRenderStatus();
+                    return StepFeedAssemblers();
                 case 9:
+                    return StepRenderStatus();
+                case 10:
                     return StepPersistCatalog();
                 default:
                     return NoOpStep();
