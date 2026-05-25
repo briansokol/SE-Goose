@@ -172,12 +172,6 @@ namespace IngameScript
             return v;
         }
 
-        /// <summary>Returns true when <paramref name="name"/> contains <paramref name="tag"/> as a substring.</summary>
-        private bool NameHasTag(string name, string tag)
-        {
-            return !string.IsNullOrEmpty(name) && name.IndexOf(tag, StringComparison.Ordinal) >= 0;
-        }
-
         /// <summary>
         /// Rebuilds <see cref="_containersByCategory"/>, <see cref="_stockContainers"/>, and
         /// <see cref="_entryByBlock"/> from name tags and CustomData on every managed block.
@@ -206,12 +200,12 @@ namespace IngameScript
                     Block = block,
                     Inventory = block.GetInventory(0),
                     Priority = ParsePriorityFromName(block.CustomName),
-                    IsStock = NameHasTag(block.CustomName, "[Stock]")
+                    IsStock = BlockNameTags.NameHasTag(block.CustomName, "[Stock]")
                 };
 
                 for (int c = 0; c < CategoryTags.Length; c++)
                 {
-                    if (NameHasTag(block.CustomName, CategoryTags[c]))
+                    if (BlockNameTags.NameHasTag(block.CustomName, CategoryTags[c]))
                     {
                         var cat = (ItemCategory)c;
                         entry.Categories.Add(cat);

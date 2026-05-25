@@ -217,7 +217,7 @@ namespace IngameScript
                     entry.ConsumerKind = ConsumerKind.None;
                     entry.AcceptedAmmo = null;
                 }
-                else if (NameHasTag(block.CustomName, "[NoBalance]"))
+                else if (BlockNameTags.NameHasTag(block.CustomName, "[NoBalance]"))
                 {
                     entry.ConsumerKind = ConsumerKind.None;
                     entry.AcceptedAmmo = null;
