@@ -43,6 +43,8 @@ Current design documents:
 
 This list will grow as additional features are planned; more documents will be added here over time.
 
+**Local wiki clone:** The wiki repo (`git@github.com:briansokol/SE-Goose.wiki.git`) is cloned next to this repo at `../SE-Goose.wiki` (i.e., a sibling of the `SE-Goose` directory). Always read and edit wiki content through that clone. Do not create alternate clones in `tmp/`, `/tmp`, scratch directories, or anywhere else. If the sibling clone is missing, clone it there first with `git clone git@github.com:briansokol/SE-Goose.wiki.git ../SE-Goose.wiki` and then use it; do not work around its absence with a different location. Always pull the latest changes before editing.
+
 **Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
 
 ## Technology Stack
@@ -114,9 +116,9 @@ Space Engineers blocks expose a per-block custom data string. Use it for configu
 
 - Store configuration in INI format via `MyIni` (from `VRage.Game.ModAPI.Ingame.Utilities`).
 - Section headers identify the owning script:
-  - **Goose PB**: `[Goose]` section.
-  - **Crane PB**: `[Crane]` section.
-  - Per-block configs (e.g., the `[CCraft]` LCD's quota lines) use the same section as their owning script.
+    - **Goose PB**: `[Goose]` section.
+    - **Crane PB**: `[Crane]` section.
+    - Per-block configs (e.g., the `[CCraft]` LCD's quota lines) use the same section as their owning script.
 - Each script lazily auto-populates its recognised keys into the PB CustomData on first parse (`EnsureConfigKeysPopulated`), preserving existing user keys and comments. Add new config keys via that path so users get usable defaults without manual editing.
 - Parse and validate custom data on each update cycle, or only when the block is (re)discovered — weigh cost against flexibility.
 
@@ -213,16 +215,16 @@ If you've already accidentally committed to `main`, recover by creating a branch
 
 **Types:**
 
-| Type | When to use |
-|------|-------------|
-| `feat` | A new feature |
-| `fix` | A bug fix |
-| `docs` | Documentation changes only |
-| `style` | Formatting, whitespace — no logic change |
-| `refactor` | Code restructuring without behavior change |
-| `test` | Adding or updating tests |
-| `chore` | Build process, tooling, config, dependencies |
-| `perf` | Performance improvements |
+| Type       | When to use                                  |
+| ---------- | -------------------------------------------- |
+| `feat`     | A new feature                                |
+| `fix`      | A bug fix                                    |
+| `docs`     | Documentation changes only                   |
+| `style`    | Formatting, whitespace — no logic change     |
+| `refactor` | Code restructuring without behavior change   |
+| `test`     | Adding or updating tests                     |
+| `chore`    | Build process, tooling, config, dependencies |
+| `perf`     | Performance improvements                     |
 
 **Examples:**
 
@@ -239,6 +241,7 @@ chore: update MDK2 to latest version
 ```
 
 **Rules:**
+
 - Use lowercase for type and description.
 - Keep the subject line under 72 characters.
 - Use an imperative, present-tense verb ("add", "fix", "update" — not "added", "fixes").
