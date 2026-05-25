@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using Sandbox.ModAPI.Ingame;
+using SpaceEngineers.Game.ModAPI.Ingame;
+using VRage.Game.ModAPI.Ingame;
 
 namespace IngameScript
 {
@@ -117,6 +120,54 @@ namespace IngameScript
                     h ^= ((ulong)c.OtherGridId) << 1;
                     h ^= c.Connected ? 0x4UL : 0x0UL;
                     h ^= c.FederateTag ? 0x8UL : 0x0UL;
+                    h *= 1099511628211UL;
+                }
+            }
+            return h;
+        }
+
+        /// <summary>Drift-hash fast-path: hashes raw live blocks directly without projecting to POCO edges. Bit composition matches <see cref="ComputeScopeDriftHash(IList{MechanicalEdge}, IList{ConnectorEdge})"/> so both hashes are interchangeable on identical inputs.</summary>
+        public static ulong ComputeScopeDriftHashFromRaw(
+            IList<IMyMechanicalConnectionBlock> mech,
+            IList<IMyShipConnector> conn)
+        {
+            ulong h = 1469598103934665603UL;
+            if (mech != null)
+            {
+                for (int i = 0; i < mech.Count; i++)
+                {
+                    IMyMechanicalConnectionBlock m = mech[i];
+                    if (m.Closed)
+                    {
+                        continue;
+                    }
+
+                    long baseId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
+                    long topId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
+                    h ^= (ulong)baseId;
+                    h ^= ((ulong)topId) << 1;
+                    h ^= m.IsAttached ? 0x1UL : 0x0UL;
+                    h ^= BlockNameTags.NameHasTag(m.CustomName, BlockNameTags.NoSubgridTag) ? 0x2UL : 0x0UL;
+                    h *= 1099511628211UL;
+                }
+            }
+            if (conn != null)
+            {
+                for (int i = 0; i < conn.Count; i++)
+                {
+                    IMyShipConnector c = conn[i];
+                    if (c.Closed)
+                    {
+                        continue;
+                    }
+
+                    long ownerId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
+                    IMyShipConnector other = c.OtherConnector;
+                    long otherId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                    h ^= (ulong)ownerId;
+                    h ^= ((ulong)otherId) << 1;
+                    h ^= c.Status == MyShipConnectorStatus.Connected ? 0x4UL : 0x0UL;
+                    h ^= BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag) ? 0x8UL : 0x0UL;
                     h *= 1099511628211UL;
                 }
             }

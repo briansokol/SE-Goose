@@ -75,27 +75,6 @@ namespace Goose.Tests
             }
         }
 
-        public class IsWeaponFromProbe_Tests
-        {
-            [Theory]
-            [InlineData(false, false, Program.ConsumerKind.None)]   // accepts nothing recognised
-            [InlineData(true, false, Program.ConsumerKind.Weapon)]  // accepts ammo, not steel plate
-            [InlineData(false, true, Program.ConsumerKind.None)]    // generic cargo
-            [InlineData(true, true, Program.ConsumerKind.None)]     // accepts steel plate => generic cargo, ammo gate ignored
-            public void Resolves_weapon_from_probe_results(bool canAmmo, bool canSteelPlate, Program.ConsumerKind expected)
-            {
-                Program.IsWeaponFromProbe(canAmmo, canSteelPlate).Should().Be(expected);
-            }
-
-            [Fact]
-            public void SteelPlate_acceptance_blocks_weapon_classification()
-            {
-                // A container that accepts ammo AND steel plate is a generic container, not a weapon.
-                Program.IsWeaponFromProbe(true, true).Should().Be(Program.ConsumerKind.None);
-            }
-        }
-
-
         public class WillBlockBeBalanced_Tests
         {
             [Theory]

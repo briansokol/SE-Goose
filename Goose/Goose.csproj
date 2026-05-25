@@ -27,4 +27,9 @@
     <AdditionalFiles Include="Instructions.readme" />
     <AdditionalFiles Include="thumb.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Scope\**\*.cs" LinkBase="Shared\Scope" />
+    <Compile Include="..\Shared\Blocks\**\*.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\Shared\Dispatcher\YieldReason.cs" LinkBase="Shared\Dispatcher" />
+  </ItemGroup>
 </Project>

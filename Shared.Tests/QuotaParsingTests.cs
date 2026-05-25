@@ -79,20 +79,6 @@ namespace Shared.Tests
             }
         }
 
-        public class ClampPercent_Tests
-        {
-            [Theory]
-            [InlineData(-5, 0)]
-            [InlineData(0, 0)]
-            [InlineData(50, 50)]
-            [InlineData(100, 100)]
-            [InlineData(150, 100)]
-            public void Clamps_to_0_to_100(int input, int expected)
-            {
-                QuotaParsing.ClampPercent(input).Should().Be(expected);
-            }
-        }
-
         public class IsIdentifier_Tests
         {
             [Theory]

@@ -34,17 +34,11 @@ namespace IngameScript
         /// <summary>Reusable raw mechanical block buffer.</summary>
         private readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
 
-        /// <summary>Snapshot of mechanical edges from the most recent scope build.</summary>
-        private readonly List<MechanicalEdge> _scopeMechCache = new List<MechanicalEdge>();
-
         /// <summary>Reusable raw connector block buffer (mirror of <see cref="_scopeMechRaw"/>).</summary>
         private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
 
         /// <summary>Connector edges fed to <see cref="ScopeBuilder.BuildScope"/> for [Federate]-tagged docking admission.</summary>
         private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
-
-        /// <summary>Snapshot of connector edges from the most recent scope build (mirror of <see cref="_scopeMechCache"/>).</summary>
-        private readonly List<ConnectorEdge> _scopeConnCache = new List<ConnectorEdge>();
 
         /// <summary>Rolling hash of the scope inputs.</summary>
         private ulong _scopeDriftHash;
@@ -88,42 +82,11 @@ namespace IngameScript
         /// <summary>Walks live mechanical-connection blocks, projects them into POCOs, then runs <see cref="ScopeBuilder.BuildScope"/>.</summary>
         private void RebuildScope()
         {
-            _scopeMechRaw.Clear();
-            GridTerminalSystem.GetBlocksOfType(_scopeMechRaw, m => !m.Closed);
-            _scopeMechBuf.Clear();
-            for (int i = 0; i < _scopeMechRaw.Count; i++)
-            {
-                IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
-                MechanicalEdge edge;
-                edge.BaseGridId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
-                edge.TopGridId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
-                edge.Attached = m.IsAttached;
-                edge.NoSubgridTag = BlockNameTags.NameHasTag(m.CustomName, BlockNameTags.NoSubgridTag);
-                _scopeMechBuf.Add(edge);
-            }
-
-            _scopeConnRaw.Clear();
-            GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
-            _scopeConnBuf.Clear();
-            for (int i = 0; i < _scopeConnRaw.Count; i++)
-            {
-                IMyShipConnector c = _scopeConnRaw[i];
-                ConnectorEdge edge;
-                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
-                IMyShipConnector other = c.OtherConnector;
-                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
-                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
-                edge.FederateTag = BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag);
-                _scopeConnBuf.Add(edge);
-            }
+            ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _scopeMechRaw, _scopeConnRaw, _scopeMechBuf, _scopeConnBuf);
 
             ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
 
-            _scopeMechCache.Clear();
-            _scopeMechCache.AddRange(_scopeMechBuf);
-            _scopeConnCache.Clear();
-            _scopeConnCache.AddRange(_scopeConnBuf);
-            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechCache, _scopeConnCache);
+            _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
             _logger.LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
         }
 
@@ -132,34 +95,9 @@ namespace IngameScript
         {
             _scopeMechRaw.Clear();
             GridTerminalSystem.GetBlocksOfType(_scopeMechRaw, m => !m.Closed);
-            _scopeMechBuf.Clear();
-            for (int i = 0; i < _scopeMechRaw.Count; i++)
-            {
-                IMyMechanicalConnectionBlock m = _scopeMechRaw[i];
-                MechanicalEdge edge;
-                edge.BaseGridId = m.CubeGrid != null ? m.CubeGrid.EntityId : 0;
-                edge.TopGridId = (m.IsAttached && m.TopGrid != null) ? m.TopGrid.EntityId : 0;
-                edge.Attached = m.IsAttached;
-                edge.NoSubgridTag = BlockNameTags.NameHasTag(m.CustomName, BlockNameTags.NoSubgridTag);
-                _scopeMechBuf.Add(edge);
-            }
-
             _scopeConnRaw.Clear();
             GridTerminalSystem.GetBlocksOfType(_scopeConnRaw, c => !c.Closed);
-            _scopeConnBuf.Clear();
-            for (int i = 0; i < _scopeConnRaw.Count; i++)
-            {
-                IMyShipConnector c = _scopeConnRaw[i];
-                ConnectorEdge edge;
-                edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
-                IMyShipConnector other = c.OtherConnector;
-                edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
-                edge.Connected = c.Status == MyShipConnectorStatus.Connected;
-                edge.FederateTag = BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag);
-                _scopeConnBuf.Add(edge);
-            }
-
-            return ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
+            return ScopeBuilder.ComputeScopeDriftHashFromRaw(_scopeMechRaw, _scopeConnRaw);
         }
 
         /// <summary>Rescans blocks in scope and classifies them (assembler / <c>[CCraft]</c> LCD / <c>[CError]</c> LCD).</summary>

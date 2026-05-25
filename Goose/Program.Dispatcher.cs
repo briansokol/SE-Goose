@@ -22,20 +22,6 @@ namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        /// <summary>Why a step yielded back to the dispatcher.</summary>
-        public enum YieldReason
-        {
-            /// <summary>Per-tick instruction budget was hit; resume next tick.</summary>
-            BudgetHit,
-            /// <summary>Logical chunk completed; resume next tick.</summary>
-            ChunkBoundary,
-            /// <summary>Step is waiting on external state (reserved for future use).</summary>
-            ExternalWait
-        }
-
-        /// <summary>Fallback budget fraction used before configuration is parsed.</summary>
-        private const float DefaultBudgetFraction = 0.8f;
-
         /// <summary>Index of the currently executing top-level step.</summary>
         private int _stepIndex;
 

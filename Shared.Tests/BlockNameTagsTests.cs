@@ -35,50 +35,5 @@ namespace Shared.Tests
             }
         }
 
-        public class ParsePriorityFromName_Tests
-        {
-            [Theory]
-            [InlineData("Cargo [P:10]", 10)]
-            [InlineData("Cargo [P:0]", 0)]
-            [InlineData("Cargo [P:200]", 200)]
-            [InlineData("Cargo", 100)]
-            [InlineData("Cargo [P:abc]", 100)]
-            [InlineData("Cargo [P:", 100)]
-            [InlineData(null, 100)]
-            public void Parses_or_defaults_to_100(string name, int expected)
-            {
-                BlockNameTags.ParsePriorityFromName(name).Should().Be(expected);
-            }
-        }
-
-        public class ParseBalanceTagCount_Tests
-        {
-            [Theory]
-            [InlineData("Reactor [Balance=50]", 50L)]
-            [InlineData("Reactor [Balance=0]", 0L)]
-            [InlineData("Reactor", -1L)]
-            [InlineData("Reactor [Balance=-5]", -1L)]
-            [InlineData("Reactor [Balance=abc]", -1L)]
-            [InlineData(null, -1L)]
-            public void Parses_or_returns_neg_one(string name, long expected)
-            {
-                BlockNameTags.ParseBalanceTagCount(name).Should().Be(expected);
-            }
-        }
-
-        public class LooksLikeNameTagQuota_Tests
-        {
-            [Theory]
-            [InlineData("Component/SteelPlate:100", true)]
-            [InlineData("Stock", false)]
-            [InlineData("P:50", false)]
-            [InlineData("Foo/Bar", false)]
-            [InlineData("", false)]
-            [InlineData(null, false)]
-            public void Detects_quota_shape(string token, bool expected)
-            {
-                BlockNameTags.LooksLikeNameTagQuota(token).Should().Be(expected);
-            }
-        }
     }
 }

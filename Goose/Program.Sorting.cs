@@ -25,7 +25,7 @@ namespace IngameScript
         /// <summary>Returns true when <paramref name="b"/>'s name carries the <c>[Stock]</c> tag.</summary>
         private bool IsStockTagged(IMyTerminalBlock b)
         {
-            return NameHasTag(b.CustomName, "[Stock]");
+            return BlockNameTags.NameHasTag(b.CustomName, "[Stock]");
         }
 
         /// <summary>
