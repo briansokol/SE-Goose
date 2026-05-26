@@ -405,6 +405,7 @@ namespace IngameScript
                 yield break;
             }
             _modeLockedThisTick.Clear();
+            BridgeResetHoldAnnouncementCycle();
 
             var assembleWork = new List<AutocraftTarget>();
             var disassembleWork = new List<AutocraftTarget>();
@@ -637,12 +638,21 @@ namespace IngameScript
                     {
                         _logger.LogAction("queue +" + topUp + " " + t.Key);
                     }
+                    if (mode == MyAssemblerMode.Assembly)
+                    {
+                        BridgeAnnounceHold(asm);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarningOnce("queue:add:" + t.Key,
                         "[Crane] AddQueueItem failed on " + asm.CustomName + " for " + t.Key + ": " + ex.Message);
                 }
+            }
+            else if (mode == MyAssemblerMode.Assembly && alreadyOnThisAsm > 0)
+            {
+                // Active queue we haven't touched this cycle still needs Goose to back off.
+                BridgeAnnounceHold(asm);
             }
         }
 

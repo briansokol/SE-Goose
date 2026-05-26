@@ -29,7 +29,7 @@ namespace IngameScript
         /// <summary>Map of command verb to handler, populated by <see cref="InitCommands"/>.</summary>
         private Dictionary<string, Action<MyCommandLine>> _commands;
 
-        /// <summary>Sets the update cadence, wires up commands, and primes the work iterator.</summary>
+        /// <summary>Sets the update cadence, wires up commands, primes the work iterator, and brings the Goose-Crane bridge online.</summary>
         public Program()
         {
             _logger = new RuntimeLogger(Echo, "Crane v1");
@@ -39,6 +39,7 @@ namespace IngameScript
                 (ctx, ex) => _logger.LogError(ctx, ex));
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             InitCommands();
+            InitBridge();
             _logger.LogAction("Crane v1 initialized");
         }
 
@@ -56,6 +57,11 @@ namespace IngameScript
                 if (!string.IsNullOrEmpty(argument))
                 {
                     DispatchCommand(argument);
+                }
+                _mainTickCount++;
+                if (_bridge != null)
+                {
+                    _bridge.Tick(_mainTickCount);
                 }
                 if ((updateSource & UpdateType.Update10) != 0 && !_paused)
                 {

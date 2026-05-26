@@ -196,6 +196,7 @@ namespace IngameScript
             {
                 sb.Append("Reserved (Disassemble): ").Append(FindAssemblerName(_reservedAsmEntityId)).Append('\n');
             }
+            AppendBridgeStatusLine(sb);
             sb.Append("ITEM                  TARGET    ACTUAL    STATUS\n");
             for (int i = 0; i < _autocraftTargets.Count; i++)
             {

@@ -379,6 +379,14 @@ namespace IngameScript
                     continue;
                 }
 
+                // Crane announces an assembler hold while it is actively crafting. Suppressing
+                // the drain keeps Goose's balancer from yanking just-staged ingots back out
+                // of the assembler input before the assembler can consume them.
+                if (_bridge != null && entry.Block != null && _bridge.IsAssemblerHeld(entry.Block.EntityId))
+                {
+                    continue;
+                }
+
                 _balanceSources.Add(entry);
             }
 

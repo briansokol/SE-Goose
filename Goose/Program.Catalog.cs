@@ -36,19 +36,58 @@ namespace IngameScript
 
         /// <summary>Records an observed item type. Idempotent; no-op when the type is already known.</summary>
         /// <param name="type">Item type observed during an inventory scan.</param>
-        private void Catalog_RecordItem(MyItemType type)
+        /// <summary>Records an observed item type. Idempotent; no-op when the type is already known.</summary>
+        /// <returns><c>true</c> when the key was newly added; <c>false</c> when it was already known or the type was unusable.</returns>
+        private bool Catalog_RecordItem(MyItemType type)
         {
             if (string.IsNullOrEmpty(type.SubtypeId))
+            {
+                return false;
+            }
+
+            string key = Catalog_BuildKey(type);
+            if (_knownItems.ContainsKey(key))
+            {
+                return false;
+            }
+
+            _knownItems[key] = type;
+            _catalogVersion++;
+            return true;
+        }
+
+
+        /// <summary>Merges a peer-supplied catalog key (<c>Type/Subtype</c>) into the local catalog. Silently no-ops on malformed input.</summary>
+        private void Catalog_HandlePeerKey(string key)
+        {
+            if (string.IsNullOrEmpty(key))
             {
                 return;
             }
 
-            string key = Catalog_BuildKey(type);
-            if (!_knownItems.ContainsKey(key))
+            int slash = key.IndexOf('/');
+            if (slash <= 0 || slash >= key.Length - 1)
             {
-                _knownItems[key] = type;
-                _catalogVersion++;
+                return;
             }
+
+            if (_knownItems.ContainsKey(key))
+            {
+                return;
+            }
+
+            string fullyQualified = "MyObjectBuilder_" + key;
+            MyItemType type;
+            try
+            {
+                type = MyItemType.Parse(fullyQualified);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+            _knownItems[key] = type;
+            _catalogVersion++;
         }
 
         /// <summary>Restores the catalog from <see cref="MyGridProgram.Storage"/>. One key per line.

@@ -81,6 +81,18 @@ namespace IngameScript
             /// overflow lands in lower tiers. Off by default.
             /// </summary>
             public bool EnableSameRoleBalancing = false;
+
+            /// <summary>Master kill-switch for the Goose-Crane bridge. When false, all bridge traffic and peer-aware behavior are suppressed.</summary>
+            public bool EnableBridge = true;
+
+            /// <summary>IGC broadcast tag used by the bridge. Peers must agree on this string to exchange messages.</summary>
+            public string BridgeChannelTag = BridgeProtocol.DefaultChannelTag;
+
+            /// <summary>Heartbeat cadence in main-loop ticks. Also drives <c>hello</c> resend while no peer is linked.</summary>
+            public int BridgeHeartbeatTicks = 60;
+
+            /// <summary>Maximum number of concurrent assembler holds tracked. Older holds are evicted FIFO when exceeded.</summary>
+            public int BridgeMaxHoldsTracked = 64;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -123,6 +135,12 @@ namespace IngameScript
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
             _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
+            _config.EnableBridge = _ini.Get("Goose", "enableBridge").ToBoolean(true);
+            _config.BridgeChannelTag = _ini.Get("Goose", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
+            int bridgeHbRaw = _ini.Get("Goose", "bridgeHeartbeatTicks").ToInt32(60);
+            _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
+            int bridgeMaxRaw = _ini.Get("Goose", "bridgeMaxHoldsTracked").ToInt32(64);
+            _config.BridgeMaxHoldsTracked = bridgeMaxRaw < 1 ? 1 : bridgeMaxRaw;
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
@@ -182,6 +200,8 @@ namespace IngameScript
             }
 
             EnsureBalancerKeysPopulated();
+
+            ApplyBridgeConfig();
 
             _configDirty = false;
             yield return YieldReason.ChunkBoundary;
@@ -366,6 +386,36 @@ namespace IngameScript
                     "When true, redistributes items inside non-Stock category-tagged containers so each " +
                     "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
                     "overflow lands in lower tiers. false (default) disables.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "enableBridge"))
+            {
+                _ini.Set("Goose", "enableBridge", true);
+                _ini.SetComment("Goose", "enableBridge",
+                    "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
+                    "ignores incoming traffic, and behaves identically to a script without the bridge.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "bridgeChannelTag"))
+            {
+                _ini.Set("Goose", "bridgeChannelTag", BridgeProtocol.DefaultChannelTag);
+                _ini.SetComment("Goose", "bridgeChannelTag",
+                    "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "bridgeHeartbeatTicks"))
+            {
+                _ini.Set("Goose", "bridgeHeartbeatTicks", 60);
+                _ini.SetComment("Goose", "bridgeHeartbeatTicks",
+                    "Heartbeat cadence in main-loop ticks (Update10 ~ 6 ticks/sec; default 60 ~ 10s). " +
+                    "Also drives hello resend while no peer is linked.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "bridgeMaxHoldsTracked"))
+            {
+                _ini.Set("Goose", "bridgeMaxHoldsTracked", 64);
+                _ini.SetComment("Goose", "bridgeMaxHoldsTracked",
+                    "Maximum number of concurrent assembler holds tracked. Older entries are evicted FIFO when exceeded.");
                 changed = true;
             }
             if (changed)

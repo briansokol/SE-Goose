@@ -32,12 +32,14 @@ namespace IngameScript
         private Dictionary<string, Action<MyCommandLine>> _commands;
 
         /// <summary>Sets the update cadence, wires up commands, and primes the work iterator.</summary>
+        /// <summary>Sets the update cadence, wires up commands, primes the work iterator, and brings the Goose-Crane bridge online.</summary>
         public Program()
         {
             Catalog_LoadFromStorage();
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
             InitCommands();
             _workIterator = StepRoot();
+            InitBridge();
             LogAction("Goose v1 initialized");
         }
 
@@ -50,6 +52,9 @@ namespace IngameScript
         /// <summary>Entry point invoked by the programmable block on every update tick.</summary>
         /// <param name="argument">Optional command argument from a terminal action or trigger.</param>
         /// <param name="updateSource">Flags describing why this tick fired.</param>
+        /// <summary>Entry point invoked by the programmable block on every update tick.</summary>
+        /// <param name="argument">Optional command argument from a terminal action or trigger.</param>
+        /// <param name="updateSource">Flags describing why this tick fired.</param>
         public void Main(string argument, UpdateType updateSource)
         {
             try
@@ -57,6 +62,11 @@ namespace IngameScript
                 if (!string.IsNullOrEmpty(argument))
                 {
                     DispatchCommand(argument);
+                }
+                _mainTickCount++;
+                if (_bridge != null)
+                {
+                    _bridge.Tick(_mainTickCount);
                 }
                 if ((updateSource & UpdateType.Update10) != 0 && !_paused)
                 {

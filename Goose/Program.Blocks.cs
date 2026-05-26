@@ -791,7 +791,10 @@ namespace IngameScript
                         long current;
                         _itemTotals.TryGetValue(item.Type, out current);
                         _itemTotals[item.Type] = current + (long)item.Amount;
-                        Catalog_RecordItem(item.Type);
+                        if (Catalog_RecordItem(item.Type) && _bridge != null)
+                        {
+                            _bridge.AnnounceCatalogAdd(Catalog_BuildKey(item.Type));
+                        }
                         if (item.Type.TypeId == "MyObjectBuilder_AmmoMagazine")
                         {
                             float volPerUnit;

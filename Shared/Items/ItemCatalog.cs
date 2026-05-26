@@ -18,19 +18,24 @@ namespace IngameScript
         public int Version { get { return _version; } }
 
         /// <summary>Records an observed item type. Idempotent; no-op when the type is already known.</summary>
-        public void RecordItem(MyItemType type)
+        /// <summary>Records an observed item type. Idempotent; no-op when the type is already known.</summary>
+        /// <returns><c>true</c> when the key was newly added to the catalog; <c>false</c> when it was already present or the type was unusable.</returns>
+        public bool RecordItem(MyItemType type)
         {
             if (string.IsNullOrEmpty(type.SubtypeId))
             {
-                return;
+                return false;
             }
 
             string key = CatalogKeyHelpers.BuildKey(type);
-            if (!_knownItems.ContainsKey(key))
+            if (_knownItems.ContainsKey(key))
             {
-                _knownItems[key] = type;
-                _version++;
+                return false;
             }
+
+            _knownItems[key] = type;
+            _version++;
+            return true;
         }
 
         /// <summary>Restores the catalog from a serialized blob. One key per line. Malformed lines are silently skipped.</summary>
