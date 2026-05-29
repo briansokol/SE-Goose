@@ -52,6 +52,12 @@ namespace IngameScript
 
             /// <summary>Target fill level (percent of input capacity) Crane tops each managed refinery's input toward.</summary>
             public int RefineryTargetFillPercent = 50;
+
+            /// <summary>Default low watermark: an ingot below this (with no explicit [CRefine] threshold) makes its ore high priority. <c>0</c> disables.</summary>
+            public long RefineDefaultIngotMin = 500;
+
+            /// <summary>Default high watermark: a high-priority ingot reverts to normal priority once it reaches this. <c>0</c> disables.</summary>
+            public long RefineDefaultIngotMax = 1000;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -105,6 +111,10 @@ namespace IngameScript
             _config.EnableRefineryBalancing = MyIniHelpers.GetBool(_ini, "Crane", "enableRefineryBalancing", true);
             int fillRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineryTargetFillPercent", 50);
             _config.RefineryTargetFillPercent = fillRaw < 0 ? 0 : (fillRaw > 100 ? 100 : fillRaw);
+            int defMinRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineDefaultIngotMin", 500);
+            _config.RefineDefaultIngotMin = defMinRaw < 0 ? 0 : defMinRaw;
+            int defMaxRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineDefaultIngotMax", 1000);
+            _config.RefineDefaultIngotMax = defMaxRaw < 0 ? 0 : defMaxRaw;
             LoadRefineConfig();
 
             EnsureConfigKeysPopulated();
@@ -194,15 +204,30 @@ namespace IngameScript
                     "Target fill level (percent of input capacity) Crane tops each managed refinery's input toward.");
                 changed = true;
             }
+            if (!_ini.ContainsKey("Crane", "refineDefaultIngotMin"))
+            {
+                _ini.Set("Crane", "refineDefaultIngotMin", 500);
+                _ini.SetComment("Crane", "refineDefaultIngotMin",
+                    "Default low watermark for ingots with no explicit [CRefine] threshold: below this, the ore becomes " +
+                    "high priority. It stays high until the ingot reaches refineDefaultIngotMax (hysteresis). 0 disables.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "refineDefaultIngotMax"))
+            {
+                _ini.Set("Crane", "refineDefaultIngotMax", 1000);
+                _ini.SetComment("Crane", "refineDefaultIngotMax",
+                    "Default high watermark: a high-priority ingot reverts to normal priority once it reaches this. 0 disables.");
+                changed = true;
+            }
             if (!_ini.ContainsSection("CRefine"))
             {
                 _ini.Set("CRefine", "order", DefaultRefineOrder);
                 _ini.SetComment("CRefine", "order",
                     "Ore feed priority. Crane fills and orders refinery inputs in this order.\n" +
                     "Per-ingot thresholds (add lines below):  <IngotSubtype> = <min>,<max>\n" +
-                    "  below min (and ore available) -> bump that ore to the front\n" +
-                    "  at/above max                  -> stop feeding that ore (cap)\n" +
-                    "  0 means no min bump / no max cap. Example:  Iron = 5000,50000");
+                    "  ingot below min      -> ore becomes high priority (bumped to the front)\n" +
+                    "  stays high until ingot reaches max, then reverts to normal (still fed)\n" +
+                    "  omitted ingots use refineDefaultIngotMin/Max. Example:  Iron = 5000,8000");
                 changed = true;
             }
             if (changed)

@@ -37,6 +37,9 @@ namespace IngameScript
         /// <summary>Grid-wide ore totals (in cargo) by subtype, rebuilt each balancing cycle.</summary>
         private readonly Dictionary<string, long> _refineOreTotals = new Dictionary<string, long>(StringComparer.Ordinal);
 
+        /// <summary>Hysteresis state: ore subtypes currently latched high priority (below min, not yet recovered to max). Persists across cycles.</summary>
+        private readonly HashSet<string> _refineHighPriority = new HashSet<string>(StringComparer.Ordinal);
+
         /// <summary>Reusable scratch buffer for refinery inventory scans.</summary>
         private readonly List<MyInventoryItem> _refineItemBuffer = new List<MyInventoryItem>();
 
@@ -95,7 +98,8 @@ namespace IngameScript
 
             ClaimRefineryInputs(_refineries);
             BuildRefineryTotals();
-            List<string> order = BuildDynamicRefineOrder(_refineOrder, _refineThresholds, _refineIngotTotals, _refineOreTotals);
+            List<string> order = BuildDynamicRefineOrder(_refineOrder, _refineThresholds, _refineIngotTotals, _refineOreTotals,
+                _config.RefineDefaultIngotMin, _config.RefineDefaultIngotMax, _refineHighPriority);
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
             {
@@ -326,17 +330,23 @@ namespace IngameScript
             }
         }
 
-        /// <summary>Builds the per-cycle ore feed order: ingots below their min (with ore available) are bumped to the front; ingots at/above their max are dropped.</summary>
-        /// <param name="baseOrder">Configured base priority (ore subtype names, rare to common).</param>
-        /// <param name="thresholds">Per-subtype min/max thresholds.</param>
+        /// <summary>Builds the per-cycle ore feed order with hysteresis: an ore becomes high priority when its ingot drops below <c>min</c> and stays high until the ingot reaches <c>max</c>, then reverts to normal. High-priority ores with available ore are bumped to the front (keeping relative base order).</summary>
+        /// <param name="baseOrder">Configured base priority (ore subtype names).</param>
+        /// <param name="thresholds">Per-subtype min/max thresholds; subtypes without one use the defaults.</param>
         /// <param name="ingotTotals">Grid-wide ingot totals by subtype.</param>
         /// <param name="oreTotals">Grid-wide ore totals by subtype.</param>
+        /// <param name="defaultMin">Default low watermark applied when no per-subtype threshold exists.</param>
+        /// <param name="defaultMax">Default high watermark applied when no per-subtype threshold exists.</param>
+        /// <param name="highPriority">Persisted hysteresis state (mutated): subtypes currently latched high priority.</param>
         /// <returns>The ore subtypes to feed this cycle, in priority order.</returns>
         internal static List<string> BuildDynamicRefineOrder(
             IList<string> baseOrder,
             IDictionary<string, RefineThreshold> thresholds,
             IDictionary<string, long> ingotTotals,
-            IDictionary<string, long> oreTotals)
+            IDictionary<string, long> oreTotals,
+            long defaultMin,
+            long defaultMax,
+            HashSet<string> highPriority)
         {
             var bumped = new List<string>();
             var normal = new List<string>();
@@ -344,22 +354,43 @@ namespace IngameScript
             for (int i = 0; i < baseOrder.Count; i++)
             {
                 string subtype = baseOrder[i];
+
+                long min = defaultMin;
+                long max = defaultMax;
                 RefineThreshold threshold;
-                thresholds.TryGetValue(subtype, out threshold);
+                if (thresholds.TryGetValue(subtype, out threshold) && threshold != null)
+                {
+                    min = threshold.Min;
+                    max = threshold.Max;
+                }
 
                 long ingot;
                 ingotTotals.TryGetValue(subtype, out ingot);
 
-                if (threshold != null && threshold.Max > 0 && ingot >= threshold.Max)
+                bool isHigh = highPriority.Contains(subtype);
+                if (min > 0 && ingot < min)
                 {
-                    continue;
+                    isHigh = true;
+                }
+                else if (max > 0 && ingot >= max)
+                {
+                    isHigh = false;
+                }
+
+                if (isHigh)
+                {
+                    highPriority.Add(subtype);
+                }
+                else
+                {
+                    highPriority.Remove(subtype);
                 }
 
                 long ore;
                 oreTotals.TryGetValue(subtype, out ore);
                 bool oreAvailable = ore > 0;
 
-                if (threshold != null && threshold.Min > 0 && ingot < threshold.Min && oreAvailable)
+                if (isHigh && oreAvailable)
                 {
                     bumped.Add(subtype);
                 }
