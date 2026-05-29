@@ -20,6 +20,12 @@ namespace Crane.Tests.Fakes
         /// <summary>True when the inventory should refuse all incoming items (capacity-full simulation).</summary>
         public bool Full = false;
 
+        /// <summary>Volume occupied per item unit, used to derive <see cref="CurrentVolume"/> and <see cref="VolumeFillFactor"/>. 0 disables volume modeling.</summary>
+        public double UnitVolume = 0.0;
+
+        /// <summary>Total volume capacity backing <see cref="MaxVolume"/>.</summary>
+        public double MaxVolumeValue = 1_000_000.0;
+
         /// <summary>Adds <paramref name="amount"/> units of <paramref name="type"/> as a single stack.</summary>
         public void Add(MyItemType type, long amount)
         {
@@ -42,6 +48,17 @@ namespace Crane.Tests.Fakes
 
         /// <summary>Count of distinct stacks (handy for asserting "everything drained").</summary>
         public int StackCount { get { return _items.Count; } }
+
+        /// <summary>The item types in their current stack order (for asserting reordering).</summary>
+        public List<MyItemType> TypesInOrder()
+        {
+            var types = new List<MyItemType>(_items.Count);
+            for (int i = 0; i < _items.Count; i++)
+            {
+                types.Add(_items[i].Type);
+            }
+            return types;
+        }
 
         public void GetItems(List<MyInventoryItem> items, Func<MyInventoryItem, bool> filter = null)
         {
@@ -68,9 +85,25 @@ namespace Crane.Tests.Fakes
                 return false;
             }
             var dst = destination as FakeInventory;
-            if (dst == null || dst == this)
+            if (dst == null)
             {
                 return false;
+            }
+            if (dst == this)
+            {
+                MyInventoryItem moving = _items[sourceItemIndex];
+                _items.RemoveAt(sourceItemIndex);
+                int tgt = targetItemIndex.HasValue ? targetItemIndex.Value : _items.Count;
+                if (tgt < 0)
+                {
+                    tgt = 0;
+                }
+                if (tgt > _items.Count)
+                {
+                    tgt = _items.Count;
+                }
+                _items.Insert(tgt, moving);
+                return true;
             }
             MyInventoryItem src = _items[sourceItemIndex];
             MyFixedPoint moveAmount = amount.HasValue ? amount.Value : src.Amount;
@@ -94,14 +127,25 @@ namespace Crane.Tests.Fakes
             return true;
         }
 
+        /// <summary>Sums every stack's amount across all item types.</summary>
+        private long TotalItemAmount()
+        {
+            long sum = 0;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                sum += (long)_items[i].Amount;
+            }
+            return sum;
+        }
+
         public bool CanPutItems { get { throw new NotImplementedException(); } }
         public MyFixedPoint CurrentMass { get { throw new NotImplementedException(); } }
-        public MyFixedPoint CurrentVolume { get { throw new NotImplementedException(); } }
+        public MyFixedPoint CurrentVolume { get { return (MyFixedPoint)(TotalItemAmount() * UnitVolume); } }
         public bool IsFull { get { throw new NotImplementedException(); } }
         public int ItemCount { get { throw new NotImplementedException(); } }
-        public MyFixedPoint MaxVolume { get { throw new NotImplementedException(); } }
+        public MyFixedPoint MaxVolume { get { return (MyFixedPoint)MaxVolumeValue; } }
         public VRage.Game.ModAPI.Ingame.IMyEntity Owner { get { throw new NotImplementedException(); } }
-        public float VolumeFillFactor { get { throw new NotImplementedException(); } }
+        public float VolumeFillFactor { get { return MaxVolumeValue <= 0 ? 1f : (float)(TotalItemAmount() * UnitVolume / MaxVolumeValue); } }
 
         public bool ContainItems(MyFixedPoint amount, MyItemType itemType) { throw new NotImplementedException(); }
         public MyInventoryItem? FindItem(MyItemType itemType) { throw new NotImplementedException(); }
