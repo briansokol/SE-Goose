@@ -36,6 +36,12 @@ namespace IngameScript
         /// <summary>Crane-to-Goose declaration that an assembler is actively crafting; suppresses Goose's balancer drain.</summary>
         public const string KindAssemblerHold = "assemblerHold";
 
+        /// <summary>Crane-to-Goose request for grid-wide counts of a named set of item keys.</summary>
+        public const string KindItemCountRequest = "itemCountReq";
+
+        /// <summary>Goose-to-Crane reply carrying grid-wide counts for the requested item keys.</summary>
+        public const string KindItemCountResponse = "itemCountRes";
+
         /// <summary>Envelope key that names the message kind.</summary>
         public const string KeyKind = "kind";
 
@@ -63,11 +69,17 @@ namespace IngameScript
         /// <summary>Envelope key carrying a <see cref="NeedDelimiter"/>-separated list of ingot needs (key:amount pairs).</summary>
         public const string KeyNeed = "need";
 
+        /// <summary>Envelope key carrying a <see cref="KeysDelimiter"/>-separated list of <c>key:amount</c> pairs on <c>itemCountRes</c>.</summary>
+        public const string KeyCounts = "counts";
+
         /// <summary>Inner delimiter for the <c>keys=</c> field on <c>catalogSnapshot</c>.</summary>
         public const char KeysDelimiter = '|';
 
         /// <summary>Inner delimiter for the <c>need=</c> field on <c>assemblerHold</c>.</summary>
         public const char NeedDelimiter = ',';
+
+        /// <summary>Separator between a key and its amount inside a <c>counts=</c> entry on <c>itemCountRes</c>. Safe because item subtypes contain neither this nor <see cref="KeysDelimiter"/>.</summary>
+        public const char CountPairSeparator = ':';
 
         /// <summary>Field separator between <c>k=v</c> envelope pairs.</summary>
         public const char FieldSeparator = ';';

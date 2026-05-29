@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using VRage.Game.ModAPI.Ingame;
 
 namespace IngameScript
 {
@@ -34,6 +35,7 @@ namespace IngameScript
                     BridgeLocalCatalogCount,
                     BridgeLocalCatalogKeys,
                     BridgeLogWarning);
+                _bridge.SetItemCountResponder(GooseResolveItemCount);
                 ApplyBridgeConfig();
                 _bridge.Initialize();
             }
@@ -67,6 +69,29 @@ namespace IngameScript
         private IEnumerable<string> BridgeLocalCatalogKeys()
         {
             return _knownItems.Keys;
+        }
+
+        /// <summary>Resolves the grid-wide total for a catalog key (<c>Type/Subtype</c>) from the latest inventory scan. Returns 0 for absent or unparseable keys: Goose scans every inventory block, so an absent key means none exist on the grid.</summary>
+        private long GooseResolveItemCount(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return 0;
+            }
+
+            MyItemType type;
+            try
+            {
+                type = MyItemType.Parse("MyObjectBuilder_" + key);
+            }
+            catch (System.Exception)
+            {
+                return 0;
+            }
+
+            long total;
+            _itemTotals.TryGetValue(type, out total);
+            return total;
         }
 
         /// <summary>Surfaces bridge-internal warnings through the standard one-shot warning channel.</summary>

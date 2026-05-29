@@ -72,7 +72,7 @@ namespace IngameScript
         private IEnumerator<YieldReason> StepScanInventories()
         {
             foreach (YieldReason r in ItemTotalsBuilder.BuildItemTotals(
-                _allManagedBlocks, _itemTotals, _catalog, _itemBuffer, BudgetExceeded,
+                _inventoryScanBlocks, _itemTotals, _catalog, _itemBuffer, BudgetExceeded,
                 BridgeOnLocalCatalogKey))
             {
                 yield return r;

@@ -36,6 +36,7 @@ namespace IngameScript
                     BridgeLocalCatalogCount,
                     BridgeLocalCatalogKeys,
                     BridgeLogWarning);
+                _bridge.SetOnPeerItemCount(BridgeHandlePeerItemCount);
                 ApplyBridgeConfig();
                 _bridge.Initialize();
             }
@@ -81,6 +82,16 @@ namespace IngameScript
                 return;
             }
             _catalog.RecordItem(type);
+        }
+
+        /// <summary>Records a grid-wide item count reported by Goose, keyed by catalog key, for use by the quota engine's <c>EffectiveActual</c> lookup.</summary>
+        private void BridgeHandlePeerItemCount(string key, long amount)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+            _gooseItemCounts[key] = amount;
         }
 
         /// <summary>Forwards a locally added catalog key out to the peer. Wired into <see cref="ItemTotalsBuilder.BuildItemTotals"/> via the optional callback parameter.</summary>
