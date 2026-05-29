@@ -39,8 +39,9 @@ dotnet_style_qualification_for_event = false:warning
 dotnet_style_predefined_type_for_locals_parameters_members = true:warning
 dotnet_style_predefined_type_for_member_access = true:warning
 
-# Accessibility modifiers — always explicit (write `private` rather than relying on default).
-dotnet_style_require_accessibility_modifiers = always:warning
+# Accessibility modifiers — always explicit (write `private` rather than relying on default),
+# except on interface members: explicit modifiers there are a C# 8 feature and break the C# 6 build.
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
 
 # `readonly` for fields only assigned in the constructor.
 dotnet_style_readonly_field = true:warning
