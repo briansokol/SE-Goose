@@ -21,6 +21,10 @@ namespace IngameScript
         /// <summary>Ore item count pulled per feeder batch while topping up a refinery input.</summary>
         private const long RefineFeedBatch = 1000;
 
+        /// <summary>Ore subtypes excluded from the min/max threshold system because they have no single corresponding ingot (so their ingot total is always 0). They keep their configured base-order position and are never bumped.</summary>
+        private static readonly HashSet<string> RefineThresholdExempt =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Stone" };
+
         /// <summary>Refineries in scope whose input Crane feeds. Populated during rescan.</summary>
         private readonly List<IMyRefinery> _refineries = new List<IMyRefinery>();
 
@@ -354,6 +358,13 @@ namespace IngameScript
             for (int i = 0; i < baseOrder.Count; i++)
             {
                 string subtype = baseOrder[i];
+
+                if (RefineThresholdExempt.Contains(subtype))
+                {
+                    highPriority.Remove(subtype);
+                    normal.Add(subtype);
+                    continue;
+                }
 
                 long min = defaultMin;
                 long max = defaultMax;

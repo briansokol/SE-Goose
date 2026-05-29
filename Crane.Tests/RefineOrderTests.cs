@@ -162,6 +162,22 @@ namespace Crane.Tests
         }
 
         [Fact]
+        public void Stone_is_exempt_from_threshold_bump()
+        {
+            var ingots = new Dictionary<string, long>();
+            var ores = new Dictionary<string, long> { { "Stone", 9000 }, { "Iron", 9000 } };
+            var state = new HashSet<string> { "Stone" };
+
+            List<string> result = Build(
+                Order("Stone", "Iron"),
+                new Dictionary<string, RefineThreshold>(),
+                ingots, ores, state);
+
+            result.Should().Equal("Iron", "Stone");
+            state.Should().NotContain("Stone");
+        }
+
+        [Fact]
         public void Multiple_bumped_ores_keep_relative_base_order()
         {
             var ingots = new Dictionary<string, long> { { "Gold", 0 }, { "Iron", 0 } };
