@@ -198,7 +198,7 @@ namespace IngameScript
             {
                 _ini.Set("CRefine", "order", DefaultRefineOrder);
                 _ini.SetComment("CRefine", "order",
-                    "Ore feed priority, rare to common. Crane fills refinery inputs in this order.\n" +
+                    "Ore feed priority. Crane fills and orders refinery inputs in this order.\n" +
                     "Per-ingot thresholds (add lines below):  <IngotSubtype> = <min>,<max>\n" +
                     "  below min (and ore available) -> bump that ore to the front\n" +
                     "  at/above max                  -> stop feeding that ore (cap)\n" +

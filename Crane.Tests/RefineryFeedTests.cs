@@ -13,6 +13,8 @@ namespace Crane.Tests
     {
         private static readonly MyItemType GoldOre = MyItemType.MakeOre("Gold");
         private static readonly MyItemType IronOre = MyItemType.MakeOre("Iron");
+        private static readonly MyItemType StoneOre = MyItemType.MakeOre("Stone");
+        private static readonly MyItemType PlatinumOre = MyItemType.MakeOre("Platinum");
 
         private static List<IMyCargoContainer> CargoListWith(params FakeCargoContainer[] cargos)
         {
@@ -87,6 +89,44 @@ namespace Crane.Tests
 
             input.AmountOf(GoldOre).Should().Be(0);
             input.AmountOf(IronOre).Should().BeGreaterThan(0);
+        }
+
+        [Fact]
+        public void Sort_moves_highest_priority_ore_to_front()
+        {
+            var input = new FakeInventory();
+            input.Add(IronOre, 100);
+            input.Add(StoneOre, 100);
+            input.Add(GoldOre, 100);
+
+            Program.SortRefineryInput(input, new List<string> { "Stone", "Platinum", "Gold", "Iron" }, new List<MyInventoryItem>());
+
+            input.TypesInOrder().Should().Equal(StoneOre, GoldOre, IronOre);
+        }
+
+        [Fact]
+        public void Sort_leaves_already_ordered_input_unchanged()
+        {
+            var input = new FakeInventory();
+            input.Add(StoneOre, 100);
+            input.Add(GoldOre, 100);
+            input.Add(IronOre, 100);
+
+            Program.SortRefineryInput(input, new List<string> { "Stone", "Gold", "Iron" }, new List<MyInventoryItem>());
+
+            input.TypesInOrder().Should().Equal(StoneOre, GoldOre, IronOre);
+        }
+
+        [Fact]
+        public void Sort_places_ores_not_in_order_after_prioritized_ones()
+        {
+            var input = new FakeInventory();
+            input.Add(PlatinumOre, 100);
+            input.Add(IronOre, 100);
+
+            Program.SortRefineryInput(input, new List<string> { "Iron" }, new List<MyInventoryItem>());
+
+            input.TypesInOrder().Should().Equal(IronOre, PlatinumOre);
         }
     }
 }

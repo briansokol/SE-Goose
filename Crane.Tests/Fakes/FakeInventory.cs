@@ -49,6 +49,17 @@ namespace Crane.Tests.Fakes
         /// <summary>Count of distinct stacks (handy for asserting "everything drained").</summary>
         public int StackCount { get { return _items.Count; } }
 
+        /// <summary>The item types in their current stack order (for asserting reordering).</summary>
+        public List<MyItemType> TypesInOrder()
+        {
+            var types = new List<MyItemType>(_items.Count);
+            for (int i = 0; i < _items.Count; i++)
+            {
+                types.Add(_items[i].Type);
+            }
+            return types;
+        }
+
         public void GetItems(List<MyInventoryItem> items, Func<MyInventoryItem, bool> filter = null)
         {
             for (int i = 0; i < _items.Count; i++)
@@ -74,9 +85,25 @@ namespace Crane.Tests.Fakes
                 return false;
             }
             var dst = destination as FakeInventory;
-            if (dst == null || dst == this)
+            if (dst == null)
             {
                 return false;
+            }
+            if (dst == this)
+            {
+                MyInventoryItem moving = _items[sourceItemIndex];
+                _items.RemoveAt(sourceItemIndex);
+                int tgt = targetItemIndex.HasValue ? targetItemIndex.Value : _items.Count;
+                if (tgt < 0)
+                {
+                    tgt = 0;
+                }
+                if (tgt > _items.Count)
+                {
+                    tgt = _items.Count;
+                }
+                _items.Insert(tgt, moving);
+                return true;
             }
             MyInventoryItem src = _items[sourceItemIndex];
             MyFixedPoint moveAmount = amount.HasValue ? amount.Value : src.Amount;

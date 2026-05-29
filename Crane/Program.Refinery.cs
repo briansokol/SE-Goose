@@ -8,9 +8,9 @@ namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        /// <summary>Default rare-to-common ore feed priority, used when <c>[CRefine] order</c> is absent or empty.</summary>
+        /// <summary>Default ore feed priority, used when <c>[CRefine] order</c> is absent or empty.</summary>
         private const string DefaultRefineOrder =
-            "Platinum,Uranium,Gold,Silver,Magnesium,Cobalt,Silicon,Nickel,Iron";
+            "Stone,Platinum,Uranium,Gold,Silver,Magnesium,Cobalt,Silicon,Nickel,Iron";
 
         /// <summary><c>MyObjectBuilder_</c> type id for ore item types.</summary>
         private const string OreTypeId = "MyObjectBuilder_Ore";
@@ -112,6 +112,7 @@ namespace IngameScript
                     continue;
                 }
                 TopUpRefinery(r, order, target, _refineOreTotals, _cargoContainers, _refineItemBuffer, BudgetExceeded, debugLog);
+                SortRefineryInput(r.InputInventory, order, _refineItemBuffer);
                 yield return YieldReason.ChunkBoundary;
                 if (BudgetExceeded())
                 {
@@ -239,6 +240,50 @@ namespace IngameScript
                 if (budgetExceeded != null && budgetExceeded())
                 {
                     return;
+                }
+            }
+        }
+
+        /// <summary>Reorders a refinery input's stacks so ores appear in <paramref name="order"/> priority (highest first); ores not listed are left after the prioritized ones.</summary>
+        /// <remarks>Refineries consume the first input stack, so this puts the highest-priority available ore next in line. Relies on same-inventory <see cref="IMyInventory.TransferItemTo"/> repositioning.</remarks>
+        internal static void SortRefineryInput(IMyInventory input, IList<string> order, List<MyInventoryItem> buffer)
+        {
+            if (input == null)
+            {
+                return;
+            }
+
+            int writePos = 0;
+            for (int p = 0; p < order.Count; p++)
+            {
+                var want = MyItemType.MakeOre(order[p]);
+                while (true)
+                {
+                    buffer.Clear();
+                    try
+                    { input.GetItems(buffer); }
+                    catch { return; }
+
+                    int found = -1;
+                    for (int i = writePos; i < buffer.Count; i++)
+                    {
+                        if (buffer[i].Type == want)
+                        {
+                            found = i;
+                            break;
+                        }
+                    }
+                    if (found < 0)
+                    {
+                        break;
+                    }
+                    if (found != writePos)
+                    {
+                        try
+                        { input.TransferItemTo(input, found, writePos, true, buffer[found].Amount); }
+                        catch { }
+                    }
+                    writePos++;
                 }
             }
         }
