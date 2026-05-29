@@ -116,6 +116,7 @@ namespace IngameScript
             _allManagedBlocks.Clear();
             _assemblers.Clear();
             _cargoContainers.Clear();
+            _refineries.Clear();
             _ccraftLcds.Clear();
             _cerrorLcds.Clear();
 
@@ -142,6 +143,18 @@ namespace IngameScript
                 && cc.CubeGrid != null
                 && _scopeGrids.Contains(cc.CubeGrid.EntityId)
                 && !BlockNameTags.HasIgnoreTag(cc.CustomName));
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
+
+            GridTerminalSystem.GetBlocksOfType<IMyRefinery>(_refineries, r =>
+                r != null
+                && !r.Closed
+                && r.CubeGrid != null
+                && _scopeGrids.Contains(r.CubeGrid.EntityId)
+                && !BlockNameTags.HasIgnoreTag(r.CustomName));
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
             {
@@ -194,7 +207,7 @@ namespace IngameScript
             }
 
             _logger.LogAction("Rescan: " + _assemblers.Count + " asm, "
-                + _cargoContainers.Count + " cargo, "
+                + _cargoContainers.Count + " cargo, " + _refineries.Count + " refinery, "
                 + _ccraftLcds.Count + " [CCraft], " + _cerrorLcds.Count + " [CError]");
 
             yield return YieldReason.ChunkBoundary;

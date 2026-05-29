@@ -46,6 +46,12 @@ namespace IngameScript
 
             /// <summary>TTL (in main-loop ticks) attached to each assembler-hold announcement. Long enough to cover one Goose balance cycle plus margin; short enough that a crashed Crane self-heals quickly.</summary>
             public int AssemblerHoldTtlTicks = 30;
+
+            /// <summary>Master kill-switch for refinery balancing (ore feeding into managed refineries).</summary>
+            public bool EnableRefineryBalancing = true;
+
+            /// <summary>Target fill level (percent of input capacity) Crane tops each managed refinery's input toward.</summary>
+            public int RefineryTargetFillPercent = 50;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -96,6 +102,10 @@ namespace IngameScript
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
             int holdTtlRaw = MyIniHelpers.GetInt(_ini, "Crane", "assemblerHoldTtlTicks", 30);
             _config.AssemblerHoldTtlTicks = holdTtlRaw < 1 ? 1 : holdTtlRaw;
+            _config.EnableRefineryBalancing = MyIniHelpers.GetBool(_ini, "Crane", "enableRefineryBalancing", true);
+            int fillRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineryTargetFillPercent", 50);
+            _config.RefineryTargetFillPercent = fillRaw < 0 ? 0 : (fillRaw > 100 ? 100 : fillRaw);
+            LoadRefineConfig();
 
             EnsureConfigKeysPopulated();
             ApplyBridgeConfig();
@@ -167,6 +177,32 @@ namespace IngameScript
                 _ini.SetComment("Crane", "assemblerHoldTtlTicks",
                     "TTL on assembler-hold announcements (in main-loop ticks). " +
                     "Default 30 ~ 5s: long enough for one Goose balance cycle, short enough to self-heal on Crane crash.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "enableRefineryBalancing"))
+            {
+                _ini.Set("Crane", "enableRefineryBalancing", true);
+                _ini.SetComment("Crane", "enableRefineryBalancing",
+                    "Master kill-switch for refinery balancing. When true, Crane takes over each in-scope " +
+                    "refinery's input (turns off its conveyor system) and feeds it ore per the [CRefine] order.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "refineryTargetFillPercent"))
+            {
+                _ini.Set("Crane", "refineryTargetFillPercent", 50);
+                _ini.SetComment("Crane", "refineryTargetFillPercent",
+                    "Target fill level (percent of input capacity) Crane tops each managed refinery's input toward.");
+                changed = true;
+            }
+            if (!_ini.ContainsSection("CRefine"))
+            {
+                _ini.Set("CRefine", "order", DefaultRefineOrder);
+                _ini.SetComment("CRefine", "order",
+                    "Ore feed priority, rare to common. Crane fills refinery inputs in this order.\n" +
+                    "Per-ingot thresholds (add lines below):  <IngotSubtype> = <min>,<max>\n" +
+                    "  below min (and ore available) -> bump that ore to the front\n" +
+                    "  at/above max                  -> stop feeding that ore (cap)\n" +
+                    "  0 means no min bump / no max cap. Example:  Iron = 5000,50000");
                 changed = true;
             }
             if (changed)
