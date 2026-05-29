@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -165,71 +164,6 @@ namespace IngameScript
                 .Set(BridgeProtocol.KeyEntityId, entityId)
                 .Set(BridgeProtocol.KeyTtl, ttlTicks)
                 .Set(BridgeProtocol.KeyNeed, needCsv ?? string.Empty);
-        }
-
-        /// <summary>Builds an <c>itemCountReq</c> envelope carrying a <see cref="BridgeProtocol.KeysDelimiter"/>-separated list of item keys to count.</summary>
-        public static BridgeMessage ItemCountRequest(IEnumerable<string> keys)
-        {
-            var sb = new StringBuilder();
-            if (keys != null)
-            {
-                foreach (string key in keys)
-                {
-                    if (string.IsNullOrEmpty(key))
-                    {
-                        continue;
-                    }
-                    if (sb.Length > 0)
-                    {
-                        sb.Append(BridgeProtocol.KeysDelimiter);
-                    }
-                    sb.Append(key);
-                }
-            }
-            return new BridgeMessage(BridgeProtocol.KindItemCountRequest)
-                .Set(BridgeProtocol.KeyKeys, sb.ToString());
-        }
-
-        /// <summary>Builds an <c>itemCountRes</c> envelope carrying <c>key:amount</c> pairs for the supplied counts. Stops appending once the serialized payload would exceed <paramref name="maxChars"/>, invoking <paramref name="onTruncated"/> once if anything was dropped.</summary>
-        public static BridgeMessage ItemCountResponse(IEnumerable<KeyValuePair<string, long>> counts, int maxChars, Action onTruncated)
-        {
-            string envelopePrefix = BridgeProtocol.KeyKind + "=" + BridgeProtocol.KindItemCountResponse
-                + BridgeProtocol.FieldSeparator + BridgeProtocol.KeyCounts + "=";
-            int baseLen = envelopePrefix.Length;
-
-            var sb = new StringBuilder();
-            bool truncated = false;
-            if (counts != null)
-            {
-                foreach (KeyValuePair<string, long> kv in counts)
-                {
-                    if (string.IsNullOrEmpty(kv.Key))
-                    {
-                        continue;
-                    }
-                    string entry = kv.Key + BridgeProtocol.CountPairSeparator
-                        + kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    int addCost = sb.Length == 0 ? entry.Length : 1 + entry.Length;
-                    if (baseLen + sb.Length + addCost > maxChars)
-                    {
-                        truncated = true;
-                        break;
-                    }
-                    if (sb.Length > 0)
-                    {
-                        sb.Append(BridgeProtocol.KeysDelimiter);
-                    }
-                    sb.Append(entry);
-                }
-            }
-
-            if (truncated && onTruncated != null)
-            {
-                onTruncated();
-            }
-
-            return new BridgeMessage(BridgeProtocol.KindItemCountResponse)
-                .Set(BridgeProtocol.KeyCounts, sb.ToString());
         }
 
         /// <summary>Splits <paramref name="keys"/> into <c>catalogSnapshot</c> envelopes whose serialized length does not exceed <paramref name="maxChars"/>. Output preserves the input order; concatenating each chunk's <c>keys</c> field reconstructs the full set.</summary>

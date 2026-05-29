@@ -69,12 +69,6 @@ namespace IngameScript
         /// <summary>Per-quota queued-amount sum across capable assemblers; populated during dispatch.</summary>
         private readonly Dictionary<string, long> _quotaQueued = new Dictionary<string, long>(StringComparer.Ordinal);
 
-        /// <summary>Grid-wide item counts most recently reported by Goose over the bridge, keyed by catalog key. Authoritative (covers all inventory block types) and preferred over the local cargo+assembler scan whenever the peer is linked.</summary>
-        private readonly Dictionary<string, long> _gooseItemCounts = new Dictionary<string, long>(StringComparer.Ordinal);
-
-        /// <summary>Reusable scratch list of quota keys sent to Goose in an item-count request.</summary>
-        private readonly List<string> _itemCountRequestScratch = new List<string>();
-
         /// <summary>Per-quota active-assembler count; populated during dispatch.</summary>
         private readonly Dictionary<string, int> _quotaAsmCount = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -402,29 +396,6 @@ namespace IngameScript
             yield return YieldReason.ChunkBoundary;
         }
 
-        /// <summary>Asks Goose (when linked) for grid-wide counts of every active quota key. The reply lands asynchronously in <see cref="_gooseItemCounts"/> and is consumed on a later cycle.</summary>
-        private void RequestGooseItemCounts()
-        {
-            if (_bridge == null || !_bridge.PeerStatus.Linked || _autocraftTargets.Count == 0)
-            {
-                return;
-            }
-
-            _itemCountRequestScratch.Clear();
-            for (int i = 0; i < _autocraftTargets.Count; i++)
-            {
-                _itemCountRequestScratch.Add(_autocraftTargets[i].Key);
-            }
-            _bridge.RequestItemCounts(_itemCountRequestScratch);
-        }
-
-        /// <summary>Grid-wide "already have" count for a quota target: Goose's authoritative figure when the peer is linked and a value has been received, otherwise the local cargo+assembler scan.</summary>
-        private long EffectiveActual(AutocraftTarget t)
-        {
-            bool peerLinked = _bridge != null && _bridge.PeerStatus.Linked;
-            return AutocraftCounts.EffectiveActual(peerLinked, _gooseItemCounts, t.Key, _itemTotals, t.ItemType);
-        }
-
         /// <summary>Multi-assembler dispatch + per-assembler reconcile. Iterates assemble work then disassemble work; calls <see cref="DistributeAndReconcile"/> for each.</summary>
         private IEnumerator<YieldReason> StepDispatchAndReconcile()
         {
@@ -435,14 +406,14 @@ namespace IngameScript
             }
             _modeLockedThisTick.Clear();
             BridgeResetHoldAnnouncementCycle();
-            RequestGooseItemCounts();
 
             var assembleWork = new List<AutocraftTarget>();
             var disassembleWork = new List<AutocraftTarget>();
             for (int i = 0; i < _autocraftTargets.Count; i++)
             {
                 AutocraftTarget t = _autocraftTargets[i];
-                long actual = EffectiveActual(t);
+                long actual;
+                _itemTotals.TryGetValue(t.ItemType, out actual);
                 long queued = SumQueuedAmount(t);
                 _quotaQueued[t.Key] = queued;
                 long effective = actual + queued;
@@ -598,14 +569,16 @@ namespace IngameScript
                 long deficit;
                 if (mode == MyAssemblerMode.Assembly)
                 {
-                    long actual = EffectiveActual(t);
+                    long actual;
+                    _itemTotals.TryGetValue(t.ItemType, out actual);
                     long queued;
                     _quotaQueued.TryGetValue(t.Key, out queued);
                     deficit = t.Target - (actual + queued);
                 }
                 else
                 {
-                    long actual = EffectiveActual(t);
+                    long actual;
+                    _itemTotals.TryGetValue(t.ItemType, out actual);
                     long queued;
                     _quotaQueued.TryGetValue(t.Key, out queued);
                     deficit = (actual - queued) - t.Target;

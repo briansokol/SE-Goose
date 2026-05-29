@@ -19,9 +19,6 @@ namespace IngameScript
         private readonly Func<IEnumerable<string>> _getLocalCatalogKeys;
         private readonly Action<string> _logWarning;
 
-        private Func<string, long> _itemCountResolver;
-        private Action<string, long> _onPeerItemCount;
-
         private readonly List<string> _inboxBuf = new List<string>();
         private readonly Dictionary<long, BridgeHoldHint> _holds = new Dictionary<long, BridgeHoldHint>();
         private readonly Queue<long> _holdInsertOrder = new Queue<long>();
@@ -140,29 +137,6 @@ namespace IngameScript
             }
 
             TrySend(BridgeMessage.AssemblerHold(entityId, ttlTicks, needCsv));
-        }
-
-        /// <summary>Registers the Goose-side resolver that returns the grid-wide count for a given item key (0 when the item is absent). Drives replies to <c>itemCountReq</c>.</summary>
-        public void SetItemCountResponder(Func<string, long> resolve)
-        {
-            _itemCountResolver = resolve;
-        }
-
-        /// <summary>Registers the Crane-side handler invoked once per <c>key</c>/<c>amount</c> pair carried by an inbound <c>itemCountRes</c>.</summary>
-        public void SetOnPeerItemCount(Action<string, long> handler)
-        {
-            _onPeerItemCount = handler;
-        }
-
-        /// <summary>Requests grid-wide counts for <paramref name="keys"/> from the peer. The reply arrives asynchronously and is delivered to the handler registered via <see cref="SetOnPeerItemCount"/>.</summary>
-        public void RequestItemCounts(IEnumerable<string> keys)
-        {
-            if (!_enabled || !_initialized || _transport == null)
-            {
-                return;
-            }
-
-            TrySend(BridgeMessage.ItemCountRequest(keys));
         }
 
         /// <summary>Returns <c>true</c> when an unexpired hold has been received for <paramref name="entityId"/>.</summary>
@@ -309,80 +283,6 @@ namespace IngameScript
                     }
                     RecordHold(id, ttl, msg.GetString(BridgeProtocol.KeyNeed, string.Empty));
                     break;
-
-                case BridgeProtocol.KindItemCountRequest:
-                    if (_role != BridgeRole.Goose)
-                    {
-                        return;
-                    }
-                    OnPeerSeen(_peerCatalogCount);
-                    RespondToItemCountRequest(msg.GetString(BridgeProtocol.KeyKeys, string.Empty));
-                    break;
-
-                case BridgeProtocol.KindItemCountResponse:
-                    if (_role != BridgeRole.Crane)
-                    {
-                        return;
-                    }
-                    OnPeerSeen(_peerCatalogCount);
-                    DispatchItemCounts(msg.GetString(BridgeProtocol.KeyCounts, string.Empty));
-                    break;
-            }
-        }
-
-        /// <summary>Resolves a count for each requested key via the registered responder and replies with a single <c>itemCountRes</c>. No-op when no responder is registered.</summary>
-        private void RespondToItemCountRequest(string keysCsv)
-        {
-            if (_itemCountResolver == null || string.IsNullOrEmpty(keysCsv))
-            {
-                return;
-            }
-
-            var counts = new List<KeyValuePair<string, long>>();
-            string[] keys = keysCsv.Split(BridgeProtocol.KeysDelimiter);
-            for (int i = 0; i < keys.Length; i++)
-            {
-                string key = keys[i];
-                if (string.IsNullOrEmpty(key))
-                {
-                    continue;
-                }
-                counts.Add(new KeyValuePair<string, long>(key, _itemCountResolver(key)));
-            }
-
-            TrySend(BridgeMessage.ItemCountResponse(counts, BridgeProtocol.SnapshotMaxPayloadChars,
-                () => Warn("itemCountRes: payload capped")));
-        }
-
-        /// <summary>Parses an inbound <c>counts=</c> payload and invokes the registered handler once per valid <c>key:amount</c> pair. Malformed entries are skipped.</summary>
-        private void DispatchItemCounts(string countsCsv)
-        {
-            if (_onPeerItemCount == null || string.IsNullOrEmpty(countsCsv))
-            {
-                return;
-            }
-
-            string[] entries = countsCsv.Split(BridgeProtocol.KeysDelimiter);
-            for (int i = 0; i < entries.Length; i++)
-            {
-                string entry = entries[i];
-                if (string.IsNullOrEmpty(entry))
-                {
-                    continue;
-                }
-                int sep = entry.IndexOf(BridgeProtocol.CountPairSeparator);
-                if (sep <= 0)
-                {
-                    continue;
-                }
-                string key = entry.Substring(0, sep);
-                long amount;
-                if (!long.TryParse(entry.Substring(sep + 1), System.Globalization.NumberStyles.Integer,
-                    System.Globalization.CultureInfo.InvariantCulture, out amount))
-                {
-                    continue;
-                }
-                _onPeerItemCount(key, amount);
             }
         }
 
