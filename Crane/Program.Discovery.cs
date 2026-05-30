@@ -13,6 +13,9 @@ namespace IngameScript
         /// <summary>All blocks discovered within Crane's management scope that are eligible for management.</summary>
         private readonly List<IMyTerminalBlock> _allManagedBlocks = new List<IMyTerminalBlock>();
 
+        /// <summary>Every inventory-bearing block in scope, scanned to build grid-wide item totals the same way Goose does. Kept separate from <see cref="_allManagedBlocks"/> (which means "blocks Crane manages"): Crane only acts on assemblers and refineries, but it counts items everywhere so quota decisions reflect the whole grid.</summary>
+        private readonly List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
+
         /// <summary>Assemblers in the managed group (filtered to non-survival-kit assemblers via interface).</summary>
         private readonly List<IMyAssembler> _assemblers = new List<IMyAssembler>();
 
@@ -114,6 +117,7 @@ namespace IngameScript
             _configDirty = true;
 
             _allManagedBlocks.Clear();
+            _allInventoryBlocks.Clear();
             _assemblers.Clear();
             _cargoContainers.Clear();
             _refineries.Clear();
@@ -143,6 +147,15 @@ namespace IngameScript
                 && cc.CubeGrid != null
                 && _scopeGrids.Contains(cc.CubeGrid.EntityId)
                 && !BlockNameTags.HasIgnoreTag(cc.CustomName));
+            yield return YieldReason.ChunkBoundary;
+            if (BudgetExceeded())
+            {
+                yield return YieldReason.BudgetHit;
+            }
+
+            GridTerminalSystem.GetBlocksOfType(_allInventoryBlocks,
+                b => InventoryScan.IsScannableInventoryBlock(b, _scopeGrids, Me)
+                    && !BlockNameTags.HasIgnoreTag(b.CustomName));
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
             {
