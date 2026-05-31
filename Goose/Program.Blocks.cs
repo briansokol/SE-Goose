@@ -198,27 +198,35 @@ namespace IngameScript
                     continue;
                 }
 
+                // The group (when configured) limits valid managed destinations only. Out-of-group
+                // blocks get a plain entry (no categories, not stock) so they remain grid-wide sources
+                // that are drained into in-group targets, but are never written into.
+                bool isTarget = IsInGroup(block);
+
                 var entry = new ContainerEntry
                 {
                     Block = block,
                     Inventory = block.GetInventory(0),
                     Priority = ParsePriorityFromName(block.CustomName),
-                    IsStock = BlockNameTags.NameHasTag(block.CustomName, "[Stock]")
+                    IsStock = isTarget && BlockNameTags.NameHasTag(block.CustomName, "[Stock]")
                 };
 
-                for (int c = 0; c < CategoryTags.Length; c++)
+                if (isTarget)
                 {
-                    if (BlockNameTags.NameHasTag(block.CustomName, CategoryTags[c]))
+                    for (int c = 0; c < CategoryTags.Length; c++)
                     {
-                        var cat = (ItemCategory)c;
-                        entry.Categories.Add(cat);
-                        List<ContainerEntry> bucket;
-                        if (!_containersByCategory.TryGetValue(cat, out bucket))
+                        if (BlockNameTags.NameHasTag(block.CustomName, CategoryTags[c]))
                         {
-                            bucket = new List<ContainerEntry>();
-                            _containersByCategory[cat] = bucket;
+                            var cat = (ItemCategory)c;
+                            entry.Categories.Add(cat);
+                            List<ContainerEntry> bucket;
+                            if (!_containersByCategory.TryGetValue(cat, out bucket))
+                            {
+                                bucket = new List<ContainerEntry>();
+                                _containersByCategory[cat] = bucket;
+                            }
+                            bucket.Add(entry);
                         }
-                        bucket.Add(entry);
                     }
                 }
 

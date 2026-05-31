@@ -387,6 +387,13 @@ namespace IngameScript
                     continue;
                 }
 
+                // A configured group leaves out-of-group consumers alone: never fill them and never
+                // drain their fuel/ammo. Out-of-group plain containers stay valid balance sources.
+                if (entry.ConsumerKind != ConsumerKind.None && !IsInGroup(entry.Block))
+                {
+                    continue;
+                }
+
                 _balanceSources.Add(entry);
             }
 
@@ -739,6 +746,12 @@ namespace IngameScript
                     continue;
                 }
 
+                // Only stock consumers that are valid managed targets (group members, or any when no group).
+                if (!IsInGroup(entry.Block))
+                {
+                    continue;
+                }
+
                 IMyInventory dst = entry.Inventory;
                 if (dst == null)
                 {
@@ -923,6 +936,12 @@ namespace IngameScript
 
                         ContainerEntry srcEntry = kv.Value;
                         if (srcEntry == null || srcEntry == entry)
+                        {
+                            continue;
+                        }
+
+                        // Don't pull ammo out of an out-of-group consumer (leave it alone).
+                        if (srcEntry.ConsumerKind != ConsumerKind.None && !IsInGroup(srcEntry.Block))
                         {
                             continue;
                         }

@@ -111,5 +111,67 @@ namespace Shared.Tests
             ScopeBuilder.ComputeScopeDriftHash(mech1, null)
                 .Should().NotBe(ScopeBuilder.ComputeScopeDriftHash(mech2, null));
         }
+
+        [Fact]
+        public void Group_mode_admits_only_members()
+        {
+            var groupIds = new HashSet<long> { 100, 200 };
+            var scopeGrids = new HashSet<long> { 1, 2 };
+            ScopeBuilder.IsBlockInScope(true, groupIds, scopeGrids, 100, 1).Should().BeTrue();
+            ScopeBuilder.IsBlockInScope(true, groupIds, scopeGrids, 300, 1).Should().BeFalse();
+        }
+
+        [Fact]
+        public void Group_mode_excludes_non_member_on_in_scope_grid()
+        {
+            var groupIds = new HashSet<long> { 100 };
+            var scopeGrids = new HashSet<long> { 1 };
+            ScopeBuilder.IsBlockInScope(true, groupIds, scopeGrids, 300, 1).Should().BeFalse();
+        }
+
+        [Fact]
+        public void Grid_mode_uses_scope_grids()
+        {
+            var scopeGrids = new HashSet<long> { 1, 2 };
+            ScopeBuilder.IsBlockInScope(false, null, scopeGrids, 100, 1).Should().BeTrue();
+            ScopeBuilder.IsBlockInScope(false, null, scopeGrids, 100, 3).Should().BeFalse();
+        }
+
+        [Fact]
+        public void Group_mode_with_null_members_admits_nothing()
+        {
+            var scopeGrids = new HashSet<long> { 1 };
+            ScopeBuilder.IsBlockInScope(true, null, scopeGrids, 100, 1).Should().BeFalse();
+        }
+
+        [Fact]
+        public void Grid_mode_with_null_scope_admits_nothing()
+        {
+            ScopeBuilder.IsBlockInScope(false, null, null, 100, 1).Should().BeFalse();
+        }
+
+        [Fact]
+        public void IsManagedTarget_no_group_admits_any()
+        {
+            ScopeBuilder.IsManagedTarget(false, null, 100).Should().BeTrue();
+        }
+
+        [Fact]
+        public void IsManagedTarget_group_admits_member()
+        {
+            ScopeBuilder.IsManagedTarget(true, new HashSet<long> { 100 }, 100).Should().BeTrue();
+        }
+
+        [Fact]
+        public void IsManagedTarget_group_excludes_non_member()
+        {
+            ScopeBuilder.IsManagedTarget(true, new HashSet<long> { 100 }, 300).Should().BeFalse();
+        }
+
+        [Fact]
+        public void IsManagedTarget_group_with_null_members_admits_nothing()
+        {
+            ScopeBuilder.IsManagedTarget(true, null, 100).Should().BeFalse();
+        }
     }
 }

@@ -75,6 +75,9 @@ namespace IngameScript
             /// <summary>Master kill-switch for connector federation. When false, <c>[Federate]</c>-tagged connectors are ignored.</summary>
             public bool EnableConnectorFederation = true;
 
+            /// <summary>Optional terminal-group name. When set, Goose manages only that group's member blocks and tagged blocks (e.g. <c>[Federate]</c> connectors) are ignored unless they belong to the group. Empty (default) uses the wider grid-based scope.</summary>
+            public string BlockGroup = "";
+
             /// <summary>
             /// When true, redistributes items across non-Stock category-tagged containers so each
             /// <c>[P:NN]</c> tier holds an equal share per item type. Higher-priority tiers fill first;
@@ -134,6 +137,7 @@ namespace IngameScript
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
             _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
+            _config.BlockGroup = (_ini.Get("Goose", "blockGroup").ToString("") ?? "").Trim();
             _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
             _config.EnableBridge = _ini.Get("Goose", "enableBridge").ToBoolean(true);
             _config.BridgeChannelTag = _ini.Get("Goose", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
@@ -377,6 +381,15 @@ namespace IngameScript
                 _ini.Set("Goose", "weaponAmmoFillPercent", 0);
                 _ini.SetComment("Goose", "weaponAmmoFillPercent",
                     "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "blockGroup"))
+            {
+                _ini.Set("Goose", "blockGroup", "");
+                _ini.SetComment("Goose", "blockGroup",
+                    "Optional terminal-group name. When set, Goose manages ONLY blocks in this group; " +
+                    "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
+                    "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
                 changed = true;
             }
             if (!_ini.ContainsKey("Goose", "enableSameRoleBalancing"))

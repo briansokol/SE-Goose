@@ -52,8 +52,7 @@ namespace IngameScript
         {
             return block != null
                 && !block.Closed
-                && block.CubeGrid != null
-                && _scopeGrids.Contains(block.CubeGrid.EntityId);
+                && IsInScope(block);
         }
 
         /// <summary>Returns true when a block name carries an opt-out tag (<c>[Ignore]</c> or <c>[Locked]</c>).</summary>
@@ -93,15 +92,15 @@ namespace IngameScript
             }
 
             _cargoContainers.Clear();
-            GridTerminalSystem.GetBlocksOfType(_cargoContainers, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
+            GridTerminalSystem.GetBlocksOfType(_cargoContainers, b => !b.Closed && IsInScope(b));
             yield return YieldReason.ChunkBoundary;
 
             _connectors.Clear();
-            GridTerminalSystem.GetBlocksOfType(_connectors, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
+            GridTerminalSystem.GetBlocksOfType(_connectors, b => !b.Closed && IsInScope(b));
             yield return YieldReason.ChunkBoundary;
 
             _productionBlocks.Clear();
-            GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
+            GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && IsInScope(b));
             yield return YieldReason.ChunkBoundary;
 
             _lastRescanSummary = "Rescan: " + _allInventoryBlocks.Count + " inv, "

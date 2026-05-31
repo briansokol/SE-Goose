@@ -95,6 +95,38 @@ namespace IngameScript
             }
         }
 
+        /// <summary>Pure membership decision shared by group and grid scope modes. In group mode a block is in scope only when it is a named group member; otherwise membership falls back to grid scope.</summary>
+        /// <param name="groupModeActive">True when a non-empty group name resolved to an existing group.</param>
+        /// <param name="groupBlockIds">EntityIds of the resolved group's member blocks; consulted only in group mode.</param>
+        /// <param name="scopeGrids">EntityIds of grids in grid-based scope; consulted only outside group mode.</param>
+        /// <param name="blockEntityId">EntityId of the candidate block.</param>
+        /// <param name="blockGridId">EntityId of the candidate block's grid.</param>
+        /// <returns>True when the block is in management scope under the active mode.</returns>
+        public static bool IsBlockInScope(
+            bool groupModeActive,
+            HashSet<long> groupBlockIds,
+            HashSet<long> scopeGrids,
+            long blockEntityId,
+            long blockGridId)
+        {
+            if (groupModeActive)
+            {
+                return groupBlockIds != null && groupBlockIds.Contains(blockEntityId);
+            }
+
+            return scopeGrids != null && scopeGrids.Contains(blockGridId);
+        }
+
+        /// <summary>True when a block is an eligible managed target: every block when no group is configured, or only group members when one is. Grid filtering is handled upstream by discovery.</summary>
+        /// <param name="groupModeActive">True when a block group is configured.</param>
+        /// <param name="groupBlockIds">EntityIds of the configured group's member blocks; consulted only in group mode.</param>
+        /// <param name="blockEntityId">EntityId of the candidate block.</param>
+        /// <returns>True when the block may be used as a managed destination/target.</returns>
+        public static bool IsManagedTarget(bool groupModeActive, HashSet<long> groupBlockIds, long blockEntityId)
+        {
+            return !groupModeActive || (groupBlockIds != null && groupBlockIds.Contains(blockEntityId));
+        }
+
         /// <summary>Cheap rolling hash over mechanical and connector edges. Differs whenever any scope input changes.</summary>
         public static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn)
         {
