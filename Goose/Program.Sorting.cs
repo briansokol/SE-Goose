@@ -130,6 +130,22 @@ namespace IngameScript
             return total;
         }
 
+        /// <summary>Fills <see cref="_quotaSnapshot"/> with the per-type quantity totals of <paramref name="inv"/> in a single pass, so quota fulfillment can read current amounts without re-scanning the inventory for every quota.</summary>
+        /// <param name="inv">Inventory to snapshot.</param>
+        private void BuildQuotaSnapshot(IMyInventory inv)
+        {
+            _quotaSnapshot.Clear();
+            _itemBuffer.Clear();
+            inv.GetItems(_itemBuffer);
+            for (int i = 0; i < _itemBuffer.Count; i++)
+            {
+                MyInventoryItem item = _itemBuffer[i];
+                long current;
+                _quotaSnapshot.TryGetValue(item.Type, out current);
+                _quotaSnapshot[item.Type] = current + (long)item.Amount;
+            }
+        }
+
         /// <summary>
         /// Wrapper around <see cref="MoveAllOfType"/> that returns the actual delta on the destination.
         /// Measuring the delta is necessary because partial transfers are common and the underlying
@@ -168,11 +184,14 @@ namespace IngameScript
                     continue;
                 }
 
+                BuildQuotaSnapshot(dst.Inventory);
+
                 foreach (KeyValuePair<MyItemType, StockQuota> pair in dst.Quotas)
                 {
                     MyItemType type = pair.Key;
                     StockQuota q = pair.Value;
-                    long current = GetCurrentAmount(dst.Inventory, type);
+                    long current;
+                    _quotaSnapshot.TryGetValue(type, out current);
                     long need = 0;
                     long excess = 0;
                     switch (q.Mode)
@@ -208,19 +227,24 @@ namespace IngameScript
                             break;
                     }
 
+                    long pulled = 0;
+                    long pushed = 0;
                     if (need > 0)
                     {
-                        PullItemFromSources(dst, type, need);
+                        pulled = PullItemFromSources(dst, type, need);
                     }
 
                     if (excess > 0)
                     {
-                        PushExcessToCategory(dst, type, excess);
+                        pushed = PushExcessToCategory(dst, type, excess);
                     }
 
                     if (q.Mode == QuotaMode.Exact || q.Mode == QuotaMode.Minimum)
                     {
-                        long after = GetCurrentAmount(dst.Inventory, type);
+                        // Pull only adds this type, push only removes it, and need/excess are
+                        // mutually exclusive per quota, so the snapshot value plus the moved
+                        // deltas is the post-transfer amount without a second inventory scan.
+                        long after = current + pulled - pushed;
                         if (after < q.Amount)
                         {
                             string typeShort = type.TypeId != null
@@ -248,7 +272,8 @@ namespace IngameScript
         /// preferring other stock containers' excess, then category-routed containers, then
         /// generic uncategorized inventories.
         /// </summary>
-        private void PullItemFromSources(ContainerEntry dst, MyItemType type, long need)
+        /// <returns>The number of units actually moved into <paramref name="dst"/>.</returns>
+        private long PullItemFromSources(ContainerEntry dst, MyItemType type, long need)
         {
             long remaining = need;
 
@@ -295,7 +320,7 @@ namespace IngameScript
                 remaining -= TryMove(src.Inventory, dst.Inventory, type, Math.Min(srcExcess, remaining), "stock<-stock");
                 if (BudgetExceeded())
                 {
-                    return;
+                    return need - remaining;
                 }
             }
 
@@ -324,7 +349,7 @@ namespace IngameScript
                     remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock<-cat");
                     if (BudgetExceeded())
                     {
-                        return;
+                        return need - remaining;
                     }
                 }
             }
@@ -369,23 +394,26 @@ namespace IngameScript
                 remaining -= TryMove(srcInv, dst.Inventory, type, remaining, "stock<-gen");
                 if (BudgetExceeded())
                 {
-                    return;
+                    return need - remaining;
                 }
             }
+
+            return need - remaining;
         }
 
         /// <summary>
         /// Pushes <paramref name="excess"/> units out of <paramref name="src"/> into a category-routed
         /// container; warns once per category when no route exists.
         /// </summary>
-        private void PushExcessToCategory(ContainerEntry src, MyItemType type, long excess)
+        /// <returns>The number of units actually moved out of <paramref name="src"/>.</returns>
+        private long PushExcessToCategory(ContainerEntry src, MyItemType type, long excess)
         {
             ItemCategory cat = Classify(type);
             List<ContainerEntry> routes;
             if (!_containersByCategory.TryGetValue(cat, out routes))
             {
                 LogWarningOnce("noroute:" + cat, "[Goose] Excess " + type.SubtypeId + " has no [" + cat + "] route");
-                return;
+                return 0;
             }
             long remaining = excess;
             for (int i = 0; i < routes.Count && remaining > 0; i++)
@@ -409,9 +437,11 @@ namespace IngameScript
                 remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock->cat");
                 if (BudgetExceeded())
                 {
-                    return;
+                    return excess - remaining;
                 }
             }
+
+            return excess - remaining;
         }
 
         /// <summary>

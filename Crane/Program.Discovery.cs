@@ -219,7 +219,7 @@ namespace IngameScript
                     "[Crane] No assemblers found in scope. Add assemblers to this grid (or to a federated grid via a [Federate]-tagged connector).");
             }
 
-            _logger.LogAction("Rescan: " + _assemblers.Count + " asm, "
+            _logger.SetRescanSummary("Rescan: " + _assemblers.Count + " asm, "
                 + _cargoContainers.Count + " cargo, " + _refineries.Count + " refinery, "
                 + _ccraftLcds.Count + " [CCraft], " + _cerrorLcds.Count + " [CError]");
 

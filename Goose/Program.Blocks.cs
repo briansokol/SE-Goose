@@ -91,6 +91,9 @@ namespace IngameScript
         /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
         private readonly List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
 
+        /// <summary>Reused per-type quantity snapshot of a single stock container, built once per container in <see cref="StepFulfillStockQuotas"/> to avoid re-scanning the inventory for every quota.</summary>
+        private readonly Dictionary<MyItemType, long> _quotaSnapshot = new Dictionary<MyItemType, long>();
+
         /// <summary>Reused active-quota map for <see cref="SyncStockTemplate"/>; key = quota key, value = full <c>key=value</c> line.</summary>
         private readonly Dictionary<string, string> _stockActiveQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
 

@@ -37,7 +37,7 @@ namespace IngameScript
             _dispatcher = new WorkDispatcher(CraneStepLabels, StepFor, BudgetExceeded,
                 () => _logger.ResetOneShotWarnings(),
                 (ctx, ex) => _logger.LogError(ctx, ex));
-            Runtime.UpdateFrequency = UpdateFrequency.Update10;
+            Runtime.UpdateFrequency = UpdateFrequency.Update100;
             InitCommands();
             InitBridge();
             _logger.LogAction("Crane v1 initialized");
@@ -63,7 +63,7 @@ namespace IngameScript
                 {
                     _bridge.Tick(_mainTickCount);
                 }
-                if ((updateSource & UpdateType.Update10) != 0 && !_paused)
+                if ((updateSource & UpdateType.Update100) != 0 && !_paused)
                 {
                     _dispatcher.RunOneTick();
                 }

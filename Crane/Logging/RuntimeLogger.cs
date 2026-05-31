@@ -18,6 +18,7 @@ namespace IngameScript
         public int MaxWarningEntries = 32;
 
         private readonly Queue<string> _actionLog = new Queue<string>();
+        private string _lastRescanSummary = "";
         private readonly List<string> _warningOrder = new List<string>();
         private readonly Dictionary<string, int> _warnings = new Dictionary<string, int>();
         private readonly HashSet<string> _oneShotWarnedKeys = new HashSet<string>();
@@ -42,6 +43,13 @@ namespace IngameScript
             {
                 _actionLog.Dequeue();
             }
+        }
+
+        /// <summary>Records the most recent rescan summary, shown as a single in-place status line instead of accumulating in the action log.</summary>
+        /// <param name="msg">Rescan summary text to display.</param>
+        public void SetRescanSummary(string msg)
+        {
+            _lastRescanSummary = msg ?? "";
         }
 
         /// <summary>Records a warning, deduplicating repeats and evicting the oldest when the cap is hit.</summary>
@@ -128,6 +136,10 @@ namespace IngameScript
             _echoBuffer.Append("Instr: ").Append(currentInstr)
                 .Append('/').Append(maxInstr).Append('\n');
             _echoBuffer.Append("LastRunMs: ").Append(lastRunMs.ToString("F2")).Append('\n');
+            if (_lastRescanSummary.Length > 0)
+            {
+                _echoBuffer.Append(_lastRescanSummary).Append('\n');
+            }
             if (_actionLog.Count > 0)
             {
                 _echoBuffer.Append("Last:\n");
