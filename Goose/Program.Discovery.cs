@@ -43,8 +43,7 @@ namespace IngameScript
         /// <summary>Predicate for blocks Goose should manage: in scope, has inventory, not ignored.</summary>
         private bool IsManaged(IMyTerminalBlock block)
         {
-            return IsInScope(block)
-                && InventoryScan.IsScannableInventoryBlock(block, _scopeGrids, Me)
+            return InventoryScan.IsScannableInventoryBlock(block, _scopeGrids, Me)
                 && !HasIgnoreTag(block.CustomName);
         }
 

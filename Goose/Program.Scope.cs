@@ -34,19 +34,23 @@ namespace IngameScript
         /// <summary>True when <see cref="GooseConfig.BlockGroup"/> is non-empty. When true, <see cref="_groupBlockIds"/> is the sole authority for membership (an empty set means nothing is managed).</summary>
         private bool _groupModeActive = false;
 
-        /// <summary>Single membership gate for discovery: group members only in group mode, otherwise grid-based scope.</summary>
+        /// <summary>Grid-based discovery gate: a block is in scope when it sits on a grid reachable from the PB. Independent of any configured block group; the group only limits managed targets via <see cref="IsInGroup"/>.</summary>
         /// <param name="block">Candidate block.</param>
         /// <returns>True when the block is in management scope.</returns>
         private bool IsInScope(IMyTerminalBlock block)
         {
-            if (block == null || block.CubeGrid == null)
-            {
-                return false;
-            }
+            return block != null
+                && block.CubeGrid != null
+                && _scopeGrids.Contains(block.CubeGrid.EntityId);
+        }
 
-            return ScopeBuilder.IsBlockInScope(
-                _groupModeActive, _groupBlockIds, _scopeGrids,
-                block.EntityId, block.CubeGrid.EntityId);
+        /// <summary>True when a block may be used as a managed destination/target: every in-scope block when no group is configured, or only group members when one is.</summary>
+        /// <param name="block">Candidate block.</param>
+        /// <returns>True when the block is an eligible managed target.</returns>
+        private bool IsInGroup(IMyTerminalBlock block)
+        {
+            return block != null
+                && ScopeBuilder.IsManagedTarget(_groupModeActive, _groupBlockIds, block.EntityId);
         }
 
         /// <summary>Projects live mechanical-connection and connector blocks via the shared enumerator, then refreshes <see cref="_scopeGrids"/> through <see cref="ScopeBuilder.BuildScope"/>. When <see cref="GooseConfig.BlockGroup"/> is set, also resolves the named group into <see cref="_groupBlockIds"/>.</summary>

@@ -64,19 +64,23 @@ namespace IngameScript
         /// <summary>True when <see cref="CraneConfig.BlockGroup"/> is non-empty. When true, <see cref="_groupBlockIds"/> is the sole authority for membership (an empty set means nothing is managed).</summary>
         private bool _groupModeActive = false;
 
-        /// <summary>Single membership gate for discovery: group members only in group mode, otherwise grid-based scope.</summary>
+        /// <summary>Grid-based discovery gate: a block is in scope when it sits on a grid reachable from the PB. Independent of any configured block group; the group only limits managed targets via <see cref="IsInGroup"/>.</summary>
         /// <param name="block">Candidate block.</param>
         /// <returns>True when the block is in management scope.</returns>
         private bool IsInScope(IMyTerminalBlock block)
         {
-            if (block == null || block.CubeGrid == null)
-            {
-                return false;
-            }
+            return block != null
+                && block.CubeGrid != null
+                && _scopeGrids.Contains(block.CubeGrid.EntityId);
+        }
 
-            return ScopeBuilder.IsBlockInScope(
-                _groupModeActive, _groupBlockIds, _scopeGrids,
-                block.EntityId, block.CubeGrid.EntityId);
+        /// <summary>True when a block may be used as a managed target (assembler/refinery Crane acts on): every in-scope block when no group is configured, or only group members when one is.</summary>
+        /// <param name="block">Candidate block.</param>
+        /// <returns>True when the block is an eligible managed target.</returns>
+        private bool IsInGroup(IMyTerminalBlock block)
+        {
+            return block != null
+                && ScopeBuilder.IsManagedTarget(_groupModeActive, _groupBlockIds, block.EntityId);
         }
 
         /// <summary>Rebuilds <see cref="_scopeGrids"/> when due, including [Federate]-tagged connector edges when enabled.</summary>
@@ -189,6 +193,7 @@ namespace IngameScript
                 asm != null
                 && !asm.Closed
                 && IsInScope(asm)
+                && IsInGroup(asm)
                 && !BlockNameTags.HasIgnoreTag(asm.CustomName));
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
@@ -213,8 +218,7 @@ namespace IngameScript
             }
 
             GridTerminalSystem.GetBlocksOfType(_allInventoryBlocks,
-                b => IsInScope(b)
-                    && InventoryScan.IsScannableInventoryBlock(b, _scopeGrids, Me)
+                b => InventoryScan.IsScannableInventoryBlock(b, _scopeGrids, Me)
                     && !BlockNameTags.HasIgnoreTag(b.CustomName));
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
@@ -226,6 +230,7 @@ namespace IngameScript
                 r != null
                 && !r.Closed
                 && IsInScope(r)
+                && IsInGroup(r)
                 && !BlockNameTags.HasIgnoreTag(r.CustomName));
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
