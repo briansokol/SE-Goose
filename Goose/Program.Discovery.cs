@@ -34,6 +34,15 @@ namespace IngameScript
         /// <summary>Refineries, assemblers, and other production blocks in scope.</summary>
         private readonly List<IMyProductionBlock> _productionBlocks = new List<IMyProductionBlock>();
 
+        /// <summary>First surfaces of in-scope blocks tagged <c>[GError]</c>, redrawn each cycle.</summary>
+        private readonly List<IMyTextSurface> _gerrorLcds = new List<IMyTextSurface>();
+
+        /// <summary>First surfaces of in-scope blocks tagged <c>[GStatus]</c>, redrawn each cycle.</summary>
+        private readonly List<IMyTextSurface> _gstatusLcds = new List<IMyTextSurface>();
+
+        /// <summary>Scratch buffer reused by status-surface enumeration during rescans.</summary>
+        private readonly List<IMyTextSurfaceProvider> _surfaceProviderScratch = new List<IMyTextSurfaceProvider>();
+
         /// <summary>Ticks elapsed since the last rescan; initialized high to force a first-cycle rescan.</summary>
         private int _ticksSinceRescan = int.MaxValue;
 
@@ -45,6 +54,23 @@ namespace IngameScript
         {
             return InventoryScan.IsScannableInventoryBlock(block, _scopeGrids, Me)
                 && !HasIgnoreTag(block.CustomName);
+        }
+
+        /// <summary>Predicate for status-display surfaces: in scope, not ignored, tagged <c>[GError]</c> or <c>[GStatus]</c>.</summary>
+        private bool IsStatusSurfaceProvider(IMyTextSurfaceProvider provider)
+        {
+            var tb = provider as IMyTerminalBlock;
+            if (tb == null || tb.Closed || tb == Me)
+            {
+                return false;
+            }
+            if (!IsInScope(tb) || HasIgnoreTag(tb.CustomName))
+            {
+                return false;
+            }
+
+            return BlockNameTags.NameHasTag(tb.CustomName, "[GError]")
+                || BlockNameTags.NameHasTag(tb.CustomName, "[GStatus]");
         }
 
         /// <summary>Returns true when a previously discovered block is still alive and in scope.</summary>
@@ -103,9 +129,35 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && IsInScope(b));
             yield return YieldReason.ChunkBoundary;
 
+            _gerrorLcds.Clear();
+            _gstatusLcds.Clear();
+            _surfaceProviderScratch.Clear();
+            GridTerminalSystem.GetBlocksOfType(_surfaceProviderScratch, IsStatusSurfaceProvider);
+            for (int i = 0; i < _surfaceProviderScratch.Count; i++)
+            {
+                IMyTextSurfaceProvider provider = _surfaceProviderScratch[i];
+                if (provider.SurfaceCount <= 0)
+                {
+                    continue;
+                }
+
+                var tb = provider as IMyTerminalBlock;
+                if (BlockNameTags.NameHasTag(tb.CustomName, "[GError]"))
+                {
+                    _gerrorLcds.Add(provider.GetSurface(0));
+                }
+                if (BlockNameTags.NameHasTag(tb.CustomName, "[GStatus]"))
+                {
+                    _gstatusLcds.Add(provider.GetSurface(0));
+                }
+            }
+            yield return YieldReason.ChunkBoundary;
+
             _lastRescanSummary = "Rescan: " + _allInventoryBlocks.Count + " inv, "
                 + _cargoContainers.Count + " cargo, "
-                + _productionBlocks.Count + " prod";
+                + _productionBlocks.Count + " prod, "
+                + _gstatusLcds.Count + " [GStatus], "
+                + _gerrorLcds.Count + " [GError]";
         }
     }
 }
