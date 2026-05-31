@@ -14,6 +14,9 @@ namespace IngameScript
             /// <summary>When true, [Federate]-tagged connectors on Me.CubeGrid admit the docked remote grid into Crane's management scope.</summary>
             public bool EnableConnectorFederation = true;
 
+            /// <summary>Optional terminal-group name. When set, Crane manages only that group's member blocks and tagged blocks (e.g. <c>[Federate]</c> connectors) are ignored unless they belong to the group. Empty (default) uses the wider grid-based scope.</summary>
+            public string BlockGroup = "";
+
             /// <summary>Maximum total queue depth Crane will maintain per (assembler, blueprint) pair.</summary>
             public int AutocraftMaxQueueDepth = 100;
 
@@ -95,6 +98,7 @@ namespace IngameScript
             }
             _config.EnableAutocraft = MyIniHelpers.GetBool(_ini, "Crane", "enableAutocraft", true);
             _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, "Crane", "enableConnectorFederation", true);
+            _config.BlockGroup = (_ini.Get("Crane", "blockGroup").ToString("") ?? "").Trim();
             _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, "Crane", "autocraftMaxQueueDepth", 100);
             _config.AssemblerIngotKeep = MyIniHelpers.GetFloat(_ini, "Crane", "assemblerIngotKeep", 50f);
             _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 60);
@@ -142,6 +146,15 @@ namespace IngameScript
                 _ini.Set("Crane", "enableConnectorFederation", true);
                 _ini.SetComment("Crane", "enableConnectorFederation",
                     "When true, [Federate]-tagged connectors on this grid admit the docked remote grid into Crane's management scope.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Crane", "blockGroup"))
+            {
+                _ini.Set("Crane", "blockGroup", "");
+                _ini.SetComment("Crane", "blockGroup",
+                    "Optional terminal-group name. When set, Crane manages ONLY blocks in this group; " +
+                    "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
+                    "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
                 changed = true;
             }
             if (!_ini.ContainsKey("Crane", "autocraftMaxQueueDepth"))

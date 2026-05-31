@@ -93,6 +93,8 @@ namespace IngameScript
                 } },
                 { "reset-scope", c => {
                     _scopeGrids.Clear();
+                    _groupBlockIds.Clear();
+                    _groupModeActive = false;
                     _rescanRequested = true;
                     _logger.LogAction("cmd: reset-scope");
                 } }

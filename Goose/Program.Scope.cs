@@ -25,16 +25,75 @@ namespace IngameScript
         /// <summary>Rolling hash of (mechanical attach state + connector dock state + scope-affecting tags). Differs across ticks when scope inputs change; equal otherwise.</summary>
         private ulong _scopeDriftHash;
 
-        /// <summary>Projects live mechanical-connection and connector blocks via the shared enumerator, then refreshes <see cref="_scopeGrids"/> through <see cref="ScopeBuilder.BuildScope"/>.</summary>
+        /// <summary>EntityIds of the configured block group's member blocks. Empty unless <see cref="_groupModeActive"/> is true; populated during <see cref="RebuildScope"/>.</summary>
+        private readonly HashSet<long> _groupBlockIds = new HashSet<long>();
+
+        /// <summary>Reusable buffer for group-member enumeration during scope rebuilds.</summary>
+        private readonly List<IMyTerminalBlock> _groupBlockScratch = new List<IMyTerminalBlock>();
+
+        /// <summary>True when <see cref="GooseConfig.BlockGroup"/> is non-empty. When true, <see cref="_groupBlockIds"/> is the sole authority for membership (an empty set means nothing is managed).</summary>
+        private bool _groupModeActive = false;
+
+        /// <summary>Single membership gate for discovery: group members only in group mode, otherwise grid-based scope.</summary>
+        /// <param name="block">Candidate block.</param>
+        /// <returns>True when the block is in management scope.</returns>
+        private bool IsInScope(IMyTerminalBlock block)
+        {
+            if (block == null || block.CubeGrid == null)
+            {
+                return false;
+            }
+
+            return ScopeBuilder.IsBlockInScope(
+                _groupModeActive, _groupBlockIds, _scopeGrids,
+                block.EntityId, block.CubeGrid.EntityId);
+        }
+
+        /// <summary>Projects live mechanical-connection and connector blocks via the shared enumerator, then refreshes <see cref="_scopeGrids"/> through <see cref="ScopeBuilder.BuildScope"/>. When <see cref="GooseConfig.BlockGroup"/> is set, also resolves the named group into <see cref="_groupBlockIds"/>.</summary>
         private void RebuildScope()
         {
             ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _scopeMechRaw, _scopeConnRaw, _scopeMechBuf, _scopeConnBuf);
 
             ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
 
+            _groupBlockIds.Clear();
+            _groupModeActive = false;
+            string groupName = _config.BlockGroup;
+            if (!string.IsNullOrEmpty(groupName))
+            {
+                _groupModeActive = true;
+                IMyBlockGroup group = GridTerminalSystem.GetBlockGroupWithName(groupName);
+                if (group == null)
+                {
+                    LogWarningOnce("scope:group-missing:" + groupName,
+                        "[Goose] Block group '" + groupName + "' not found. Managing nothing until it exists. Check the blockGroup name in CustomData.");
+                }
+                else
+                {
+                    _groupBlockScratch.Clear();
+                    group.GetBlocks(_groupBlockScratch);
+                    for (int i = 0; i < _groupBlockScratch.Count; i++)
+                    {
+                        IMyTerminalBlock b = _groupBlockScratch[i];
+                        if (b != null && !b.Closed)
+                        {
+                            _groupBlockIds.Add(b.EntityId);
+                        }
+                    }
+                }
+            }
+
             _scopeDriftHash = ScopeBuilder.ComputeScopeDriftHash(_scopeMechBuf, _scopeConnBuf);
 
-            LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
+            if (_groupModeActive)
+            {
+                LogActionOnce("scope:group:" + groupName + ":" + _groupBlockIds.Count,
+                    "Scope: group '" + groupName + "', " + _groupBlockIds.Count + " block(s)");
+            }
+            else
+            {
+                LogActionOnce("scope:size:" + _scopeGrids.Count, "Scope: " + _scopeGrids.Count + " grid(s)");
+            }
         }
 
         /// <summary>Rebuilds <see cref="_scopeGrids"/> when a rescan is pending, on first run, or once the rescan interval elapses; otherwise yields cheaply.</summary>
@@ -42,6 +101,7 @@ namespace IngameScript
         {
             bool needs = _rescanRequested
                       || _scopeGrids.Count == 0
+                      || (_groupModeActive && _groupBlockIds.Count == 0)
                       || _ticksSinceRescan >= _config.RescanIntervalTicks;
 
             if (!needs && _scopeGrids.Count > 0)
