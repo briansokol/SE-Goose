@@ -25,6 +25,9 @@ namespace IngameScript
         /// <summary>Recent action messages shown on the Echo display (capped by config).</summary>
         private readonly Queue<string> _actionLog = new Queue<string>();
 
+        /// <summary>Most recent rescan summary, shown as a single in-place status line instead of accumulating in the action log.</summary>
+        private string _lastRescanSummary = "";
+
         /// <summary>Insertion order of <see cref="_warnings"/> keys for FIFO eviction.</summary>
         private readonly List<string> _warningOrder = new List<string>();
 
@@ -133,6 +136,10 @@ namespace IngameScript
                 .Append('/').Append(Runtime.MaxInstructionCount).Append('\n');
             _echoBuffer.Append("LastRunMs: ").Append(Runtime.LastRunTimeMs.ToString("F2")).Append('\n');
             AppendBridgeEchoLine(_echoBuffer);
+            if (_lastRescanSummary.Length > 0)
+            {
+                _echoBuffer.Append(_lastRescanSummary).Append('\n');
+            }
             if (_actionLog.Count > 0)
             {
                 _echoBuffer.Append("Last:\n");

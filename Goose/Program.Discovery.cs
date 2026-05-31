@@ -104,9 +104,9 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && b.CubeGrid != null && _scopeGrids.Contains(b.CubeGrid.EntityId));
             yield return YieldReason.ChunkBoundary;
 
-            LogAction("Rescan: " + _allInventoryBlocks.Count + " inv, "
+            _lastRescanSummary = "Rescan: " + _allInventoryBlocks.Count + " inv, "
                 + _cargoContainers.Count + " cargo, "
-                + _productionBlocks.Count + " prod");
+                + _productionBlocks.Count + " prod";
         }
     }
 }
