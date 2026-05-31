@@ -36,7 +36,7 @@ namespace IngameScript
         public Program()
         {
             Catalog_LoadFromStorage();
-            Runtime.UpdateFrequency = UpdateFrequency.Update10;
+            Runtime.UpdateFrequency = UpdateFrequency.Update100;
             InitCommands();
             _workIterator = StepRoot();
             InitBridge();
@@ -68,7 +68,7 @@ namespace IngameScript
                 {
                     _bridge.Tick(_mainTickCount);
                 }
-                if ((updateSource & UpdateType.Update10) != 0 && !_paused)
+                if ((updateSource & UpdateType.Update100) != 0 && !_paused)
                 {
                     RunOneTick();
                 }

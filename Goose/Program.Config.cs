@@ -49,7 +49,7 @@ namespace IngameScript
         public class GooseConfig
         {
             /// <summary>Ticks between automatic rescans of managed blocks.</summary>
-            public int RescanIntervalTicks = 600;
+            public int RescanIntervalTicks = 60;
 
             /// <summary>Fraction of the per-tick instruction budget the script may consume before yielding.</summary>
             public float BudgetFraction = 0.8f;
@@ -89,7 +89,7 @@ namespace IngameScript
             public string BridgeChannelTag = BridgeProtocol.DefaultChannelTag;
 
             /// <summary>Heartbeat cadence in main-loop ticks. Also drives <c>hello</c> resend while no peer is linked.</summary>
-            public int BridgeHeartbeatTicks = 60;
+            public int BridgeHeartbeatTicks = 6;
 
             /// <summary>Maximum number of concurrent assembler holds tracked. Older holds are evicted FIFO when exceeded.</summary>
             public int BridgeMaxHoldsTracked = 64;
@@ -128,7 +128,7 @@ namespace IngameScript
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            _config.RescanIntervalTicks = _ini.Get("Goose", "rescanIntervalTicks").ToInt32(600);
+            _config.RescanIntervalTicks = _ini.Get("Goose", "rescanIntervalTicks").ToInt32(60);
             _config.BudgetFraction = (float)_ini.Get("Goose", "budgetFraction").ToDouble(0.8);
             _config.DebugLogging = _ini.Get("Goose", "debugLogging").ToBoolean(false);
             _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
@@ -137,7 +137,7 @@ namespace IngameScript
             _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
             _config.EnableBridge = _ini.Get("Goose", "enableBridge").ToBoolean(true);
             _config.BridgeChannelTag = _ini.Get("Goose", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
-            int bridgeHbRaw = _ini.Get("Goose", "bridgeHeartbeatTicks").ToInt32(60);
+            int bridgeHbRaw = _ini.Get("Goose", "bridgeHeartbeatTicks").ToInt32(6);
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
             int bridgeMaxRaw = _ini.Get("Goose", "bridgeMaxHoldsTracked").ToInt32(64);
             _config.BridgeMaxHoldsTracked = bridgeMaxRaw < 1 ? 1 : bridgeMaxRaw;
@@ -405,9 +405,9 @@ namespace IngameScript
             }
             if (!_ini.ContainsKey("Goose", "bridgeHeartbeatTicks"))
             {
-                _ini.Set("Goose", "bridgeHeartbeatTicks", 60);
+                _ini.Set("Goose", "bridgeHeartbeatTicks", 6);
                 _ini.SetComment("Goose", "bridgeHeartbeatTicks",
-                    "Heartbeat cadence in main-loop ticks (Update10 ~ 6 ticks/sec; default 60 ~ 10s). " +
+                    "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
                     "Also drives hello resend while no peer is linked.");
                 changed = true;
             }

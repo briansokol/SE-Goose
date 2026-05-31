@@ -21,7 +21,7 @@ namespace IngameScript
             public float AssemblerIngotKeep = 50f;
 
             /// <summary>Ticks between automatic rescans of managed blocks.</summary>
-            public int RescanIntervalTicks = 600;
+            public int RescanIntervalTicks = 60;
 
             /// <summary>Fraction of the per-tick instruction budget Crane may consume before yielding.</summary>
             public float BudgetFraction = 0.8f;
@@ -42,7 +42,7 @@ namespace IngameScript
             public string BridgeChannelTag = BridgeProtocol.DefaultChannelTag;
 
             /// <summary>Heartbeat cadence in main-loop ticks. Also drives <c>hello</c> resend while no peer is linked.</summary>
-            public int BridgeHeartbeatTicks = 60;
+            public int BridgeHeartbeatTicks = 6;
 
             /// <summary>TTL (in main-loop ticks) attached to each assembler-hold announcement. Long enough to cover one Goose balance cycle plus margin; short enough that a crashed Crane self-heals quickly.</summary>
             public int AssemblerHoldTtlTicks = 30;
@@ -97,14 +97,14 @@ namespace IngameScript
             _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, "Crane", "enableConnectorFederation", true);
             _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, "Crane", "autocraftMaxQueueDepth", 100);
             _config.AssemblerIngotKeep = MyIniHelpers.GetFloat(_ini, "Crane", "assemblerIngotKeep", 50f);
-            _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 600);
+            _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 60);
             _config.BudgetFraction = MyIniHelpers.GetFloat(_ini, "Crane", "budgetFraction", 0.8f);
             _config.DebugLogging = MyIniHelpers.GetBool(_ini, "Crane", "debugLogging", false);
             _config.MaxActionLogEntries = MyIniHelpers.GetInt(_ini, "Crane", "maxActionLogEntries", 48);
             _config.MaxWarningEntries = MyIniHelpers.GetInt(_ini, "Crane", "maxWarningEntries", 32);
             _config.EnableBridge = MyIniHelpers.GetBool(_ini, "Crane", "enableBridge", true);
             _config.BridgeChannelTag = _ini.Get("Crane", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
-            int bridgeHbRaw = MyIniHelpers.GetInt(_ini, "Crane", "bridgeHeartbeatTicks", 60);
+            int bridgeHbRaw = MyIniHelpers.GetInt(_ini, "Crane", "bridgeHeartbeatTicks", 6);
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
             int holdTtlRaw = MyIniHelpers.GetInt(_ini, "Crane", "assemblerHoldTtlTicks", 30);
             _config.AssemblerHoldTtlTicks = holdTtlRaw < 1 ? 1 : holdTtlRaw;
@@ -175,9 +175,9 @@ namespace IngameScript
             }
             if (!_ini.ContainsKey("Crane", "bridgeHeartbeatTicks"))
             {
-                _ini.Set("Crane", "bridgeHeartbeatTicks", 60);
+                _ini.Set("Crane", "bridgeHeartbeatTicks", 6);
                 _ini.SetComment("Crane", "bridgeHeartbeatTicks",
-                    "Heartbeat cadence in main-loop ticks (Update10 ~ 6 ticks/sec; default 60 ~ 10s). " +
+                    "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
                     "Also drives hello resend while no peer is linked.");
                 changed = true;
             }
