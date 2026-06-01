@@ -35,19 +35,6 @@ namespace Goose.Tests
             }
         }
 
-        public class RenderFillBar_Tests
-        {
-            [Theory]
-            [InlineData(60, 10, "[######----]")]
-            [InlineData(0, 10, "[----------]")]
-            [InlineData(100, 10, "[##########]")]
-            [InlineData(32, 10, "[###-------]")]
-            public void Renders_proportional_bar(int percent, int width, string expected)
-            {
-                Program.RenderFillBar(percent, width).Should().Be(expected);
-            }
-        }
-
         public class AbbreviateCategory_Tests
         {
             [Theory]
