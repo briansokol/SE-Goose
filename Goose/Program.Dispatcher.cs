@@ -35,7 +35,8 @@ namespace IngameScript
         private static readonly string[] StepLabels = {
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
-            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers"
+            "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers",
+            "RenderStatus"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -97,6 +98,8 @@ namespace IngameScript
                     return StepBalanceConsumers();
                 case 9:
                     return StepBalanceSameRoleContainers();
+                case 10:
+                    return StepRenderStatus();
                 default:
                     return NoOpStep();
             }
