@@ -1,22 +1,48 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Sandbox.ModAPI.Ingame;
-using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
+using VRageMath;
 
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        /// <summary>Width of the fill bar drawn on <c>[GStatus]</c> rows.</summary>
-        private const int StatusBarWidth = 10;
+        /// <summary>Font used for all status/error surfaces; proportional, so columns are aligned via sprite pixel positions.</summary>
+        private const string StatusFont = "Debug";
 
-        /// <summary>Width of the category label column on <c>[GStatus]</c> rows.</summary>
-        private const int StatusLabelWidth = 9;
+        /// <summary>Inter-row spacing multiplier applied on top of measured line height.</summary>
+        private const float StatusLineSpacing = 1.3f;
 
-        /// <summary>Reusable buffer for status/error rendering to avoid per-tick allocations.</summary>
-        private readonly StringBuilder _statusBuffer = new StringBuilder(512);
+        /// <summary>Lower clamp for the auto-fit font scale.</summary>
+        private const float StatusMinScale = 0.4f;
+
+        /// <summary>Upper clamp for the auto-fit font scale.</summary>
+        private const float StatusMaxScale = 1.0f;
+
+        /// <summary>Left edge of the fill bar, as a fraction of drawable width.</summary>
+        private const float StatusBarXFraction = 0.34f;
+
+        /// <summary>Fill bar width, as a fraction of drawable width.</summary>
+        private const float StatusBarWidthFraction = 0.44f;
+
+        /// <summary>Fill bar height, as a fraction of a row's text height.</summary>
+        private const float StatusBarHeightFraction = 0.55f;
+
+        /// <summary>Title text color.</summary>
+        private static readonly Color StatusTitleColor = Color.White;
+
+        /// <summary>Category label and percent text color.</summary>
+        private static readonly Color StatusLabelColor = Color.White;
+
+        /// <summary>Empty-track color behind a fill bar.</summary>
+        private static readonly Color StatusBarTrackColor = new Color(40, 40, 40);
+
+        /// <summary>Filled portion color of a fill bar.</summary>
+        private static readonly Color StatusBarFillColor = new Color(60, 160, 220);
+
+        /// <summary>Color for warnings and uncovered-category notices.</summary>
+        private static readonly Color StatusWarningColor = Color.Orange;
 
         /// <summary>Categories with at least one item present on the grid, rebuilt each render cycle.</summary>
         private readonly HashSet<ItemCategory> _presentCategories = new HashSet<ItemCategory>();
@@ -71,47 +97,85 @@ namespace IngameScript
             return _containersByCategory.TryGetValue(category, out entries) && entries.Count > 0;
         }
 
-        /// <summary>Writes the warning log to every <c>[GError]</c> surface.</summary>
+        /// <summary>Draws the warning log to every <c>[GError]</c> surface.</summary>
         private void RenderGErrorStatus()
         {
-            if (_gerrorLcds.Count == 0)
+            for (int i = 0; i < _gerrorLcds.Count; i++)
             {
-                return;
+                IMyTextSurface surface = _gerrorLcds[i];
+                if (surface != null)
+                {
+                    RenderGErrorSurface(surface);
+                }
             }
+        }
 
-            _statusBuffer.Clear();
-            _statusBuffer.Append("=== Goose Errors ===\n");
+        /// <summary>Draws per-category fill levels to every <c>[GStatus]</c> surface.</summary>
+        private void RenderGStatusStatus()
+        {
+            for (int i = 0; i < _gstatusLcds.Count; i++)
+            {
+                IMyTextSurface surface = _gstatusLcds[i];
+                if (surface != null)
+                {
+                    RenderGStatusSurface(surface);
+                }
+            }
+        }
+
+        /// <summary>Renders one <c>[GError]</c> surface: a title plus one row per active warning, auto-scaled to fit.</summary>
+        private void RenderGErrorSurface(IMyTextSurface surface)
+        {
+            var measurer = new SurfaceMeasurer(surface);
+            DisplayViewport vp = SurfaceRenderer.CreateViewport(surface);
+
+            int rowCount = 1 + Math.Max(1, _warnings.Count);
+            float lineHeight = measurer.Measure("Ag", StatusFont, 1f).Height;
+            float scale = LayoutScaler.FitScale(vp.Size.Y, rowCount, lineHeight, StatusLineSpacing, StatusMinScale, StatusMaxScale);
+            float rowHeight = LayoutScaler.RowHeight(lineHeight, scale, StatusLineSpacing);
+
+            var builder = new DisplayFrameBuilder(vp, measurer);
+            builder.AddText("Goose Errors", vp.Size.X / 2f, 0f, DrawAlign.Center, StatusFont, scale, StatusTitleColor);
+
+            int row = 1;
             if (_warnings.Count == 0)
             {
-                _statusBuffer.Append("(no errors)\n");
+                builder.AddText("(no errors)", 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusLabelColor);
             }
             else
             {
                 foreach (KeyValuePair<string, int> kv in _warnings)
                 {
-                    _statusBuffer.Append(kv.Key);
-                    if (kv.Value > 1)
-                    {
-                        _statusBuffer.Append(" (x").Append(kv.Value).Append(')');
-                    }
-
-                    _statusBuffer.Append('\n');
+                    string line = kv.Value > 1 ? $"{kv.Key} (x{kv.Value})" : kv.Key;
+                    builder.AddText(line, 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusWarningColor);
+                    row++;
                 }
             }
 
-            WriteToSurfaces(_gerrorLcds, _statusBuffer.ToString());
+            SurfaceRenderer.Render(surface, builder.Commands);
         }
 
-        /// <summary>Writes per-category fill levels to every <c>[GStatus]</c> surface.</summary>
-        private void RenderGStatusStatus()
+        /// <summary>Renders one <c>[GStatus]</c> surface: a title plus one fill-bar row per visible category, auto-scaled to fit.</summary>
+        private void RenderGStatusSurface(IMyTextSurface surface)
         {
-            if (_gstatusLcds.Count == 0)
-            {
-                return;
-            }
+            var measurer = new SurfaceMeasurer(surface);
+            DisplayViewport vp = SurfaceRenderer.CreateViewport(surface);
 
-            _statusBuffer.Clear();
-            _statusBuffer.Append("=== Goose Status ===\n");
+            int rowCount = 1 + CountVisibleStatusRows();
+            float lineHeight = measurer.Measure("Ag", StatusFont, 1f).Height;
+            float scale = LayoutScaler.FitScale(vp.Size.Y, rowCount, lineHeight, StatusLineSpacing, StatusMinScale, StatusMaxScale);
+            float rowHeight = LayoutScaler.RowHeight(lineHeight, scale, StatusLineSpacing);
+            float textHeight = lineHeight * scale;
+
+            float barX = vp.Size.X * StatusBarXFraction;
+            float barWidth = vp.Size.X * StatusBarWidthFraction;
+            float barHeight = textHeight * StatusBarHeightFraction;
+            float percentX = vp.Size.X;
+
+            var builder = new DisplayFrameBuilder(vp, measurer);
+            builder.AddText("Goose Status", vp.Size.X / 2f, 0f, DrawAlign.Center, StatusFont, scale, StatusTitleColor);
+
+            int row = 1;
             for (int c = 0; c <= (int)ItemCategory.Misc; c++)
             {
                 var category = (ItemCategory)c;
@@ -121,20 +185,40 @@ namespace IngameScript
                     continue;
                 }
 
-                _statusBuffer.Append(PadRight(AbbreviateCategory(category), StatusLabelWidth));
+                float y = ColumnLayout.RowY(0f, rowHeight, row);
+                builder.AddText(AbbreviateCategory(category), 0f, y, DrawAlign.Left, StatusFont, scale, StatusLabelColor);
                 if (hasContainers)
                 {
                     int percent = ComputeCategoryFillPercent(category);
-                    _statusBuffer.Append(RenderFillBar(percent, StatusBarWidth))
-                        .Append("  ").Append(percent).Append("%\n");
+                    float barY = y + (textHeight - barHeight) / 2f;
+                    builder.AddBar(barX, barY, barWidth, barHeight, percent, StatusBarTrackColor, StatusBarFillColor);
+                    builder.AddText($"{percent}%", percentX, y, DrawAlign.Right, StatusFont, scale, StatusLabelColor);
                 }
                 else
                 {
-                    _statusBuffer.Append("NO CONTAINER\n");
+                    builder.AddText("NO CONTAINER", barX, y, DrawAlign.Left, StatusFont, scale, StatusWarningColor);
+                }
+
+                row++;
+            }
+
+            SurfaceRenderer.Render(surface, builder.Commands);
+        }
+
+        /// <summary>Counts categories that should appear on the status screen: any with containers tagged or items present.</summary>
+        private int CountVisibleStatusRows()
+        {
+            int count = 0;
+            for (int c = 0; c <= (int)ItemCategory.Misc; c++)
+            {
+                var category = (ItemCategory)c;
+                if (CategoryHasContainers(category) || _presentCategories.Contains(category))
+                {
+                    count++;
                 }
             }
 
-            WriteToSurfaces(_gstatusLcds, _statusBuffer.ToString());
+            return count;
         }
 
         /// <summary>Sums a category's container volumes and returns the combined fill percentage.</summary>
@@ -160,21 +244,6 @@ namespace IngameScript
             return ComputeFillPercent(used, max);
         }
 
-        /// <summary>Applies the standard text-surface settings and writes the given text to each surface.</summary>
-        private static void WriteToSurfaces(List<IMyTextSurface> surfaces, string text)
-        {
-            for (int i = 0; i < surfaces.Count; i++)
-            {
-                IMyTextSurface surface = surfaces[i];
-                if (surface != null)
-                {
-                    surface.ContentType = ContentType.TEXT_AND_IMAGE;
-                    surface.Font = "Debug";
-                    surface.WriteText(text, false);
-                }
-            }
-        }
-
         /// <summary>Combined fill percentage (0-100) for a used/max volume pair; 0 when capacity is not positive.</summary>
         internal static int ComputeFillPercent(double used, double max)
         {
@@ -196,23 +265,7 @@ namespace IngameScript
             return percent;
         }
 
-        /// <summary>Renders a fixed-width fill bar, e.g. <c>[######----]</c> for 60% at width 10.</summary>
-        internal static string RenderFillBar(int percent, int width)
-        {
-            int filled = (int)Math.Round(percent / 100.0 * width);
-            if (filled < 0)
-            {
-                filled = 0;
-            }
-            if (filled > width)
-            {
-                filled = width;
-            }
-
-            return "[" + new string('#', filled) + new string('-', width - filled) + "]";
-        }
-
-        /// <summary>Returns a short fixed-width-friendly label for a category.</summary>
+        /// <summary>Returns a short label for a category to keep status rows compact.</summary>
         internal static string AbbreviateCategory(ItemCategory category)
         {
             switch (category)
@@ -228,22 +281,6 @@ namespace IngameScript
                 default:
                     return category.ToString();
             }
-        }
-
-        /// <summary>Right-pads a string to <paramref name="width"/> with spaces; truncates when longer.</summary>
-        private static string PadRight(string s, int width)
-        {
-            if (s == null)
-            {
-                s = string.Empty;
-            }
-
-            if (s.Length >= width)
-            {
-                return s.Substring(0, width);
-            }
-
-            return s + new string(' ', width - s.Length);
         }
     }
 }
