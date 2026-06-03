@@ -32,6 +32,7 @@
     <Compile Include="..\Shared\Blocks\**\*.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\Shared\Display\**\*.cs" LinkBase="Shared\Display" />
     <Compile Include="..\Shared\Bridge\**\*.cs" LinkBase="Shared\Bridge" />
+    <Compile Include="..\Shared\Federation\**\*.cs" LinkBase="Shared\Federation" />
     <Compile Include="..\Shared\Dispatcher\YieldReason.cs" LinkBase="Shared\Dispatcher" />
   </ItemGroup>
 </Project>

@@ -96,6 +96,15 @@ namespace IngameScript
 
             /// <summary>Maximum number of concurrent assembler holds tracked. Older holds are evicted FIFO when exceeded.</summary>
             public int BridgeMaxHoldsTracked = 64;
+
+            /// <summary>Master switch for multi-Goose coordination (same-grid duplicate detection and connector-federation arbitration). When true, federation requires <c>[Federate]</c> on both connectors and a higher-priority docked Goose makes this instance stand down.</summary>
+            public bool EnableMultiGooseArbitration = true;
+
+            /// <summary>IGC broadcast tag for the Goose-to-Goose presence beacon. Instances must agree on this string to coordinate.</summary>
+            public string FederationChannelTag = FederationProtocol.DefaultChannelTag;
+
+            /// <summary>Presence-announce cadence in main-loop ticks. Clamped to a minimum of 6.</summary>
+            public int FederationHeartbeatTicks = 6;
         }
 
         /// <summary>Reusable INI parser for both PB and per-block CustomData.</summary>
@@ -145,6 +154,10 @@ namespace IngameScript
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
             int bridgeMaxRaw = _ini.Get("Goose", "bridgeMaxHoldsTracked").ToInt32(64);
             _config.BridgeMaxHoldsTracked = bridgeMaxRaw < 1 ? 1 : bridgeMaxRaw;
+            _config.EnableMultiGooseArbitration = _ini.Get("Goose", "enableMultiGooseArbitration").ToBoolean(true);
+            _config.FederationChannelTag = _ini.Get("Goose", "federationChannelTag").ToString(FederationProtocol.DefaultChannelTag);
+            int fedHbRaw = _ini.Get("Goose", "federationHeartbeatTicks").ToInt32(6);
+            _config.FederationHeartbeatTicks = fedHbRaw < 6 ? 6 : fedHbRaw;
 
             int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
@@ -429,6 +442,30 @@ namespace IngameScript
                 _ini.Set("Goose", "bridgeMaxHoldsTracked", 64);
                 _ini.SetComment("Goose", "bridgeMaxHoldsTracked",
                     "Maximum number of concurrent assembler holds tracked. Older entries are evicted FIFO when exceeded.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "enableMultiGooseArbitration"))
+            {
+                _ini.Set("Goose", "enableMultiGooseArbitration", true);
+                _ini.SetComment("Goose", "enableMultiGooseArbitration",
+                    "Multi-Goose coordination. When true: two Geese on the same grid both halt with an error, " +
+                    "and federation requires [Federate] on BOTH docked connectors. Tag connectors [Federate P:n] " +
+                    "(lower n = higher priority; bare [Federate] = P:0). A higher-priority docked Goose makes the " +
+                    "lower-priority instance stand down until undocked; equal priorities simply do not federate.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "federationChannelTag"))
+            {
+                _ini.Set("Goose", "federationChannelTag", FederationProtocol.DefaultChannelTag);
+                _ini.SetComment("Goose", "federationChannelTag",
+                    "IGC broadcast tag for the Goose-to-Goose presence beacon. All Geese that should coordinate must share this value.");
+                changed = true;
+            }
+            if (!_ini.ContainsKey("Goose", "federationHeartbeatTicks"))
+            {
+                _ini.Set("Goose", "federationHeartbeatTicks", 6);
+                _ini.SetComment("Goose", "federationHeartbeatTicks",
+                    "Presence-announce cadence in main-loop ticks (default 6 ~ 10s). Minimum 6.");
                 changed = true;
             }
             if (changed)

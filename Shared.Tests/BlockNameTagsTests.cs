@@ -35,5 +35,49 @@ namespace Shared.Tests
             }
         }
 
+        public class HasFederateTag_Tests
+        {
+            [Theory]
+            [InlineData("Connector [Federate]", true)]
+            [InlineData("Connector [Federate P:0]", true)]
+            [InlineData("Connector [Federate P:3]", true)]
+            [InlineData("Connector", false)]
+            [InlineData("Connector [Federated]", false)]
+            [InlineData("", false)]
+            [InlineData(null, false)]
+            public void Detects_federate_with_or_without_priority(string name, bool expected)
+            {
+                BlockNameTags.HasFederateTag(name).Should().Be(expected);
+            }
+        }
+
+        public class ParseFederatePriority_Tests
+        {
+            [Theory]
+            [InlineData("Connector [Federate]", 0)]
+            [InlineData("Connector [Federate P:0]", 0)]
+            [InlineData("Connector [Federate P:3]", 3)]
+            [InlineData("Connector [Federate P:42]", 42)]
+            public void Returns_priority_for_federate_tag(string name, int expected)
+            {
+                BlockNameTags.ParseFederatePriority(name).Should().Be(expected);
+            }
+
+            [Theory]
+            [InlineData("Connector")]
+            [InlineData("Connector [Federated]")]
+            [InlineData("")]
+            [InlineData(null)]
+            public void Returns_negative_one_when_no_federate_tag(string name)
+            {
+                BlockNameTags.ParseFederatePriority(name).Should().Be(-1);
+            }
+
+            [Fact]
+            public void Bare_federate_defaults_to_highest_priority_zero()
+            {
+                BlockNameTags.ParseFederatePriority("[Federate]").Should().Be(0);
+            }
+        }
     }
 }

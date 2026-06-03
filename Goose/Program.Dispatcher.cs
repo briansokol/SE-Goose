@@ -73,9 +73,14 @@ namespace IngameScript
             }
         }
 
-        /// <summary>Returns the iterator for the step at index <paramref name="i"/>.</summary>
+        /// <summary>Returns the iterator for the step at index <paramref name="i"/>. While management is suspended (duplicate or deferral), the four inventory-mutating steps (6-9) are skipped so the script moves nothing; discovery, scan, and status rendering still run so displays stay live.</summary>
         private IEnumerator<YieldReason> StepFor(int i)
         {
+            if (ManagementSuspended && i >= 6 && i <= 9)
+            {
+                return NoOpStep();
+            }
+
             switch (i)
             {
                 case 0:

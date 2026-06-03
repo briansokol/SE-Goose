@@ -64,7 +64,8 @@ namespace IngameScript
                     DispatchCommand(argument);
                 }
                 _mainTickCount++;
-                if (_bridge != null)
+                FederationTick(_mainTickCount);
+                if (_bridge != null && !ManagementSuspended)
                 {
                     _bridge.Tick(_mainTickCount);
                 }

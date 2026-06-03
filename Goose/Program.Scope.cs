@@ -58,7 +58,14 @@ namespace IngameScript
         {
             ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _scopeMechRaw, _scopeConnRaw, _scopeMechBuf, _scopeConnBuf);
 
-            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
+            if (_federationArbitrationActive)
+            {
+                ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _approvedFederateGrids, _scopeGrids);
+            }
+            else
+            {
+                ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
+            }
 
             _groupBlockIds.Clear();
             _groupModeActive = false;

@@ -129,7 +129,8 @@ namespace IngameScript
             var measurer = new SurfaceMeasurer(surface);
             DisplayViewport vp = SurfaceRenderer.CreateViewport(surface);
 
-            int rowCount = 1 + Math.Max(1, _warnings.Count);
+            int haltRows = ManagementSuspended ? 1 : 0;
+            int rowCount = 1 + haltRows + Math.Max(1, _warnings.Count);
             float lineHeight = measurer.Measure("Ag", StatusFont, 1f).Height;
             float scale = LayoutScaler.FitScale(vp.Size.Y, rowCount, lineHeight, StatusLineSpacing, StatusMinScale, StatusMaxScale);
             float rowHeight = LayoutScaler.RowHeight(lineHeight, scale, StatusLineSpacing);
@@ -138,6 +139,12 @@ namespace IngameScript
             builder.AddText("Goose Errors", vp.Size.X / 2f, 0f, DrawAlign.Center, StatusFont, scale, StatusTitleColor);
 
             int row = 1;
+            if (ManagementSuspended)
+            {
+                builder.AddText(_haltMessage, 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusWarningColor);
+                row++;
+            }
+
             if (_warnings.Count == 0)
             {
                 builder.AddText("(no errors)", 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusLabelColor);

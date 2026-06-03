@@ -128,6 +128,10 @@ namespace IngameScript
         private void RenderEchoStatus()
         {
             _echoBuffer.Clear();
+            if (ManagementSuspended)
+            {
+                _echoBuffer.Append("** ").Append(_haltMessage).Append(" **\n");
+            }
             _echoBuffer.Append("Goose v1 ");
             _echoBuffer.Append(_paused ? "[PAUSED] " : "");
             _echoBuffer.Append("step ").Append(_stepIndex).Append('.').Append(_subStep)

@@ -95,6 +95,57 @@ namespace IngameScript
             }
         }
 
+        /// <summary>Builds scope from a pre-resolved set of approved federation grids (the output of <see cref="ScopeArbitration"/>), rather than re-deriving federation from connector tags. Seeds the BFS with the root plus every approved grid, then walks mechanical edges so each approved grid's subgrids are included too.</summary>
+        /// <param name="rootGridId">EntityId of the seed grid.</param>
+        /// <param name="mechEdges">All mechanical-connection edges in the visible grid system.</param>
+        /// <param name="approvedFederateGrids">Remote grids cleared to federate this tick; <c>null</c> or empty means no federation.</param>
+        /// <param name="output">Set to populate. Cleared first.</param>
+        public static void BuildScope(
+            long rootGridId,
+            IList<MechanicalEdge> mechEdges,
+            HashSet<long> approvedFederateGrids,
+            HashSet<long> output)
+        {
+            output.Clear();
+            output.Add(rootGridId);
+            var frontier = new Queue<long>();
+            frontier.Enqueue(rootGridId);
+
+            if (approvedFederateGrids != null)
+            {
+                foreach (long g in approvedFederateGrids)
+                {
+                    if (g != 0 && output.Add(g))
+                    {
+                        frontier.Enqueue(g);
+                    }
+                }
+            }
+
+            while (frontier.Count > 0)
+            {
+                long gridId = frontier.Dequeue();
+                if (mechEdges == null)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < mechEdges.Count; i++)
+                {
+                    MechanicalEdge e = mechEdges[i];
+                    if (e.BaseGridId != gridId || !e.Attached || e.NoSubgridTag || e.TopGridId == 0)
+                    {
+                        continue;
+                    }
+
+                    if (output.Add(e.TopGridId))
+                    {
+                        frontier.Enqueue(e.TopGridId);
+                    }
+                }
+            }
+        }
+
         /// <summary>Pure membership decision shared by group and grid scope modes. In group mode a block is in scope only when it is a named group member; otherwise membership falls back to grid scope.</summary>
         /// <param name="groupModeActive">True when a non-empty group name resolved to an existing group.</param>
         /// <param name="groupBlockIds">EntityIds of the resolved group's member blocks; consulted only in group mode.</param>
@@ -127,6 +178,30 @@ namespace IngameScript
             return !groupModeActive || (groupBlockIds != null && groupBlockIds.Contains(blockEntityId));
         }
 
+        /// <summary>Order-independent FNV-1a hash over a construct's grid EntityIds. Two PBs on the same physical construct produce an identical signature; used for same-scope duplicate detection. Pass the mechanical-only grid set (no connector federation) so mutually federated grids never collide.</summary>
+        /// <param name="gridIds">EntityIds of every grid in the construct.</param>
+        /// <returns>A stable signature for the set, independent of enumeration order.</returns>
+        public static ulong ComputeConstructSignature(IEnumerable<long> gridIds)
+        {
+            var ids = new List<long>();
+            if (gridIds != null)
+            {
+                foreach (long id in gridIds)
+                {
+                    ids.Add(id);
+                }
+            }
+
+            ids.Sort();
+            ulong h = 1469598103934665603UL;
+            for (int i = 0; i < ids.Count; i++)
+            {
+                h ^= (ulong)ids[i];
+                h *= 1099511628211UL;
+            }
+            return h;
+        }
+
         /// <summary>Cheap rolling hash over mechanical and connector edges. Differs whenever any scope input changes.</summary>
         public static ulong ComputeScopeDriftHash(IList<MechanicalEdge> mech, IList<ConnectorEdge> conn)
         {
@@ -152,6 +227,9 @@ namespace IngameScript
                     h ^= ((ulong)c.OtherGridId) << 1;
                     h ^= c.Connected ? 0x4UL : 0x0UL;
                     h ^= c.FederateTag ? 0x8UL : 0x0UL;
+                    h ^= c.OtherFederateTag ? 0x10UL : 0x0UL;
+                    h ^= ((ulong)(uint)c.LocalPriority) << 16;
+                    h ^= ((ulong)(uint)c.OtherPriority) << 24;
                     h *= 1099511628211UL;
                 }
             }
@@ -196,10 +274,14 @@ namespace IngameScript
                     long ownerId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
                     IMyShipConnector other = c.OtherConnector;
                     long otherId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                    string otherName = other != null ? other.CustomName : null;
                     h ^= (ulong)ownerId;
                     h ^= ((ulong)otherId) << 1;
                     h ^= c.Status == MyShipConnectorStatus.Connected ? 0x4UL : 0x0UL;
-                    h ^= BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag) ? 0x8UL : 0x0UL;
+                    h ^= BlockNameTags.HasFederateTag(c.CustomName) ? 0x8UL : 0x0UL;
+                    h ^= BlockNameTags.HasFederateTag(otherName) ? 0x10UL : 0x0UL;
+                    h ^= ((ulong)(uint)BlockNameTags.ParseFederatePriority(c.CustomName)) << 16;
+                    h ^= ((ulong)(uint)BlockNameTags.ParseFederatePriority(otherName)) << 24;
                     h *= 1099511628211UL;
                 }
             }

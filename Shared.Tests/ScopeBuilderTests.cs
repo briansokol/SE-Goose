@@ -113,6 +113,97 @@ namespace Shared.Tests
         }
 
         [Fact]
+        public void Approved_overload_root_only_when_no_approvals()
+        {
+            var output = new HashSet<long>();
+            ScopeBuilder.BuildScope(1, new List<MechanicalEdge>(), new HashSet<long>(), output);
+            output.Should().BeEquivalentTo(new long[] { 1 });
+        }
+
+        [Fact]
+        public void Approved_overload_federates_listed_grids()
+        {
+            var output = new HashSet<long>();
+            ScopeBuilder.BuildScope(1, new List<MechanicalEdge>(), new HashSet<long> { 9 }, output);
+            output.Should().BeEquivalentTo(new long[] { 1, 9 });
+        }
+
+        [Fact]
+        public void Approved_overload_includes_subgrids_of_approved_grid()
+        {
+            var output = new HashSet<long>();
+            var mech = new List<MechanicalEdge> {
+                new MechanicalEdge { BaseGridId = 9, TopGridId = 11, Attached = true }
+            };
+            ScopeBuilder.BuildScope(1, mech, new HashSet<long> { 9 }, output);
+            output.Should().BeEquivalentTo(new long[] { 1, 9, 11 });
+        }
+
+        [Fact]
+        public void Approved_overload_null_set_yields_root_and_subgrids()
+        {
+            var output = new HashSet<long>();
+            var mech = new List<MechanicalEdge> {
+                new MechanicalEdge { BaseGridId = 1, TopGridId = 2, Attached = true }
+            };
+            ScopeBuilder.BuildScope(1, mech, (HashSet<long>)null, output);
+            output.Should().BeEquivalentTo(new long[] { 1, 2 });
+        }
+
+        [Fact]
+        public void Drift_hash_changes_on_priority_change()
+        {
+            var c1 = new List<ConnectorEdge> {
+                new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true, LocalPriority = 0 }
+            };
+            var c2 = new List<ConnectorEdge> {
+                new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true, LocalPriority = 2 }
+            };
+            ScopeBuilder.ComputeScopeDriftHash(null, c1)
+                .Should().NotBe(ScopeBuilder.ComputeScopeDriftHash(null, c2));
+        }
+
+        [Fact]
+        public void Drift_hash_changes_on_other_federate_tag()
+        {
+            var c1 = new List<ConnectorEdge> {
+                new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true, OtherFederateTag = false }
+            };
+            var c2 = new List<ConnectorEdge> {
+                new ConnectorEdge { OwnerGridId = 1, OtherGridId = 9, Connected = true, FederateTag = true, OtherFederateTag = true }
+            };
+            ScopeBuilder.ComputeScopeDriftHash(null, c1)
+                .Should().NotBe(ScopeBuilder.ComputeScopeDriftHash(null, c2));
+        }
+
+        [Fact]
+        public void Construct_signature_independent_of_order()
+        {
+            var a = new long[] { 1, 2, 3 };
+            var b = new long[] { 3, 1, 2 };
+            ScopeBuilder.ComputeConstructSignature(a)
+                .Should().Be(ScopeBuilder.ComputeConstructSignature(b));
+        }
+
+        [Fact]
+        public void Construct_signature_differs_for_different_sets()
+        {
+            var a = new long[] { 1, 2, 3 };
+            var b = new long[] { 1, 2, 4 };
+            ScopeBuilder.ComputeConstructSignature(a)
+                .Should().NotBe(ScopeBuilder.ComputeConstructSignature(b));
+        }
+
+        [Fact]
+        public void Construct_signature_differs_when_member_added()
+        {
+            var a = new long[] { 1 };
+            var b = new long[] { 1, 2 };
+            ScopeBuilder.ComputeConstructSignature(a)
+                .Should().NotBe(ScopeBuilder.ComputeConstructSignature(b));
+        }
+
+        [Fact]
         public void Group_mode_admits_only_members()
         {
             var groupIds = new HashSet<long> { 100, 200 };
