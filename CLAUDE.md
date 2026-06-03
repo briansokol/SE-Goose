@@ -47,6 +47,10 @@ This list will grow as additional features are planned; more documents will be a
 
 **Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
 
+## Plans
+
+**All implementation plans must be written into the `.specs` folder** at the repository root. When you produce a plan for a multi-step task, save it as a file under `.specs/` rather than leaving it only in the conversation. Create the folder if it does not yet exist.
+
 ## Technology Stack
 
 - **Framework**: .NET Framework 4.8 (C# 6.0)
