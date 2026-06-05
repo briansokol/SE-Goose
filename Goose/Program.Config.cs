@@ -373,41 +373,29 @@ namespace IngameScript
         {
             bool changed = false;
             changed |= EnsureKey("reactorUraniumIngotsPer1000L", 0,
-                "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 10). 0 disables. " +
-                "Each 1000L of inventory adds one bucket of ingots, starting at 1L: 1-999L gets 1*ratio, " +
-                "1000-1999L gets 2*ratio, 2000-2999L gets 3*ratio, etc. " +
-                "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
+                "Uranium ingots per 1000L of reactor inventory (e.g. 10); 0 disables. Per-block: [Balance=N] or [NoBalance].");
             changed |= EnsureKey("gasIceFillPercent", 0,
-                "Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.");
+                "Percent (0-100) of each gas/irrigation block to fill with Ice; 0 disables.");
             changed |= EnsureKey("weaponAmmoFillPercent", 0,
-                "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
+                "Percent (0-100) of each weapon to fill with ammo; 0 disables.");
             changed |= EnsureKey("blockGroup", "",
-                "Optional terminal-group name. When set, Goose manages ONLY blocks in this group; " +
-                "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
-                "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
+                "Optional group name; when set Goose manages only that group (ignores [Federate]/traversal). Empty = grid scope. Run 'rescan' after editing.");
             changed |= EnsureKey("enableSameRoleBalancing", false,
-                "When true, redistributes items inside non-Stock category-tagged containers so each " +
-                "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
-                "overflow lands in lower tiers. false (default) disables.");
+                "When true, evens each item across [P:NN] tiers in non-Stock category containers (higher tiers fill first). Default false.");
             changed |= EnsureKey("enableBridge", true,
-                "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
-                "ignores incoming traffic, and behaves identically to a script without the bridge.");
+                "Master kill-switch for the Goose-Crane bridge; false fully disables it.");
             changed |= EnsureKey("bridgeChannelTag", BridgeProtocol.DefaultChannelTag,
-                "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid.");
+                "IGC tag for the bridge. Change if running multiple Goose/Crane pairs on one grid.");
             changed |= EnsureKey("bridgeHeartbeatTicks", 6,
-                "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
-                "Also drives hello resend while no peer is linked.");
+                "Heartbeat cadence in ticks (default 6 ~ 10s); also drives hello resend.");
             changed |= EnsureKey("bridgeMaxHoldsTracked", 64,
-                "Maximum number of concurrent assembler holds tracked. Older entries are evicted FIFO when exceeded.");
+                "Max concurrent assembler holds tracked; oldest evicted FIFO.");
             changed |= EnsureKey("enableMultiGooseArbitration", true,
-                "Multi-Goose coordination. When true: two Geese on the same grid both halt with an error, " +
-                "and federation requires [Federate] on BOTH docked connectors. Tag connectors [Federate P:n] " +
-                "(lower n = higher priority; bare [Federate] = P:0). A higher-priority docked Goose makes the " +
-                "lower-priority instance stand down until undocked; equal priorities simply do not federate.");
+                "Multi-Goose coordination. true: two Geese on one grid both halt; federation needs [Federate] on both connectors. [Federate P:n], lower n = higher priority; a higher-priority docked Goose makes others stand down.");
             changed |= EnsureKey("federationChannelTag", FederationProtocol.DefaultChannelTag,
-                "IGC broadcast tag for the Goose-to-Goose presence beacon. All Geese that should coordinate must share this value.");
+                "IGC tag for the Goose-to-Goose presence beacon; coordinating Geese must share it.");
             changed |= EnsureKey("federationHeartbeatTicks", 6,
-                "Presence-announce cadence in main-loop ticks (default 6 ~ 10s). Minimum 6.");
+                "Presence-announce cadence in ticks (default 6 ~ 10s); min 6.");
             if (changed)
             {
                 Me.CustomData = _ini.ToString();

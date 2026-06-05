@@ -508,20 +508,8 @@ namespace IngameScript
             StringBuilder sb = _stockTemplateSB;
             sb.Length = 0;
             sb.Append("[Goose]\n");
-            sb.Append(";Stock container quotas.\n");
-            sb.Append(";Uncomment a line to enable management of an item (remove the ; at the start of the line)\n");
-            sb.Append(";Format: <Type>/<Subtype>=<value>\n");
-            sb.Append(";Suffixes:\n");
-            sb.Append(";  M=minimum (pull-only)\n");
-            sb.Append(";  L=limiter (push-only)\n");
-            sb.Append(";  no suffix=exact (pull/push)\n");
-            sb.Append(";  All=uncapped pull\n\n");
-            sb.Append(";Examples:\n");
-            sb.Append(";  Component/SteelPlate=100\n");
-            sb.Append(";  Ingot/Iron=500M\n");
-            sb.Append(";  Ore/Stone=1000L\n");
-            sb.Append(";  Component/Construction=All\n");
-
+            sb.Append(";Stock quotas. Uncomment a line to manage an item. Format: <Type>/<Subtype>=<value>[suffix]\n");
+            sb.Append(";Suffix M=min/pull-only, L=limit/push-only, none=exact, All=uncapped pull. E.g. Ingot/Iron=500M\n");
             sb.Append("\n; --- Manage Items Below ---\n");
 
             _stockMergedKeys.Clear();
