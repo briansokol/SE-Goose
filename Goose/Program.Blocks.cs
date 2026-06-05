@@ -686,60 +686,18 @@ namespace IngameScript
 
             if (typeId == "MyObjectBuilder_PhysicalGunObject")
             {
-                if (subId.IndexOf("Welder", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (subId.IndexOf("Welder", StringComparison.OrdinalIgnoreCase) >= 0
+                    || subId.IndexOf("Grinder", StringComparison.OrdinalIgnoreCase) >= 0
+                    || subId.IndexOf("Drill", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Grinder", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Drill", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("HandDrill", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Pistol", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Rifle", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Launcher", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("FireArm", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Goggles", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
                 }
 
                 return ItemCategory.Weapons;
             }
 
-            if (typeId == "MyObjectBuilder_OxygenContainerObject")
-            {
-                return ItemCategory.Tools;
-            }
-
-            if (typeId == "MyObjectBuilder_GasContainerObject")
+            if (typeId == "MyObjectBuilder_OxygenContainerObject"
+                || typeId == "MyObjectBuilder_GasContainerObject")
             {
                 return ItemCategory.Tools;
             }
@@ -759,11 +717,6 @@ namespace IngameScript
                 }
 
                 return ItemCategory.Consumables;
-            }
-
-            if (typeId == "MyObjectBuilder_PhysicalObject")
-            {
-                return ItemCategory.Misc;
             }
 
             return ItemCategory.Misc;

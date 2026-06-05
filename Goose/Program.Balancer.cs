@@ -419,31 +419,41 @@ namespace IngameScript
         }
 
         /// <summary>Pulls into <paramref name="dst"/> from <paramref name="srcInv"/> using a probe-then-bulk pattern. The first successful transfer for an item type measures the per-unit volume; subsequent calls (and the same call once the cache is populated) compute the remaining headroom in units and pull it in a single <see cref="TryMove"/>. Avoids the O(n) iteration cost of one-unit-at-a-time pulls when the per-unit volume is small (e.g. Ice at ~0.00037 m^3/unit, where 25%% of a 30 m^3 generator is ~20,000 units).</summary>
-        private void BulkPullToTargetVolume(IMyInventory srcInv, IMyInventory dst, MyItemType item, float targetVolume)
+        /// <summary>Moves an item between two inventories until the measured inventory reaches the target volume.</summary>
+        /// <param name="measured">Inventory whose volume is compared to the target (filled when pulling, drained when pushing).</param>
+        /// <param name="other">The opposite inventory: source when pulling, destination when pushing.</param>
+        /// <param name="item">Item type to move.</param>
+        /// <param name="targetVolume">Target volume for the measured inventory, in litres.</param>
+        /// <param name="push">True to drain the measured inventory down to the target; false to fill it up to the target.</param>
+        private void BulkTransferToVolume(IMyInventory measured, IMyInventory other, MyItemType item, float targetVolume, bool push)
         {
-            if ((float)dst.CurrentVolume >= targetVolume)
+            if (push ? (float)measured.CurrentVolume <= targetVolume : (float)measured.CurrentVolume >= targetVolume)
             {
                 return;
             }
 
+            IMyInventory src = push ? measured : other;
+            IMyInventory dst = push ? other : measured;
+            string reason = push ? "balance-excess" : "balance";
+
             float volPerUnit;
             if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f)
             {
-                float beforeVol = (float)dst.CurrentVolume;
-                long moved = TryMove(srcInv, dst, item, 1, "balance");
+                float beforeVol = (float)measured.CurrentVolume;
+                long moved = TryMove(src, dst, item, 1, reason);
                 if (moved == 0)
                 {
                     return;
                 }
 
-                float afterVol = (float)dst.CurrentVolume;
-                volPerUnit = (afterVol - beforeVol) / moved;
+                float afterVol = (float)measured.CurrentVolume;
+                volPerUnit = (push ? beforeVol - afterVol : afterVol - beforeVol) / moved;
                 if (volPerUnit > 0f)
                 {
                     _balanceVolumeCache[item] = volPerUnit;
                 }
 
-                if ((float)dst.CurrentVolume >= targetVolume)
+                if (push ? (float)measured.CurrentVolume <= targetVolume : (float)measured.CurrentVolume >= targetVolume)
                 {
                     return;
                 }
@@ -454,61 +464,34 @@ namespace IngameScript
                 return;
             }
 
-            float headroom = targetVolume - (float)dst.CurrentVolume;
-            long unitsToPull = (long)System.Math.Ceiling(headroom / volPerUnit);
-            if (unitsToPull <= 0)
+            float delta = push ? (float)measured.CurrentVolume - targetVolume : targetVolume - (float)measured.CurrentVolume;
+            long units = (long)System.Math.Ceiling(delta / volPerUnit);
+            if (units <= 0)
             {
                 return;
             }
 
-            TryMove(srcInv, dst, item, unitsToPull, "balance");
+            TryMove(src, dst, item, units, reason);
+        }
+
+        /// <summary>Resolves the push-destination routes for a category, warning once if none are tagged.</summary>
+        /// <param name="cat">Category whose tagged containers serve as push destinations.</param>
+        /// <param name="excessLabel">Label naming the excess in the warning (an item subtype id or "ammo").</param>
+        /// <returns>The route list, or null if no container is tagged for the category.</returns>
+        private List<ContainerEntry> ResolvePushRoutes(ItemCategory cat, string excessLabel)
+        {
+            List<ContainerEntry> routes;
+            if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0)
+            {
+                LogWarningOnce("balancer:no-route:" + cat,
+                    "[Goose] Balancer cannot push excess " + excessLabel + ": no container tagged " + cat);
+                return null;
+            }
+            return routes;
         }
 
         /// <summary>Mirror of <see cref="BulkPullToTargetVolume"/> for excess push: probes once if the cache is cold, then pushes the over-target volume in a single bulk <see cref="TryMove"/>.</summary>
-        private void BulkPushFromExcessByVolume(IMyInventory dst, IMyInventory rinv, MyItemType item, float targetVolume)
-        {
-            if ((float)dst.CurrentVolume <= targetVolume)
-            {
-                return;
-            }
 
-            float volPerUnit;
-            if (!_balanceVolumeCache.TryGetValue(item, out volPerUnit) || volPerUnit <= 0f)
-            {
-                float beforeVol = (float)dst.CurrentVolume;
-                long moved = TryMove(dst, rinv, item, 1, "balance-excess");
-                if (moved == 0)
-                {
-                    return;
-                }
-
-                float afterVol = (float)dst.CurrentVolume;
-                volPerUnit = (beforeVol - afterVol) / moved;
-                if (volPerUnit > 0f)
-                {
-                    _balanceVolumeCache[item] = volPerUnit;
-                }
-
-                if ((float)dst.CurrentVolume <= targetVolume)
-                {
-                    return;
-                }
-            }
-
-            if (volPerUnit <= 0f)
-            {
-                return;
-            }
-
-            float overage = (float)dst.CurrentVolume - targetVolume;
-            long unitsToPush = (long)System.Math.Ceiling(overage / volPerUnit);
-            if (unitsToPush <= 0)
-            {
-                return;
-            }
-
-            TryMove(dst, rinv, item, unitsToPush, "balance-excess");
-        }
 
 
         /// <summary>Pure helper: returns the proportional fill factor in [0, 1] for untagged blocks of a kind. Tagged blocks are reserved their full count from the supply before factor is computed; whatever's left is divided across untagged demand. Pure for unit testing.</summary>
@@ -863,19 +846,16 @@ namespace IngameScript
                     continue;
                 }
 
-                BulkPullToTargetVolume(srcEntry.Inventory, dst, item, targetVolume);
+                BulkTransferToVolume(dst, srcEntry.Inventory, item, targetVolume, false);
             }
         }
 
         /// <summary>Pushes one unit at a time of <paramref name="item"/> out of <paramref name="dst"/> to category-tagged routes until volume falls under <paramref name="targetVolume"/>. Warns once when no route exists.</summary>
         private void PushSingleItemExcessByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume)
         {
-            ItemCategory cat = Classify(item);
-            List<ContainerEntry> routes;
-            if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0)
+            List<ContainerEntry> routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
+            if (routes == null)
             {
-                LogWarningOnce("balancer:no-route:" + cat,
-                    "[Goose] Balancer cannot push excess " + item.SubtypeId + ": no container tagged " + cat);
                 return;
             }
             for (int r = 0; r < routes.Count; r++)
@@ -902,7 +882,7 @@ namespace IngameScript
                     continue;
                 }
 
-                BulkPushFromExcessByVolume(dst, rinv, item, targetVolume);
+                BulkTransferToVolume(dst, rinv, item, targetVolume, true);
             }
         }
 
@@ -960,11 +940,9 @@ namespace IngameScript
             else if (currentMags > target)
             {
                 long excess = currentMags - target;
-                List<ContainerEntry> routes;
-                if (!_containersByCategory.TryGetValue(ItemCategory.Ammo, out routes) || routes == null || routes.Count == 0)
+                List<ContainerEntry> routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
+                if (routes == null)
                 {
-                    LogWarningOnce("balancer:no-route:Ammo",
-                        "[Goose] Balancer cannot push excess ammo: no container tagged Ammo");
                     return;
                 }
                 _itemBuffer.Clear();
@@ -1023,12 +1001,9 @@ namespace IngameScript
         /// <summary>Pushes up to <paramref name="excess"/> units of <paramref name="item"/> out of <paramref name="dst"/> into category-tagged containers for the item's classification. Warns once when no route exists and leaves the excess in place.</summary>
         private void PushCountExcessToCategory(ContainerEntry self, IMyInventory dst, MyItemType item, long excess)
         {
-            ItemCategory cat = Classify(item);
-            List<ContainerEntry> routes;
-            if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0)
+            List<ContainerEntry> routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
+            if (routes == null)
             {
-                LogWarningOnce("balancer:no-route:" + cat,
-                    "[Goose] Balancer cannot push excess " + item.SubtypeId + ": no container tagged " + cat);
                 return;
             }
             for (int r = 0; r < routes.Count && excess > 0; r++)
@@ -1054,6 +1029,11 @@ namespace IngameScript
 
 
         /// <summary>Pulls one magazine at a time across the cached <paramref name="ammoList"/> until <paramref name="dst"/>'s current volume reaches <paramref name="targetVolume"/> or no source has more compatible ammo.</summary>
+        /// <summary>Pulls each accepted ammo type from balance sources until the destination reaches the target volume.</summary>
+        /// <param name="self">The consumer being filled, excluded as a source.</param>
+        /// <param name="dst">Destination inventory.</param>
+        /// <param name="ammoList">Accepted ammo types for the weapon.</param>
+        /// <param name="targetVolume">Target volume for the destination, in litres.</param>
         private void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, List<MyItemType> ammoList, float targetVolume)
         {
             for (int a = 0; a < ammoList.Count; a++)
@@ -1063,38 +1043,16 @@ namespace IngameScript
                     return;
                 }
 
-                MyItemType ammo = ammoList[a];
-                for (int s = 0; s < _balanceSources.Count; s++)
-                {
-                    if ((float)dst.CurrentVolume >= targetVolume)
-                    {
-                        break;
-                    }
-
-                    if (BudgetExceeded())
-                    {
-                        return;
-                    }
-
-                    ContainerEntry srcEntry = _balanceSources[s];
-                    if (srcEntry == self)
-                    {
-                        continue;
-                    }
-
-                    BulkPullToTargetVolume(srcEntry.Inventory, dst, ammo, targetVolume);
-                }
+                PullSingleItemByVolume(self, dst, ammoList[a], targetVolume);
             }
         }
 
         /// <summary>Pushes one magazine at a time out of <paramref name="dst"/> to any container tagged for the <see cref="ItemCategory.Ammo"/> category until volume falls under <paramref name="targetVolume"/>. Warns once when no route exists.</summary>
         private void PushWeaponExcessToAmmoCategory(ContainerEntry self, IMyInventory dst, float targetVolume)
         {
-            List<ContainerEntry> routes;
-            if (!_containersByCategory.TryGetValue(ItemCategory.Ammo, out routes) || routes == null || routes.Count == 0)
+            List<ContainerEntry> routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
+            if (routes == null)
             {
-                LogWarningOnce("balancer:no-route:Ammo",
-                    "[Goose] Balancer cannot push excess ammo: no container tagged Ammo");
                 return;
             }
             List<MyItemType> ammoList = self.AcceptedAmmo;
@@ -1140,7 +1098,7 @@ namespace IngameScript
                         continue;
                     }
 
-                    BulkPushFromExcessByVolume(dst, rinv, ammoType, targetVolume);
+                    BulkTransferToVolume(dst, rinv, ammoType, targetVolume, true);
                 }
             }
         }

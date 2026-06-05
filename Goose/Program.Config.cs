@@ -372,107 +372,86 @@ namespace IngameScript
         private void EnsureBalancerKeysPopulated()
         {
             bool changed = false;
-            if (!_ini.ContainsKey("Goose", "reactorUraniumIngotsPer1000L"))
-            {
-                _ini.Set("Goose", "reactorUraniumIngotsPer1000L", 0);
-                _ini.SetComment("Goose", "reactorUraniumIngotsPer1000L",
-                    "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 10). 0 disables. " +
-                    "Each 1000L of inventory adds one bucket of ingots, starting at 1L: 1-999L gets 1*ratio, " +
-                    "1000-1999L gets 2*ratio, 2000-2999L gets 3*ratio, etc. " +
-                    "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "gasIceFillPercent"))
-            {
-                _ini.Set("Goose", "gasIceFillPercent", 0);
-                _ini.SetComment("Goose", "gasIceFillPercent",
-                    "Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "weaponAmmoFillPercent"))
-            {
-                _ini.Set("Goose", "weaponAmmoFillPercent", 0);
-                _ini.SetComment("Goose", "weaponAmmoFillPercent",
-                    "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "blockGroup"))
-            {
-                _ini.Set("Goose", "blockGroup", "");
-                _ini.SetComment("Goose", "blockGroup",
-                    "Optional terminal-group name. When set, Goose manages ONLY blocks in this group; " +
-                    "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
-                    "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "enableSameRoleBalancing"))
-            {
-                _ini.Set("Goose", "enableSameRoleBalancing", false);
-                _ini.SetComment("Goose", "enableSameRoleBalancing",
-                    "When true, redistributes items inside non-Stock category-tagged containers so each " +
-                    "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
-                    "overflow lands in lower tiers. false (default) disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "enableBridge"))
-            {
-                _ini.Set("Goose", "enableBridge", true);
-                _ini.SetComment("Goose", "enableBridge",
-                    "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
-                    "ignores incoming traffic, and behaves identically to a script without the bridge.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "bridgeChannelTag"))
-            {
-                _ini.Set("Goose", "bridgeChannelTag", BridgeProtocol.DefaultChannelTag);
-                _ini.SetComment("Goose", "bridgeChannelTag",
-                    "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "bridgeHeartbeatTicks"))
-            {
-                _ini.Set("Goose", "bridgeHeartbeatTicks", 6);
-                _ini.SetComment("Goose", "bridgeHeartbeatTicks",
-                    "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
-                    "Also drives hello resend while no peer is linked.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "bridgeMaxHoldsTracked"))
-            {
-                _ini.Set("Goose", "bridgeMaxHoldsTracked", 64);
-                _ini.SetComment("Goose", "bridgeMaxHoldsTracked",
-                    "Maximum number of concurrent assembler holds tracked. Older entries are evicted FIFO when exceeded.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "enableMultiGooseArbitration"))
-            {
-                _ini.Set("Goose", "enableMultiGooseArbitration", true);
-                _ini.SetComment("Goose", "enableMultiGooseArbitration",
-                    "Multi-Goose coordination. When true: two Geese on the same grid both halt with an error, " +
-                    "and federation requires [Federate] on BOTH docked connectors. Tag connectors [Federate P:n] " +
-                    "(lower n = higher priority; bare [Federate] = P:0). A higher-priority docked Goose makes the " +
-                    "lower-priority instance stand down until undocked; equal priorities simply do not federate.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "federationChannelTag"))
-            {
-                _ini.Set("Goose", "federationChannelTag", FederationProtocol.DefaultChannelTag);
-                _ini.SetComment("Goose", "federationChannelTag",
-                    "IGC broadcast tag for the Goose-to-Goose presence beacon. All Geese that should coordinate must share this value.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Goose", "federationHeartbeatTicks"))
-            {
-                _ini.Set("Goose", "federationHeartbeatTicks", 6);
-                _ini.SetComment("Goose", "federationHeartbeatTicks",
-                    "Presence-announce cadence in main-loop ticks (default 6 ~ 10s). Minimum 6.");
-                changed = true;
-            }
+            changed |= EnsureKey("reactorUraniumIngotsPer1000L", 0,
+                "Uranium ingots per 1000L of each reactor's inventory volume (suggested: 10). 0 disables. " +
+                "Each 1000L of inventory adds one bucket of ingots, starting at 1L: 1-999L gets 1*ratio, " +
+                "1000-1999L gets 2*ratio, 2000-2999L gets 3*ratio, etc. " +
+                "Per-block override: name-tag [Balance=N] for an exact unit count; [NoBalance] to opt out.");
+            changed |= EnsureKey("gasIceFillPercent", 0,
+                "Percent (0-100) of each gas generator / irrigation block's inventory volume to fill with Ice. 0 disables.");
+            changed |= EnsureKey("weaponAmmoFillPercent", 0,
+                "Percent (0-100) of each weapon's inventory volume to fill with ammo. 0 disables.");
+            changed |= EnsureKey("blockGroup", "",
+                "Optional terminal-group name. When set, Goose manages ONLY blocks in this group; " +
+                "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
+                "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
+            changed |= EnsureKey("enableSameRoleBalancing", false,
+                "When true, redistributes items inside non-Stock category-tagged containers so each " +
+                "[P:NN] tier holds an equal share per item type. Higher-priority tiers fill first; " +
+                "overflow lands in lower tiers. false (default) disables.");
+            changed |= EnsureKey("enableBridge", true,
+                "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
+                "ignores incoming traffic, and behaves identically to a script without the bridge.");
+            changed |= EnsureKey("bridgeChannelTag", BridgeProtocol.DefaultChannelTag,
+                "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid.");
+            changed |= EnsureKey("bridgeHeartbeatTicks", 6,
+                "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
+                "Also drives hello resend while no peer is linked.");
+            changed |= EnsureKey("bridgeMaxHoldsTracked", 64,
+                "Maximum number of concurrent assembler holds tracked. Older entries are evicted FIFO when exceeded.");
+            changed |= EnsureKey("enableMultiGooseArbitration", true,
+                "Multi-Goose coordination. When true: two Geese on the same grid both halt with an error, " +
+                "and federation requires [Federate] on BOTH docked connectors. Tag connectors [Federate P:n] " +
+                "(lower n = higher priority; bare [Federate] = P:0). A higher-priority docked Goose makes the " +
+                "lower-priority instance stand down until undocked; equal priorities simply do not federate.");
+            changed |= EnsureKey("federationChannelTag", FederationProtocol.DefaultChannelTag,
+                "IGC broadcast tag for the Goose-to-Goose presence beacon. All Geese that should coordinate must share this value.");
+            changed |= EnsureKey("federationHeartbeatTicks", 6,
+                "Presence-announce cadence in main-loop ticks (default 6 ~ 10s). Minimum 6.");
             if (changed)
             {
                 Me.CustomData = _ini.ToString();
                 _lastSeenCustomData = Me.CustomData;
             }
+        }
+
+        /// <summary>Populates a string config key with its comment if absent.</summary>
+        /// <returns>True if the key was added.</returns>
+        private bool EnsureKey(string key, string value, string comment)
+        {
+            if (_ini.ContainsKey("Goose", key))
+            {
+                return false;
+            }
+            _ini.Set("Goose", key, value);
+            _ini.SetComment("Goose", key, comment);
+            return true;
+        }
+
+        /// <summary>Populates an integer config key with its comment if absent.</summary>
+        /// <returns>True if the key was added.</returns>
+        private bool EnsureKey(string key, int value, string comment)
+        {
+            if (_ini.ContainsKey("Goose", key))
+            {
+                return false;
+            }
+            _ini.Set("Goose", key, value);
+            _ini.SetComment("Goose", key, comment);
+            return true;
+        }
+
+        /// <summary>Populates a boolean config key with its comment if absent.</summary>
+        /// <returns>True if the key was added.</returns>
+        private bool EnsureKey(string key, bool value, string comment)
+        {
+            if (_ini.ContainsKey("Goose", key))
+            {
+                return false;
+            }
+            _ini.Set("Goose", key, value);
+            _ini.SetComment("Goose", key, comment);
+            return true;
         }
     }
 }
