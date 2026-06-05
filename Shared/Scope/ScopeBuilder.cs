@@ -31,22 +31,7 @@ namespace IngameScript
                 for (int i = 0; i < connEdges.Count; i++)
                 {
                     ConnectorEdge c = connEdges[i];
-                    if (c.OwnerGridId != rootGridId)
-                    {
-                        continue;
-                    }
-
-                    if (!c.Connected)
-                    {
-                        continue;
-                    }
-
-                    if (!c.FederateTag)
-                    {
-                        continue;
-                    }
-
-                    if (c.OtherGridId == 0)
+                    if (c.OwnerGridId != rootGridId || !c.Connected || !c.FederateTag || c.OtherGridId == 0)
                     {
                         continue;
                     }
@@ -58,41 +43,7 @@ namespace IngameScript
                 }
             }
 
-            while (frontier.Count > 0)
-            {
-                long gridId = frontier.Dequeue();
-                if (mechEdges != null)
-                {
-                    for (int i = 0; i < mechEdges.Count; i++)
-                    {
-                        MechanicalEdge e = mechEdges[i];
-                        if (e.BaseGridId != gridId)
-                        {
-                            continue;
-                        }
-
-                        if (!e.Attached)
-                        {
-                            continue;
-                        }
-
-                        if (e.NoSubgridTag)
-                        {
-                            continue;
-                        }
-
-                        if (e.TopGridId == 0)
-                        {
-                            continue;
-                        }
-
-                        if (output.Add(e.TopGridId))
-                        {
-                            frontier.Enqueue(e.TopGridId);
-                        }
-                    }
-                }
-            }
+            TraverseMechFrontier(frontier, mechEdges, output);
         }
 
         /// <summary>Builds scope from a pre-resolved set of approved federation grids (the output of <see cref="ScopeArbitration"/>), rather than re-deriving federation from connector tags. Seeds the BFS with the root plus every approved grid, then walks mechanical edges so each approved grid's subgrids are included too.</summary>
@@ -122,6 +73,15 @@ namespace IngameScript
                 }
             }
 
+            TraverseMechFrontier(frontier, mechEdges, output);
+        }
+
+        /// <summary>Breadth-first walk of mechanical edges from a seeded frontier, adding every reachable subgrid to the scope.</summary>
+        /// <param name="frontier">Queue pre-seeded with the root (and any federated) grid ids.</param>
+        /// <param name="mechEdges">Mechanical edges to traverse; null is treated as no edges.</param>
+        /// <param name="output">Scope set that accumulates reachable grid ids.</param>
+        private static void TraverseMechFrontier(Queue<long> frontier, IList<MechanicalEdge> mechEdges, HashSet<long> output)
+        {
             while (frontier.Count > 0)
             {
                 long gridId = frontier.Dequeue();
