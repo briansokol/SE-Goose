@@ -8,9 +8,9 @@ namespace IngameScript
         /// <summary>Splits a comma-separated ore-priority line into trimmed, non-empty subtype names, preserving order.</summary>
         /// <param name="raw">Raw value (e.g. <c>Platinum,Uranium,Gold</c>).</param>
         /// <returns>The ordered subtype names; empty when <paramref name="raw"/> is blank.</returns>
-        public static List<string> ParseOrderLine(string raw)
+        public static StringList ParseOrderLine(string raw)
         {
-            var order = new List<string>();
+            var order = new StringList();
             if (string.IsNullOrEmpty(raw))
             {
                 return order;

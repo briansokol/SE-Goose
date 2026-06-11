@@ -10,7 +10,7 @@ namespace IngameScript
     {
         /// <summary>Observed item catalog keyed by the un-prefixed <c>Type/Subtype</c> form
         /// (e.g. <c>Component/SteelPlate</c>). Persisted to PB Storage between recompiles.</summary>
-        private readonly Dictionary<string, MyItemType> _knownItems = new Dictionary<string, MyItemType>();
+        private readonly ItemTypeByString _knownItems = new ItemTypeByString();
 
         /// <summary>Monotonic counter bumped whenever a new key is added to <see cref="_knownItems"/>.
         /// Consumers (e.g. stock-template renderer) compare against a stored snapshot to skip work

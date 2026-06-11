@@ -19,11 +19,11 @@ namespace IngameScript
 
         private readonly Queue<string> _actionLog = new Queue<string>();
         private string _lastRescanSummary = "";
-        private readonly List<string> _warningOrder = new List<string>();
-        private readonly Dictionary<string, int> _warnings = new Dictionary<string, int>();
-        private readonly HashSet<string> _oneShotWarnedKeys = new HashSet<string>();
-        private readonly List<string> _oneShotWarnedMessages = new List<string>();
-        private readonly HashSet<string> _actionOnceKeys = new HashSet<string>();
+        private readonly StringList _warningOrder = new StringList();
+        private readonly IntByString _warnings = new IntByString();
+        private readonly StringSet _oneShotWarnedKeys = new StringSet();
+        private readonly StringList _oneShotWarnedMessages = new StringList();
+        private readonly StringSet _actionOnceKeys = new StringSet();
         private readonly StringBuilder _echoBuffer = new StringBuilder();
 
         /// <summary>Creates a logger that emits status via <paramref name="echo"/>.</summary>

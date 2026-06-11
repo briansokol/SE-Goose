@@ -16,10 +16,10 @@ namespace IngameScript
         /// <param name="connOut">Output edges, one per raw connector. Cleared first.</param>
         public static void EnumerateLiveEdges(
             IMyGridTerminalSystem gts,
-            List<IMyMechanicalConnectionBlock> mechRawScratch,
-            List<IMyShipConnector> connRawScratch,
-            List<MechanicalEdge> mechOut,
-            List<ConnectorEdge> connOut)
+            MechBlockList mechRawScratch,
+            ConnectorList connRawScratch,
+            MechanicalEdgeList mechOut,
+            ConnectorEdgeList connOut)
         {
             mechRawScratch.Clear();
             gts.GetBlocksOfType(mechRawScratch, m => !m.Closed);

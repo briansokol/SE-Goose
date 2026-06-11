@@ -21,10 +21,10 @@ namespace IngameScript
         private readonly Func<IEnumerable<long>> _getConstructGrids;
         private readonly Action<string> _logWarning;
 
-        private readonly List<string> _inboxBuf = new List<string>();
+        private readonly StringList _inboxBuf = new StringList();
         private readonly Dictionary<long, PeerRecord> _peers = new Dictionary<long, PeerRecord>();
         private readonly List<long> _sweepBuf = new List<long>();
-        private readonly List<FederationPeer> _liveBuf = new List<FederationPeer>();
+        private readonly PeerList _liveBuf = new PeerList();
 
         private bool _enabled;
         private bool _initialized;
@@ -100,7 +100,7 @@ namespace IngameScript
         }
 
         /// <summary>Returns the live (non-stale) peer Goose instances as of <paramref name="currentTick"/>. The returned list is reused between calls; copy it if retained.</summary>
-        public List<FederationPeer> GetLivePeers(long currentTick)
+        public PeerList GetLivePeers(long currentTick)
         {
             _liveBuf.Clear();
             if (!_enabled)
@@ -211,7 +211,7 @@ namespace IngameScript
             PeerRecord rec;
             if (!_peers.TryGetValue(pbId, out rec))
             {
-                rec = new PeerRecord { Peer = new FederationPeer { ConstructGrids = new HashSet<long>() } };
+                rec = new PeerRecord { Peer = new FederationPeer { ConstructGrids = new LongSet() } };
                 _peers[pbId] = rec;
             }
 
@@ -222,7 +222,7 @@ namespace IngameScript
             rec.LastSeenTick = _currentTick;
         }
 
-        private static void ParseGrids(string raw, HashSet<long> output)
+        private static void ParseGrids(string raw, LongSet output)
         {
             if (string.IsNullOrEmpty(raw))
             {
@@ -328,7 +328,7 @@ namespace IngameScript
         }
 
         /// <summary>Pulls every pending broadcast into <paramref name="outBuf"/>. Non-string payloads are dropped.</summary>
-        public void DrainInbox(List<string> outBuf)
+        public void DrainInbox(StringList outBuf)
         {
             while (_listener.HasPendingMessage)
             {

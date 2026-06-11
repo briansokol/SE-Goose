@@ -19,9 +19,9 @@ namespace Crane.Tests
         private static readonly MyItemType SteelPlate = MyItemType.MakeComponent("SteelPlate");
         private static readonly MyItemType InteriorPlate = MyItemType.MakeComponent("InteriorPlate");
 
-        private static List<IMyCargoContainer> CargoListWith(params FakeCargoContainer[] cargos)
+        private static CargoList CargoListWith(params FakeCargoContainer[] cargos)
         {
-            var list = new List<IMyCargoContainer>(cargos.Length);
+            var list = new CargoList(cargos.Length);
             for (int i = 0; i < cargos.Length; i++)
             {
                 list.Add(cargos[i]);
@@ -41,7 +41,7 @@ namespace Crane.Tests
             Program.DrainInventory(
                 input, keepIngots: true, keepSubtypes: null,
                 cargoContainers: CargoListWith(cargo),
-                itemBuffer: new List<MyInventoryItem>(),
+                itemBuffer: new InvItemList(),
                 budgetExceeded: null, debugLog: null);
 
             input.AmountOf(Iron).Should().Be(100);
@@ -58,12 +58,12 @@ namespace Crane.Tests
             output.Add(SteelPlate, 10);
             output.Add(InteriorPlate, 20);
             var cargo = new FakeCargoContainer();
-            var keep = new HashSet<string>(StringComparer.Ordinal) { "SteelPlate" };
+            var keep = new StringSet(StringComparer.Ordinal) { "SteelPlate" };
 
             Program.DrainInventory(
                 output, keepIngots: false, keepSubtypes: keep,
                 cargoContainers: CargoListWith(cargo),
-                itemBuffer: new List<MyInventoryItem>(),
+                itemBuffer: new InvItemList(),
                 budgetExceeded: null, debugLog: null);
 
             output.AmountOf(SteelPlate).Should().Be(10);
@@ -82,8 +82,8 @@ namespace Crane.Tests
             var output = new FakeInventory();
             output.Add(SteelPlate, 15);
             var cargo = new FakeCargoContainer();
-            List<IMyCargoContainer> cargos = CargoListWith(cargo);
-            var buffer = new List<MyInventoryItem>();
+            CargoList cargos = CargoListWith(cargo);
+            var buffer = new InvItemList();
 
             Program.DrainInventory(input, false, null, cargos, buffer, null, null);
             Program.DrainInventory(output, false, null, cargos, buffer, null, null);
@@ -107,7 +107,7 @@ namespace Crane.Tests
             Program.PullItemIntoInventory(
                 input, Iron, need: 40,
                 cargoContainers: CargoListWith(cargo),
-                itemBuffer: new List<MyInventoryItem>(),
+                itemBuffer: new InvItemList(),
                 budgetExceeded: null, debugLog: null);
 
             input.AmountOf(Iron).Should().Be(50);
@@ -125,7 +125,7 @@ namespace Crane.Tests
             Program.PullItemIntoInventory(
                 output, InteriorPlate, need: 10,
                 cargoContainers: CargoListWith(cargo),
-                itemBuffer: new List<MyInventoryItem>(),
+                itemBuffer: new InvItemList(),
                 budgetExceeded: null, debugLog: null);
 
             output.AmountOf(InteriorPlate).Should().Be(10);

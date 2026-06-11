@@ -23,22 +23,22 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>All inventory-bearing blocks Goose currently manages.</summary>
-        private readonly List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
+        private readonly BlockList _allInventoryBlocks = new BlockList();
 
         /// <summary>Cargo containers in scope, including unmanaged ones.</summary>
-        private readonly List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
+        private readonly CargoList _cargoContainers = new CargoList();
 
         /// <summary>Ship connectors in scope.</summary>
-        private readonly List<IMyShipConnector> _connectors = new List<IMyShipConnector>();
+        private readonly ConnectorList _connectors = new ConnectorList();
 
         /// <summary>Refineries, assemblers, and other production blocks in scope.</summary>
         private readonly List<IMyProductionBlock> _productionBlocks = new List<IMyProductionBlock>();
 
         /// <summary>First surfaces of in-scope blocks tagged <c>[GError]</c>, redrawn each cycle.</summary>
-        private readonly List<IMyTextSurface> _gerrorLcds = new List<IMyTextSurface>();
+        private readonly SurfaceList _gerrorLcds = new SurfaceList();
 
         /// <summary>First surfaces of in-scope blocks tagged <c>[GStatus]</c>, redrawn each cycle.</summary>
-        private readonly List<IMyTextSurface> _gstatusLcds = new List<IMyTextSurface>();
+        private readonly SurfaceList _gstatusLcds = new SurfaceList();
 
         /// <summary>Scratch buffer reused by status-surface enumeration during rescans.</summary>
         private readonly List<IMyTextSurfaceProvider> _surfaceProviderScratch = new List<IMyTextSurfaceProvider>();

@@ -46,19 +46,19 @@ namespace IngameScript
         private readonly List<AutocraftTarget> _autocraftTargets = new List<AutocraftTarget>();
 
         /// <summary>Map of catalog key → full active quota line (preserved for round-trip in CustomData merge).</summary>
-        private readonly Dictionary<string, string> _autocraftActiveQuotaLines = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly StringMap _autocraftActiveQuotaLines = new StringMap(StringComparer.Ordinal);
 
         /// <summary>Snapshot of assembler EntityIds seen in the previous tick. Used to detect pool divergence and clear the capability cache.</summary>
-        private readonly HashSet<long> _capabilityCacheShadow = new HashSet<long>();
+        private readonly LongSet _capabilityCacheShadow = new LongSet();
 
         /// <summary>Capability cache keyed by catalog key, value is the set of assembler EntityIds that successfully probed <see cref="IMyAssembler.CanUseBlueprint"/>.</summary>
-        private readonly Dictionary<string, HashSet<long>> _capabilityCache = new Dictionary<string, HashSet<long>>();
+        private readonly Dictionary<string, LongSet> _capabilityCache = new Dictionary<string, LongSet>();
 
         /// <summary>EntityId of the assembler currently reserved for Disassembly when both sides have work; 0 when none.</summary>
         private long _reservedAsmEntityId;
 
         /// <summary>Set during <see cref="StepDispatchAndReconcile"/> when an assembler's mode was already flipped this tick (or was non-empty); prevents a re-flip within the same dispatch.</summary>
-        private readonly HashSet<long> _modeLockedThisTick = new HashSet<long>();
+        private readonly LongSet _modeLockedThisTick = new LongSet();
 
         /// <summary>Reusable per-line status buffer rendered into the <c>[CCraft]</c> surface.</summary>
         private readonly StringBuilder _statusBuffer = new StringBuilder(2048);
@@ -67,10 +67,10 @@ namespace IngameScript
         private readonly Dictionary<string, AutocraftLineStatus> _quotaStatus = new Dictionary<string, AutocraftLineStatus>(StringComparer.Ordinal);
 
         /// <summary>Per-quota queued-amount sum across capable assemblers; populated during dispatch.</summary>
-        private readonly Dictionary<string, long> _quotaQueued = new Dictionary<string, long>(StringComparer.Ordinal);
+        private readonly LongByString _quotaQueued = new LongByString(StringComparer.Ordinal);
 
         /// <summary>Per-quota active-assembler count; populated during dispatch.</summary>
-        private readonly Dictionary<string, int> _quotaAsmCount = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly IntByString _quotaAsmCount = new IntByString(StringComparer.Ordinal);
 
         /// <summary>Currently active mode for each assembler (Assemble or Disassemble), keyed by EntityId.</summary>
         private readonly Dictionary<long, MyAssemblerMode> _asmMode = new Dictionary<long, MyAssemblerMode>();
@@ -217,10 +217,10 @@ namespace IngameScript
         }
 
         /// <summary>Reusable merged-keys set for <see cref="SyncCCraftTemplate"/>.</summary>
-        private readonly HashSet<string> _ccraftMergedKeys = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _ccraftMergedKeys = new StringSet(StringComparer.Ordinal);
 
         /// <summary>Reusable sorted-keys list for <see cref="SyncCCraftTemplate"/>.</summary>
-        private readonly List<string> _ccraftSortedKeys = new List<string>();
+        private readonly StringList _ccraftSortedKeys = new StringList();
 
         /// <summary>Reusable builder for the <c>[CCraft]</c> CustomData body.</summary>
         private readonly StringBuilder _ccraftTemplateSB = new StringBuilder(2048);
@@ -372,7 +372,7 @@ namespace IngameScript
         /// <summary>Refreshes the assembler pool snapshot and invalidates the capability cache on divergence.</summary>
         private IEnumerator<YieldReason> StepAssemblerPool()
         {
-            var currentSet = new HashSet<long>();
+            var currentSet = new LongSet();
             for (int i = 0; i < _assemblers.Count; i++)
             {
                 if (_assemblers[i] != null && !_assemblers[i].Closed)
@@ -462,8 +462,8 @@ namespace IngameScript
                 _reservedAsmEntityId = 0;
             }
 
-            List<IMyAssembler> assembleSlice;
-            List<IMyAssembler> disassembleSlice;
+            AssemblerList assembleSlice;
+            AssemblerList disassembleSlice;
             BuildAssemblerSlices(assembleCount, disassembleCount, reservedActive, reservedId,
                 out assembleSlice, out disassembleSlice);
 
@@ -515,10 +515,10 @@ namespace IngameScript
 
         /// <summary>Builds the assemble/disassemble slices from <see cref="_assemblers"/>, putting the reserved assembler first into the disassemble slice when active.</summary>
         private void BuildAssemblerSlices(int assembleCount, int disassembleCount, bool reservedActive, long reservedId,
-            out List<IMyAssembler> assembleSlice, out List<IMyAssembler> disassembleSlice)
+            out AssemblerList assembleSlice, out AssemblerList disassembleSlice)
         {
-            assembleSlice = new List<IMyAssembler>();
-            disassembleSlice = new List<IMyAssembler>();
+            assembleSlice = new AssemblerList();
+            disassembleSlice = new AssemblerList();
             if (reservedActive && reservedId != 0)
             {
                 for (int i = 0; i < _assemblers.Count; i++)
@@ -550,7 +550,7 @@ namespace IngameScript
         }
 
         /// <summary>Per-(item) distribution + per-assembler reconcile loop. For each work item: build capable slice, split deficit, and reconcile each assembler's queue.</summary>
-        private void DistributeAndReconcile(List<IMyAssembler> slice, List<AutocraftTarget> work, MyAssemblerMode mode)
+        private void DistributeAndReconcile(AssemblerList slice, List<AutocraftTarget> work, MyAssemblerMode mode)
         {
             if (slice == null || slice.Count == 0 || work == null || work.Count == 0)
             {
@@ -560,7 +560,7 @@ namespace IngameScript
             for (int w = 0; w < work.Count; w++)
             {
                 AutocraftTarget t = work[w];
-                var capableSlice = new List<IMyAssembler>();
+                var capableSlice = new AssemblerList();
                 for (int s = 0; s < slice.Count; s++)
                 {
                     if (IsAssemblerCapable(slice[s], t))
@@ -680,7 +680,7 @@ namespace IngameScript
         /// <summary>True when at least one assembler in the pool can produce <paramref name="t"/> (cache hit). Used to disambiguate <see cref="AutocraftLineStatus.BlockedNoCapableAsm"/> from <see cref="AutocraftLineStatus.BlockedNeedsLearn"/>.</summary>
         private bool HasResolvedBlueprint(AutocraftTarget t)
         {
-            HashSet<long> capable;
+            LongSet capable;
             if (_capabilityCache.TryGetValue(t.Key, out capable) && capable != null && capable.Count > 0)
             {
                 return true;
@@ -697,7 +697,7 @@ namespace IngameScript
                 return false;
             }
 
-            HashSet<long> cached;
+            LongSet cached;
             if (_capabilityCache.TryGetValue(t.Key, out cached) && cached != null && cached.Contains(asm.EntityId))
             {
                 return true;
@@ -713,10 +713,10 @@ namespace IngameScript
             {
                 if (asm.CanUseBlueprint(bp.Value))
                 {
-                    HashSet<long> set;
+                    LongSet set;
                     if (!_capabilityCache.TryGetValue(t.Key, out set))
                     {
-                        set = new HashSet<long>();
+                        set = new LongSet();
                         _capabilityCache[t.Key] = set;
                     }
                     set.Add(asm.EntityId);

@@ -16,9 +16,9 @@ namespace Crane.Tests
         private static readonly MyItemType StoneOre = MyItemType.MakeOre("Stone");
         private static readonly MyItemType PlatinumOre = MyItemType.MakeOre("Platinum");
 
-        private static List<IMyCargoContainer> CargoListWith(params FakeCargoContainer[] cargos)
+        private static CargoList CargoListWith(params FakeCargoContainer[] cargos)
         {
-            var list = new List<IMyCargoContainer>(cargos.Length);
+            var list = new CargoList(cargos.Length);
             for (int i = 0; i < cargos.Length; i++)
             {
                 list.Add(cargos[i]);
@@ -50,7 +50,7 @@ namespace Crane.Tests
 
             Program.TopUpRefinery(
                 refinery, new List<string> { "Gold", "Iron" }, 0.5, oreTotals,
-                CargoListWith(cargo), new List<MyInventoryItem>(), null, null);
+                CargoListWith(cargo), new InvItemList(), null, null);
 
             input.AmountOf(GoldOre).Should().BeGreaterThan(0);
             input.AmountOf(IronOre).Should().Be(0);
@@ -69,7 +69,7 @@ namespace Crane.Tests
 
             Program.TopUpRefinery(
                 refinery, new List<string> { "Iron" }, 0.5, oreTotals,
-                CargoListWith(cargo), new List<MyInventoryItem>(), null, null);
+                CargoListWith(cargo), new InvItemList(), null, null);
 
             input.AmountOf(IronOre).Should().Be(600);
         }
@@ -85,7 +85,7 @@ namespace Crane.Tests
 
             Program.TopUpRefinery(
                 refinery, new List<string> { "Gold", "Iron" }, 0.5, oreTotals,
-                CargoListWith(cargo), new List<MyInventoryItem>(), null, null);
+                CargoListWith(cargo), new InvItemList(), null, null);
 
             input.AmountOf(GoldOre).Should().Be(0);
             input.AmountOf(IronOre).Should().BeGreaterThan(0);
@@ -99,7 +99,7 @@ namespace Crane.Tests
             input.Add(StoneOre, 100);
             input.Add(GoldOre, 100);
 
-            Program.SortRefineryInput(input, new List<string> { "Stone", "Platinum", "Gold", "Iron" }, new List<MyInventoryItem>());
+            Program.SortRefineryInput(input, new List<string> { "Stone", "Platinum", "Gold", "Iron" }, new InvItemList());
 
             input.TypesInOrder().Should().Equal(StoneOre, GoldOre, IronOre);
         }
@@ -112,7 +112,7 @@ namespace Crane.Tests
             input.Add(GoldOre, 100);
             input.Add(IronOre, 100);
 
-            Program.SortRefineryInput(input, new List<string> { "Stone", "Gold", "Iron" }, new List<MyInventoryItem>());
+            Program.SortRefineryInput(input, new List<string> { "Stone", "Gold", "Iron" }, new InvItemList());
 
             input.TypesInOrder().Should().Equal(StoneOre, GoldOre, IronOre);
         }
@@ -124,7 +124,7 @@ namespace Crane.Tests
             input.Add(PlatinumOre, 100);
             input.Add(IronOre, 100);
 
-            Program.SortRefineryInput(input, new List<string> { "Iron" }, new List<MyInventoryItem>());
+            Program.SortRefineryInput(input, new List<string> { "Iron" }, new InvItemList());
 
             input.TypesInOrder().Should().Equal(IronOre, PlatinumOre);
         }

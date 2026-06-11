@@ -43,7 +43,7 @@ namespace Shared.Tests.Federation
 
             beacon.Tick(1);
 
-            List<FederationPeer> peers = beacon.GetLivePeers(1);
+            PeerList peers = beacon.GetLivePeers(1);
             peers.Should().HaveCount(1);
             peers[0].PbId.Should().Be(200);
             peers[0].Signature.Should().Be(99UL);

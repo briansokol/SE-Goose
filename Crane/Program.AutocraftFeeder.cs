@@ -10,16 +10,16 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>Reusable item buffer for the per-tick inventory walks in the feeder.</summary>
-        private readonly List<MyInventoryItem> _feederItemBuffer = new List<MyInventoryItem>();
+        private readonly InvItemList _feederItemBuffer = new InvItemList();
 
         /// <summary>Reusable production-queue buffer for the per-tick queue walks in the feeder.</summary>
         private readonly List<MyProductionItem> _feederQueueBuffer = new List<MyProductionItem>();
 
         /// <summary>Reusable list of ingot item types, rebuilt each pass from <see cref="ItemCatalog.KnownItems"/>.</summary>
-        private readonly List<MyItemType> _feederIngotTypes = new List<MyItemType>();
+        private readonly ItemTypeList _feederIngotTypes = new ItemTypeList();
 
         /// <summary>Reusable scratch set for queued blueprint subtypes during disassembly staging.</summary>
-        private readonly HashSet<string> _feederQueuedSubtypes = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _feederQueuedSubtypes = new StringSet(StringComparer.Ordinal);
 
         /// <summary>
         /// Per-assembler material feeder. For each managed assembler:
@@ -159,7 +159,7 @@ namespace IngameScript
         }
 
         /// <summary>Rebuilds <paramref name="output"/> with the ingot item types from the catalog.</summary>
-        internal static void CollectIngotTypes(IReadOnlyDictionary<string, MyItemType> catalog, List<MyItemType> output)
+        internal static void CollectIngotTypes(IReadOnlyDictionary<string, MyItemType> catalog, ItemTypeList output)
         {
             output.Clear();
             foreach (KeyValuePair<string, MyItemType> kv in catalog)
@@ -179,9 +179,9 @@ namespace IngameScript
         internal static void DrainInventory(
             IMyInventory inv,
             bool keepIngots,
-            HashSet<string> keepSubtypes,
+            StringSet keepSubtypes,
             IList<IMyCargoContainer> cargoContainers,
-            List<MyInventoryItem> itemBuffer,
+            InvItemList itemBuffer,
             Func<bool> budgetExceeded,
             Action<string> debugLog)
         {
@@ -275,7 +275,7 @@ namespace IngameScript
             MyItemType type,
             long need,
             IList<IMyCargoContainer> cargoContainers,
-            List<MyInventoryItem> itemBuffer,
+            InvItemList itemBuffer,
             Func<bool> budgetExceeded,
             Action<string> debugLog)
         {
@@ -355,7 +355,7 @@ namespace IngameScript
         }
 
         /// <summary>Sums all stacks of <paramref name="type"/> in <paramref name="inv"/>.</summary>
-        internal static long GetCurrentAmount(IMyInventory inv, MyItemType type, List<MyInventoryItem> itemBuffer)
+        internal static long GetCurrentAmount(IMyInventory inv, MyItemType type, InvItemList itemBuffer)
         {
             if (inv == null)
             {

@@ -6,7 +6,7 @@ namespace IngameScript
     public static class BlueprintMisses
     {
         /// <summary>Item subtype → blueprint subtype map for vanilla components whose blueprint names diverge.</summary>
-        public static readonly Dictionary<string, string> CuratedMap = new Dictionary<string, string> {
+        public static readonly StringMap CuratedMap = new StringMap {
             { "Construction", "ConstructionComponent" },
             { "Computer", "ComputerComponent" },
             { "Detector", "DetectorComponent" },

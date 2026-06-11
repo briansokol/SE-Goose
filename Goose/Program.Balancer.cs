@@ -152,10 +152,10 @@ namespace IngameScript
         };
 
         /// <summary>Reusable scratch list, refreshed each cycle, of ammo magazine types to probe weapon candidates with.</summary>
-        private readonly List<MyItemType> _ammoCandidates = new List<MyItemType>();
+        private readonly ItemTypeList _ammoCandidates = new ItemTypeList();
 
         /// <summary>Reusable scratch set used to dedupe ammo candidate keys.</summary>
-        private readonly HashSet<string> _ammoCandidateKeys = new HashSet<string>();
+        private readonly StringSet _ammoCandidateKeys = new StringSet();
 
 
         /// <summary>Per-cycle cache of measured per-unit volume (m^3/unit) for items the balancer has transferred this cycle. Lets the bulk-transfer helpers compute exact unit counts from a remaining-volume headroom without iterating one unit at a time. Cleared at the start of every <see cref="StepBalanceConsumers"/> run.</summary>
@@ -163,7 +163,7 @@ namespace IngameScript
 
 
         /// <summary>Per-pass list of viable source containers (non-null entries with a non-null inventory). Populated at the top of <see cref="StepBalanceConsumers"/> so the three pull dispatches do not each rewalk <see cref="_entryByBlock"/>.</summary>
-        private readonly List<ContainerEntry> _balanceSources = new List<ContainerEntry>();
+        private readonly ContainerList _balanceSources = new ContainerList();
 
         /// <summary>Total ammo-magazine volume across <see cref="_entryByBlock"/>, accumulated during <see cref="StepScanInventories"/>. Only items whose volume-per-unit has been measured into <see cref="_balanceVolumeCache"/> contribute.</summary>
         private float _gridAmmoVolume;
@@ -335,7 +335,7 @@ namespace IngameScript
                 return;
             }
 
-            List<MyItemType> accepted = null;
+            ItemTypeList accepted = null;
             for (int i = 0; i < _ammoCandidates.Count; i++)
             {
                 MyItemType ammo = _ammoCandidates[i];
@@ -343,7 +343,7 @@ namespace IngameScript
                 {
                     if (accepted == null)
                     {
-                        accepted = new List<MyItemType>();
+                        accepted = new ItemTypeList();
                     }
 
                     accepted.Add(ammo);
@@ -478,9 +478,9 @@ namespace IngameScript
         /// <param name="cat">Category whose tagged containers serve as push destinations.</param>
         /// <param name="excessLabel">Label naming the excess in the warning (an item subtype id or "ammo").</param>
         /// <returns>The route list, or null if no container is tagged for the category.</returns>
-        private List<ContainerEntry> ResolvePushRoutes(ItemCategory cat, string excessLabel)
+        private ContainerList ResolvePushRoutes(ItemCategory cat, string excessLabel)
         {
-            List<ContainerEntry> routes;
+            ContainerList routes;
             if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0)
             {
                 LogWarningOnce("balancer:no-route:" + cat,
@@ -798,7 +798,7 @@ namespace IngameScript
             float targetVolume = ComputeFillTargetVolume((float)dst.MaxVolume, percent) * factor;
             if (kind == ConsumerKind.Weapon)
             {
-                List<MyItemType> ammoList = entry.AcceptedAmmo;
+                ItemTypeList ammoList = entry.AcceptedAmmo;
                 if (ammoList == null || ammoList.Count == 0)
                 {
                     return;
@@ -853,7 +853,7 @@ namespace IngameScript
         /// <summary>Pushes one unit at a time of <paramref name="item"/> out of <paramref name="dst"/> to category-tagged routes until volume falls under <paramref name="targetVolume"/>. Warns once when no route exists.</summary>
         private void PushSingleItemExcessByVolume(ContainerEntry self, IMyInventory dst, MyItemType item, float targetVolume)
         {
-            List<ContainerEntry> routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
+            ContainerList routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
             if (routes == null)
             {
                 return;
@@ -889,7 +889,7 @@ namespace IngameScript
         /// <summary>Fills (or drains) a tagged weapon to exactly <paramref name="target"/> total magazines, summing across <see cref="ContainerEntry.AcceptedAmmo"/>. Uses bulk transfer (count-based) since the unit is integer magazines.</summary>
         private void BalanceWeaponByMagCount(ContainerEntry entry, IMyInventory dst, long target)
         {
-            List<MyItemType> ammoList = entry.AcceptedAmmo;
+            ItemTypeList ammoList = entry.AcceptedAmmo;
             if (ammoList == null || ammoList.Count == 0)
             {
                 return;
@@ -940,7 +940,7 @@ namespace IngameScript
             else if (currentMags > target)
             {
                 long excess = currentMags - target;
-                List<ContainerEntry> routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
+                ContainerList routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
                 if (routes == null)
                 {
                     return;
@@ -1001,7 +1001,7 @@ namespace IngameScript
         /// <summary>Pushes up to <paramref name="excess"/> units of <paramref name="item"/> out of <paramref name="dst"/> into category-tagged containers for the item's classification. Warns once when no route exists and leaves the excess in place.</summary>
         private void PushCountExcessToCategory(ContainerEntry self, IMyInventory dst, MyItemType item, long excess)
         {
-            List<ContainerEntry> routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
+            ContainerList routes = ResolvePushRoutes(Classify(item), item.SubtypeId);
             if (routes == null)
             {
                 return;
@@ -1034,7 +1034,7 @@ namespace IngameScript
         /// <param name="dst">Destination inventory.</param>
         /// <param name="ammoList">Accepted ammo types for the weapon.</param>
         /// <param name="targetVolume">Target volume for the destination, in litres.</param>
-        private void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, List<MyItemType> ammoList, float targetVolume)
+        private void PullWeaponAmmoFromAnySource(ContainerEntry self, IMyInventory dst, ItemTypeList ammoList, float targetVolume)
         {
             for (int a = 0; a < ammoList.Count; a++)
             {
@@ -1050,12 +1050,12 @@ namespace IngameScript
         /// <summary>Pushes one magazine at a time out of <paramref name="dst"/> to any container tagged for the <see cref="ItemCategory.Ammo"/> category until volume falls under <paramref name="targetVolume"/>. Warns once when no route exists.</summary>
         private void PushWeaponExcessToAmmoCategory(ContainerEntry self, IMyInventory dst, float targetVolume)
         {
-            List<ContainerEntry> routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
+            ContainerList routes = ResolvePushRoutes(ItemCategory.Ammo, "ammo");
             if (routes == null)
             {
                 return;
             }
-            List<MyItemType> ammoList = self.AcceptedAmmo;
+            ItemTypeList ammoList = self.AcceptedAmmo;
             if (ammoList == null || ammoList.Count == 0)
             {
                 return;

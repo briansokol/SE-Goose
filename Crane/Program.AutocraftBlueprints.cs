@@ -10,10 +10,10 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>Resolved blueprint subtype map keyed by catalog key (un-prefixed <c>Type/Subtype</c>). Survives recompile via the <c>[CCraftBlueprints]</c> section.</summary>
-        private readonly Dictionary<string, string> _blueprintMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly StringMap _blueprintMap = new StringMap(StringComparer.Ordinal);
 
         /// <summary>Catalog keys flagged as needing operator-driven manual seeding.</summary>
-        private readonly HashSet<string> _needsLearn = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _needsLearn = new StringSet(StringComparer.Ordinal);
 
         /// <summary>3-tier blueprint resolver. Cache → curated → direct probe → NeedsLearn.</summary>
         /// <param name="asm">Assembler used as the probe target. Must support <c>CanUseBlueprint</c>.</param>
@@ -136,14 +136,14 @@ namespace IngameScript
                     }
                 }
             }
-            List<string> learned = null;
+            StringList learned = null;
             foreach (string key in _needsLearn)
             {
                 if (_blueprintMap.ContainsKey(key))
                 {
                     if (learned == null)
                     {
-                        learned = new List<string>();
+                        learned = new StringList();
                     }
 
                     learned.Add(key);
@@ -291,7 +291,7 @@ namespace IngameScript
 
             var sb = new StringBuilder();
             sb.Append("[CCraftBlueprints]\n");
-            var keys = new List<string>();
+            var keys = new StringList();
             foreach (KeyValuePair<string, string> kv in _blueprintMap)
             {
                 keys.Add(kv.Key);

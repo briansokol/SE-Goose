@@ -19,7 +19,7 @@ namespace IngameScript
             IList<MechanicalEdge> mechEdges,
             IList<ConnectorEdge> connEdges,
             bool enableFederation,
-            HashSet<long> output)
+            LongSet output)
         {
             output.Clear();
             output.Add(rootGridId);
@@ -54,8 +54,8 @@ namespace IngameScript
         public static void BuildScope(
             long rootGridId,
             IList<MechanicalEdge> mechEdges,
-            HashSet<long> approvedFederateGrids,
-            HashSet<long> output)
+            LongSet approvedFederateGrids,
+            LongSet output)
         {
             output.Clear();
             output.Add(rootGridId);
@@ -80,7 +80,7 @@ namespace IngameScript
         /// <param name="frontier">Queue pre-seeded with the root (and any federated) grid ids.</param>
         /// <param name="mechEdges">Mechanical edges to traverse; null is treated as no edges.</param>
         /// <param name="output">Scope set that accumulates reachable grid ids.</param>
-        private static void TraverseMechFrontier(Queue<long> frontier, IList<MechanicalEdge> mechEdges, HashSet<long> output)
+        private static void TraverseMechFrontier(Queue<long> frontier, IList<MechanicalEdge> mechEdges, LongSet output)
         {
             while (frontier.Count > 0)
             {
@@ -115,8 +115,8 @@ namespace IngameScript
         /// <returns>True when the block is in management scope under the active mode.</returns>
         public static bool IsBlockInScope(
             bool groupModeActive,
-            HashSet<long> groupBlockIds,
-            HashSet<long> scopeGrids,
+            LongSet groupBlockIds,
+            LongSet scopeGrids,
             long blockEntityId,
             long blockGridId)
         {
@@ -133,7 +133,7 @@ namespace IngameScript
         /// <param name="groupBlockIds">EntityIds of the configured group's member blocks; consulted only in group mode.</param>
         /// <param name="blockEntityId">EntityId of the candidate block.</param>
         /// <returns>True when the block may be used as a managed destination/target.</returns>
-        public static bool IsManagedTarget(bool groupModeActive, HashSet<long> groupBlockIds, long blockEntityId)
+        public static bool IsManagedTarget(bool groupModeActive, LongSet groupBlockIds, long blockEntityId)
         {
             return !groupModeActive || (groupBlockIds != null && groupBlockIds.Contains(blockEntityId));
         }

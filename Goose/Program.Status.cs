@@ -93,7 +93,7 @@ namespace IngameScript
         /// <summary>True when at least one container is tagged for the given category.</summary>
         private bool CategoryHasContainers(ItemCategory category)
         {
-            List<ContainerEntry> entries;
+            ContainerList entries;
             return _containersByCategory.TryGetValue(category, out entries) && entries.Count > 0;
         }
 
@@ -231,7 +231,7 @@ namespace IngameScript
         /// <summary>Sums a category's container volumes and returns the combined fill percentage.</summary>
         private int ComputeCategoryFillPercent(ItemCategory category)
         {
-            List<ContainerEntry> entries;
+            ContainerList entries;
             if (!_containersByCategory.TryGetValue(category, out entries))
             {
                 return 0;

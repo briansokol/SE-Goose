@@ -36,22 +36,22 @@ namespace IngameScript
         private bool _federationArbitrationActive;
 
         /// <summary>Remote grids cleared to federate this tick, produced by <see cref="ScopeArbitration"/> and consumed by <see cref="RebuildScope"/>.</summary>
-        private readonly HashSet<long> _approvedFederateGrids = new HashSet<long>();
+        private readonly LongSet _approvedFederateGrids = new LongSet();
 
         /// <summary>Raw mechanical-block buffer for the federation enumeration (kept separate from the pipeline's buffers to avoid clobbering mid-iteration).</summary>
-        private readonly List<IMyMechanicalConnectionBlock> _fedMechRaw = new List<IMyMechanicalConnectionBlock>();
+        private readonly MechBlockList _fedMechRaw = new MechBlockList();
 
         /// <summary>Raw connector buffer for the federation enumeration.</summary>
-        private readonly List<IMyShipConnector> _fedConnRaw = new List<IMyShipConnector>();
+        private readonly ConnectorList _fedConnRaw = new ConnectorList();
 
         /// <summary>Projected mechanical edges for the federation enumeration.</summary>
-        private readonly List<MechanicalEdge> _fedMechBuf = new List<MechanicalEdge>();
+        private readonly MechanicalEdgeList _fedMechBuf = new MechanicalEdgeList();
 
         /// <summary>Projected connector edges for the federation enumeration; also the connector input to arbitration.</summary>
-        private readonly List<ConnectorEdge> _fedConnBuf = new List<ConnectorEdge>();
+        private readonly ConnectorEdgeList _fedConnBuf = new ConnectorEdgeList();
 
         /// <summary>This instance's mechanical-only construct grid set, refreshed each tick and announced over the beacon.</summary>
-        private readonly HashSet<long> _constructGrids = new HashSet<long>();
+        private readonly LongSet _constructGrids = new LongSet();
 
         /// <summary>This instance's mechanical-only construct signature, announced over the beacon.</summary>
         private ulong _constructSignature;
@@ -86,7 +86,7 @@ namespace IngameScript
             }
 
             ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _fedMechRaw, _fedConnRaw, _fedMechBuf, _fedConnBuf);
-            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _fedMechBuf, (HashSet<long>)null, _constructGrids);
+            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _fedMechBuf, (LongSet)null, _constructGrids);
             _constructSignature = ScopeBuilder.ComputeConstructSignature(_constructGrids);
 
             if (_beacon == null)
@@ -104,7 +104,7 @@ namespace IngameScript
             _beacon.HeartbeatTicks = _config.FederationHeartbeatTicks;
             _beacon.Tick(tick);
 
-            List<FederationPeer> peers = _beacon.GetLivePeers(tick);
+            PeerList peers = _beacon.GetLivePeers(tick);
             IList<ConnectorEdge> connForArbitration = _config.EnableConnectorFederation ? (IList<ConnectorEdge>)_fedConnBuf : null;
             ArbitrationResult result = ScopeArbitration.Decide(
                 Me.CubeGrid.EntityId, Me.EntityId, _constructSignature, connForArbitration, peers);
@@ -182,7 +182,7 @@ namespace IngameScript
         }
 
         /// <summary>Order-independent hash of the federation decision (reason plus approved grids), used to detect decision changes that warrant a scope rescan.</summary>
-        private static ulong ComputeFederationDecisionHash(HaltReason reason, HashSet<long> approved)
+        private static ulong ComputeFederationDecisionHash(HaltReason reason, LongSet approved)
         {
             ulong h = ScopeBuilder.ComputeConstructSignature(approved);
             h ^= (ulong)((int)reason + 1);

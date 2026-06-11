@@ -10,7 +10,7 @@ namespace IngameScript
         /// <summary>The peer's mechanical-only construct signature (see <see cref="ScopeBuilder.ComputeConstructSignature"/>).</summary>
         public ulong Signature;
         /// <summary>EntityIds of the grids in the peer's construct. Used to tell whether a docked grid is already managed by a peer Goose.</summary>
-        public HashSet<long> ConstructGrids;
+        public LongSet ConstructGrids;
     }
 
     /// <summary>Outcome of multi-Goose arbitration for the local instance this tick.</summary>
@@ -21,7 +21,7 @@ namespace IngameScript
         /// <summary>True when a directly federated peer Goose outranks this instance; the local instance enters full standby.</summary>
         public bool StandDown;
         /// <summary>Remote grids this instance is cleared to federate into scope this tick. Empty when standing down.</summary>
-        public HashSet<long> ApprovedFederateGrids = new HashSet<long>();
+        public LongSet ApprovedFederateGrids = new LongSet();
     }
 
     /// <summary>Pure multi-Goose deference logic. Decides, from local connector state and the IGC peer table, whether the local instance halts (duplicate), stands down (outranked), and which peer grids it may federate.</summary>

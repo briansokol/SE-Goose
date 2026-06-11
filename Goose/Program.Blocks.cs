@@ -60,18 +60,21 @@ namespace IngameScript
             public ConsumerKind ConsumerKind = ConsumerKind.None;
 
             /// <summary>Cached list of <see cref="MyItemType"/> ammo magazines this block accepts; <c>null</c> unless <see cref="ConsumerKind"/> is <see cref="ConsumerKind.Weapon"/>.</summary>
-            public List<MyItemType> AcceptedAmmo;
+            public ItemTypeList AcceptedAmmo;
 
             /// <summary>Per-block unit-count override parsed from the <c>[Balance=N]</c> name tag; <c>-1</c> means "no tag, use the class percent target." Only meaningful when <see cref="ConsumerKind"/> is non-None.</summary>
             public long BalanceTagCount = -1;
         }
 
+        /// <summary>List of container entries (named: shorter post-minification).</summary>
+        public class ContainerList : List<ContainerEntry> { }
+
         /// <summary>Routing buckets keyed by category, sorted by ascending priority.</summary>
-        private readonly Dictionary<ItemCategory, List<ContainerEntry>> _containersByCategory =
-            new Dictionary<ItemCategory, List<ContainerEntry>>();
+        private readonly Dictionary<ItemCategory, ContainerList> _containersByCategory =
+            new Dictionary<ItemCategory, ContainerList>();
 
         /// <summary>All <c>[Stock]</c>-tagged containers, sorted by ascending priority.</summary>
-        private readonly List<ContainerEntry> _stockContainers = new List<ContainerEntry>();
+        private readonly ContainerList _stockContainers = new ContainerList();
 
         /// <summary>Reverse lookup from a block to its cached <see cref="ContainerEntry"/>.</summary>
         private readonly Dictionary<IMyTerminalBlock, ContainerEntry> _entryByBlock =
@@ -86,25 +89,25 @@ namespace IngameScript
         private readonly Dictionary<IMyTerminalBlock, int> _stockTemplateVersion = new Dictionary<IMyTerminalBlock, int>();
 
         /// <summary>Total quantity of each item type observed during the most recent scan.</summary>
-        private readonly Dictionary<MyItemType, long> _itemTotals = new Dictionary<MyItemType, long>();
+        private readonly LongByItemType _itemTotals = new LongByItemType();
 
         /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
-        private readonly List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
+        private readonly InvItemList _itemBuffer = new InvItemList();
 
         /// <summary>Reused per-type quantity snapshot of a single stock container, built once per container in <see cref="StepFulfillStockQuotas"/> to avoid re-scanning the inventory for every quota.</summary>
-        private readonly Dictionary<MyItemType, long> _quotaSnapshot = new Dictionary<MyItemType, long>();
+        private readonly LongByItemType _quotaSnapshot = new LongByItemType();
 
         /// <summary>Reused active-quota map for <see cref="SyncStockTemplate"/>; key = quota key, value = full <c>key=value</c> line.</summary>
-        private readonly Dictionary<string, string> _stockActiveQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly StringMap _stockActiveQuotas = new StringMap(StringComparer.Ordinal);
 
         /// <summary>Reused builder for the <c>[Goose]</c> stock-template body.</summary>
         private readonly StringBuilder _stockTemplateSB = new StringBuilder(1024);
 
         /// <summary>Reused merged-key set (catalog ∪ active) for the stock template.</summary>
-        private readonly HashSet<string> _stockMergedKeys = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _stockMergedKeys = new StringSet(StringComparer.Ordinal);
 
         /// <summary>Reused sorted-key list for the stock template render order.</summary>
-        private readonly List<string> _stockSortedKeys = new List<string>();
+        private readonly StringList _stockSortedKeys = new StringList();
 
         /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
         /// <returns>The parsed priority, or 100 when no tag is present.</returns>
@@ -181,7 +184,7 @@ namespace IngameScript
         /// </summary>
         private IEnumerator<YieldReason> StepCategorizeContainers()
         {
-            foreach (KeyValuePair<ItemCategory, List<ContainerEntry>> kv in _containersByCategory)
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
             {
                 kv.Value.Clear();
             }
@@ -219,10 +222,10 @@ namespace IngameScript
                         {
                             var cat = (ItemCategory)c;
                             entry.Categories.Add(cat);
-                            List<ContainerEntry> bucket;
+                            ContainerList bucket;
                             if (!_containersByCategory.TryGetValue(cat, out bucket))
                             {
-                                bucket = new List<ContainerEntry>();
+                                bucket = new ContainerList();
                                 _containersByCategory[cat] = bucket;
                             }
                             bucket.Add(entry);
@@ -262,7 +265,7 @@ namespace IngameScript
                 }
             }
 
-            foreach (KeyValuePair<ItemCategory, List<ContainerEntry>> kv in _containersByCategory)
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
             {
                 kv.Value.Sort((a, b) => a.Priority.CompareTo(b.Priority));
             }
@@ -335,7 +338,7 @@ namespace IngameScript
         /// <param name="typeResolver">Maps a fully-qualified <c>Type/Subtype</c> string to a
         /// <see cref="MyItemType"/>, returning <c>null</c> on resolution failure.</param>
         /// <returns>List of malformed or unresolvable token strings, or <c>null</c> when all tokens parsed cleanly.</returns>
-        internal static List<string> ExtractNameTagQuotas(
+        internal static StringList ExtractNameTagQuotas(
             string name,
             Dictionary<MyItemType, StockQuota> destination,
             Func<string, MyItemType?> typeResolver)
@@ -345,7 +348,7 @@ namespace IngameScript
                 return null;
             }
 
-            List<string> malformed = null;
+            StringList malformed = null;
             int pos = 0;
             while (pos < name.Length)
             {
@@ -375,7 +378,7 @@ namespace IngameScript
                 {
                     if (malformed == null)
                     {
-                        malformed = new List<string>();
+                        malformed = new StringList();
                     }
 
                     malformed.Add(token);
@@ -386,7 +389,7 @@ namespace IngameScript
                 {
                     if (malformed == null)
                     {
-                        malformed = new List<string>();
+                        malformed = new StringList();
                     }
 
                     malformed.Add(token);
@@ -408,7 +411,7 @@ namespace IngameScript
                 return;
             }
 
-            List<string> malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
+            StringList malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
             if (malformed == null)
             {
                 return;
@@ -596,7 +599,7 @@ namespace IngameScript
         }
 
         /// <summary>Known component subtype IDs that route to <see cref="ItemCategory.Prototech"/>.</summary>
-        private static readonly HashSet<string> PrototechSubtypes = new HashSet<string> {
+        private static readonly StringSet PrototechSubtypes = new StringSet {
             "PrototechCapacitor", "PrototechCircuitry", "PrototechCoolingUnit",
             "PrototechFrame", "PrototechMachinery", "PrototechPanel",
             "PrototechPropulsionUnit", "PrototechScanner"

@@ -17,7 +17,7 @@ namespace IngameScript
         private long _mainTickCount;
 
         /// <summary>Reusable hold-announcement buffer to avoid per-call allocations.</summary>
-        private readonly HashSet<long> _bridgeAnnouncedAsmThisCycle = new HashSet<long>();
+        private readonly LongSet _bridgeAnnouncedAsmThisCycle = new LongSet();
 
         /// <summary>Constructs the bridge, registers its broadcast listener, and sends an initial <c>hello</c>. Tag and tunables come from the parsed config when available; defaults are applied otherwise.</summary>
         private void InitBridge()

@@ -8,7 +8,7 @@ namespace IngameScript
     /// <summary>Self-contained observed-item catalog. Persistable blob form keyed by un-prefixed <c>Type/Subtype</c>. Bumps a monotonic version counter on each new entry so consumers can skip work when the catalog hasn't grown.</summary>
     public class ItemCatalog
     {
-        private readonly Dictionary<string, MyItemType> _knownItems = new Dictionary<string, MyItemType>();
+        private readonly ItemTypeByString _knownItems = new ItemTypeByString();
         private int _version;
 
         /// <summary>Map of un-prefixed <c>Type/Subtype</c> keys to their resolved <see cref="MyItemType"/>.</summary>

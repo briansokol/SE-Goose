@@ -174,7 +174,7 @@ namespace IngameScript
         /// <summary>Moves up to <paramref name="amount"/> of an item between <paramref name="self"/> and each route entry.</summary>
         /// <param name="pull">True to pull from routes into self; false to push from self into routes.</param>
         /// <returns>The amount left unmoved.</returns>
-        private long MoveOverRoutes(ContainerEntry self, List<ContainerEntry> routes, MyItemType type, long amount, string label, bool pull)
+        private long MoveOverRoutes(ContainerEntry self, ContainerList routes, MyItemType type, long amount, string label, bool pull)
         {
             long remaining = amount;
             for (int i = 0; i < routes.Count && remaining > 0; i++)
@@ -366,7 +366,7 @@ namespace IngameScript
             }
 
             ItemCategory cat = Classify(type);
-            List<ContainerEntry> routes;
+            ContainerList routes;
             if (remaining > 0 && _containersByCategory.TryGetValue(cat, out routes))
             {
                 remaining = MoveOverRoutes(dst, routes, type, remaining, "stock<-cat", true);
@@ -431,7 +431,7 @@ namespace IngameScript
         private long PushExcessToCategory(ContainerEntry src, MyItemType type, long excess)
         {
             ItemCategory cat = Classify(type);
-            List<ContainerEntry> routes;
+            ContainerList routes;
             if (!_containersByCategory.TryGetValue(cat, out routes))
             {
                 LogWarningOnce("noroute:" + cat, "[Goose] Excess " + type.SubtypeId + " has no [" + cat + "] route");
@@ -481,7 +481,7 @@ namespace IngameScript
                 {
                     MyInventoryItem item = _itemBuffer[i];
                     ItemCategory cat = Classify(item.Type);
-                    List<ContainerEntry> routes;
+                    ContainerList routes;
                     if (!_containersByCategory.TryGetValue(cat, out routes) || routes.Count == 0)
                     {
                         LogWarningOnce("nocat:" + cat, "[Goose] No container tagged for category " + cat);

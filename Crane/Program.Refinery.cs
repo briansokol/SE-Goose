@@ -22,30 +22,30 @@ namespace IngameScript
         private const long RefineFeedBatch = 1000;
 
         /// <summary>Ore subtypes excluded from the min/max threshold system because they have no single corresponding ingot (so their ingot total is always 0). They keep their configured base-order position and are never bumped.</summary>
-        private static readonly HashSet<string> RefineThresholdExempt =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Stone" };
+        private static readonly StringSet RefineThresholdExempt =
+            new StringSet(StringComparer.OrdinalIgnoreCase) { "Stone" };
 
         /// <summary>Refineries in scope whose input Crane feeds. Populated during rescan.</summary>
         private readonly List<IMyRefinery> _refineries = new List<IMyRefinery>();
 
         /// <summary>Base ore feed priority (subtype names) parsed from <c>[CRefine] order</c>.</summary>
-        private readonly List<string> _refineOrder = new List<string>();
+        private readonly StringList _refineOrder = new StringList();
 
         /// <summary>Per-ingot thresholds (keyed by ingot/ore subtype) parsed from the <c>[CRefine]</c> section.</summary>
         private readonly Dictionary<string, RefineThreshold> _refineThresholds =
             new Dictionary<string, RefineThreshold>(StringComparer.Ordinal);
 
         /// <summary>Grid-wide ingot totals by subtype, rebuilt each balancing cycle.</summary>
-        private readonly Dictionary<string, long> _refineIngotTotals = new Dictionary<string, long>(StringComparer.Ordinal);
+        private readonly LongByString _refineIngotTotals = new LongByString(StringComparer.Ordinal);
 
         /// <summary>Grid-wide ore totals (in cargo) by subtype, rebuilt each balancing cycle.</summary>
-        private readonly Dictionary<string, long> _refineOreTotals = new Dictionary<string, long>(StringComparer.Ordinal);
+        private readonly LongByString _refineOreTotals = new LongByString(StringComparer.Ordinal);
 
         /// <summary>Hysteresis state: ore subtypes currently latched high priority (below min, not yet recovered to max). Persists across cycles.</summary>
-        private readonly HashSet<string> _refineHighPriority = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _refineHighPriority = new StringSet(StringComparer.Ordinal);
 
         /// <summary>Reusable scratch buffer for refinery inventory scans.</summary>
-        private readonly List<MyInventoryItem> _refineItemBuffer = new List<MyInventoryItem>();
+        private readonly InvItemList _refineItemBuffer = new InvItemList();
 
         /// <summary>Reusable scratch buffer for <c>[CRefine]</c> key enumeration.</summary>
         private readonly List<MyIniKey> _refineKeyScratch = new List<MyIniKey>();
@@ -57,7 +57,7 @@ namespace IngameScript
             _refineThresholds.Clear();
 
             string orderRaw = _ini.Get("CRefine", "order").ToString(string.Empty);
-            List<string> parsed = RefineParsing.ParseOrderLine(orderRaw);
+            StringList parsed = RefineParsing.ParseOrderLine(orderRaw);
             if (parsed.Count == 0)
             {
                 parsed = RefineParsing.ParseOrderLine(DefaultRefineOrder);
@@ -102,7 +102,7 @@ namespace IngameScript
 
             ClaimRefineryInputs(_refineries);
             BuildRefineryTotals();
-            List<string> order = BuildDynamicRefineOrder(_refineOrder, _refineThresholds, _refineIngotTotals, _refineOreTotals,
+            StringList order = BuildDynamicRefineOrder(_refineOrder, _refineThresholds, _refineIngotTotals, _refineOreTotals,
                 _config.RefineDefaultIngotMin, _config.RefineDefaultIngotMax, _refineHighPriority);
             yield return YieldReason.ChunkBoundary;
             if (BudgetExceeded())
@@ -188,7 +188,7 @@ namespace IngameScript
         }
 
         /// <summary>Adds every stack in <paramref name="inv"/> whose type id matches <paramref name="typeIdFilter"/> into <paramref name="totals"/>, keyed by subtype.</summary>
-        private static void AccumulateBySubtype(IMyInventory inv, string typeIdFilter, Dictionary<string, long> totals, List<MyInventoryItem> buffer)
+        private static void AccumulateBySubtype(IMyInventory inv, string typeIdFilter, LongByString totals, InvItemList buffer)
         {
             if (inv == null)
             {
@@ -220,7 +220,7 @@ namespace IngameScript
             double targetFillFraction,
             IDictionary<string, long> oreTotals,
             IList<IMyCargoContainer> cargoContainers,
-            List<MyInventoryItem> itemBuffer,
+            InvItemList itemBuffer,
             Func<bool> budgetExceeded,
             Action<string> debugLog)
         {
@@ -254,7 +254,7 @@ namespace IngameScript
 
         /// <summary>Reorders a refinery input's stacks so ores appear in <paramref name="order"/> priority (highest first); ores not listed are left after the prioritized ones.</summary>
         /// <remarks>Refineries consume the first input stack, so this puts the highest-priority available ore next in line. Relies on same-inventory <see cref="IMyInventory.TransferItemTo"/> repositioning.</remarks>
-        internal static void SortRefineryInput(IMyInventory input, IList<string> order, List<MyInventoryItem> buffer)
+        internal static void SortRefineryInput(IMyInventory input, IList<string> order, InvItemList buffer)
         {
             if (input == null)
             {
@@ -303,7 +303,7 @@ namespace IngameScript
             double targetFillFraction,
             long maxItems,
             IList<IMyCargoContainer> cargoContainers,
-            List<MyInventoryItem> itemBuffer,
+            InvItemList itemBuffer,
             Func<bool> budgetExceeded,
             Action<string> debugLog)
         {
@@ -343,17 +343,17 @@ namespace IngameScript
         /// <param name="defaultMax">Default high watermark applied when no per-subtype threshold exists.</param>
         /// <param name="highPriority">Persisted hysteresis state (mutated): subtypes currently latched high priority.</param>
         /// <returns>The ore subtypes to feed this cycle, in priority order.</returns>
-        internal static List<string> BuildDynamicRefineOrder(
+        internal static StringList BuildDynamicRefineOrder(
             IList<string> baseOrder,
             IDictionary<string, RefineThreshold> thresholds,
             IDictionary<string, long> ingotTotals,
             IDictionary<string, long> oreTotals,
             long defaultMin,
             long defaultMax,
-            HashSet<string> highPriority)
+            StringSet highPriority)
         {
-            var bumped = new List<string>();
-            var normal = new List<string>();
+            var bumped = new StringList();
+            var normal = new StringList();
 
             for (int i = 0; i < baseOrder.Count; i++)
             {
@@ -411,7 +411,7 @@ namespace IngameScript
                 }
             }
 
-            var result = new List<string>(bumped.Count + normal.Count);
+            var result = new StringList(bumped.Count + normal.Count);
             result.AddRange(bumped);
             result.AddRange(normal);
             return result;

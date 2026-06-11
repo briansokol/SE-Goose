@@ -19,7 +19,7 @@ namespace Shared.Tests
         }
 
         /// <summary>Transfers the current contents of <see cref="Inbox"/> into <paramref name="outBuf"/> and clears the inbox.</summary>
-        public void DrainInbox(List<string> outBuf)
+        public void DrainInbox(StringList outBuf)
         {
             for (int i = 0; i < Inbox.Count; i++)
             {
