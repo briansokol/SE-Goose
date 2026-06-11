@@ -434,7 +434,7 @@ namespace IngameScript
             ContainerList routes;
             if (!_containersByCategory.TryGetValue(cat, out routes))
             {
-                LogWarningOnce("noroute:" + cat, "[Goose] Excess " + type.SubtypeId + " has no [" + cat + "] route");
+                LogWarningOnce("noroute:" + cat, "[Goose] Excess " + type.SubtypeId + " has no [" + CategoryName(cat) + "] route");
                 return 0;
             }
             long remaining = MoveOverRoutes(src, routes, type, excess, "stock->cat", false);
@@ -484,7 +484,7 @@ namespace IngameScript
                     ContainerList routes;
                     if (!_containersByCategory.TryGetValue(cat, out routes) || routes.Count == 0)
                     {
-                        LogWarningOnce("nocat:" + cat, "[Goose] No container tagged for category " + cat);
+                        LogWarningOnce("nocat:" + cat, "[Goose] No container tagged for category " + CategoryName(cat));
                         continue;
                     }
                     bool atHome = false;

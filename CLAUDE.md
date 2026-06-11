@@ -193,6 +193,13 @@ Configured in `mdk.ini`:
 - `minify=none`: No optimization (default for development)
 - Other options: `trim`, `stripcomments`, `lite`, `full`
 
+#### Minification Safety (full minify)
+
+Both scripts pack with `minify=full`, which **renames identifiers** (types, members, locals, enum members) and **strips all `using` directives**. Code that compiles fine under `dotnet build` can still fail or misbehave in-game because of this. Two rules:
+
+- **Never derive a user-visible string or a tag-match key from an identifier name.** `enumValue.ToString()`, `nameof(...)`, and string interpolation of an enum (`$"{category}"`) all resolve to the renamed single-character name in the packed script. Back every label, log message, and tag comparison with an explicit string literal instead (e.g. route categories through `CategoryName(ItemCategory)` / the `CategoryTags` array). Enum values are still fine as dictionary keys or dedup keys, since those are never displayed.
+- **Fully qualify any type from a namespace the in-game compiler does not auto-import.** Space Engineers injects a fixed set of `using`s (it does **not** include `System.Globalization`), and full minify removes the directives the source relied on. So write `System.Globalization.CultureInfo` / `System.Globalization.NumberStyles` (and similar) inline rather than depending on a `using`.
+
 ### File Exclusions
 
 Files matching these patterns are excluded from the packaged scripts (each script has its own `mdk.ini` that lists exclusions):

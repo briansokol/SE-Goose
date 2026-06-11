@@ -35,6 +35,12 @@ namespace IngameScript
             "Ammo", "Consumables", "Ingredients", "Meals", "Seeds", "Misc"
         };
 
+        /// <summary>Returns the literal tag token for a category; safe under full minification, unlike <c>ToString()</c>.</summary>
+        internal static string CategoryName(ItemCategory category)
+        {
+            return CategoryTags[(int)category];
+        }
+
         /// <summary>Cached metadata for a single managed inventory block.</summary>
         public class ContainerEntry
         {

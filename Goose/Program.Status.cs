@@ -84,8 +84,9 @@ namespace IngameScript
             {
                 if (!CategoryHasContainers(category))
                 {
+                    string name = CategoryName(category);
                     LogWarningOnce("status:no-container:" + category,
-                        $"[Goose] {category} present but no container tagged. Tag a container [{category}].");
+                        $"[Goose] {name} present but no container tagged. Tag a container [{name}].");
                 }
             }
         }
@@ -277,16 +278,30 @@ namespace IngameScript
         {
             switch (category)
             {
+                case ItemCategory.Ingots:
+                    return "Ingots";
+                case ItemCategory.Ores:
+                    return "Ores";
                 case ItemCategory.Components:
                     return "Comps";
                 case ItemCategory.Prototech:
                     return "Proto";
+                case ItemCategory.Tools:
+                    return "Tools";
+                case ItemCategory.Weapons:
+                    return "Weapons";
+                case ItemCategory.Ammo:
+                    return "Ammo";
                 case ItemCategory.Consumables:
                     return "Consum";
                 case ItemCategory.Ingredients:
                     return "Ingred";
+                case ItemCategory.Meals:
+                    return "Meals";
+                case ItemCategory.Seeds:
+                    return "Seeds";
                 default:
-                    return category.ToString();
+                    return "Misc";
             }
         }
     }

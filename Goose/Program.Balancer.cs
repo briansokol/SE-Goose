@@ -484,7 +484,7 @@ namespace IngameScript
             if (!_containersByCategory.TryGetValue(cat, out routes) || routes == null || routes.Count == 0)
             {
                 LogWarningOnce("balancer:no-route:" + cat,
-                    "[Goose] Balancer cannot push excess " + excessLabel + ": no container tagged " + cat);
+                    "[Goose] Balancer cannot push excess " + excessLabel + ": no container tagged " + CategoryName(cat));
                 return null;
             }
             return routes;

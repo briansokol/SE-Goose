@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
 
@@ -135,7 +134,7 @@ namespace IngameScript
                     {
                         sb.Append(FederationProtocol.GridsDelimiter);
                     }
-                    sb.Append(g.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(g.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     first = false;
                 }
             }
@@ -143,7 +142,7 @@ namespace IngameScript
             return new BridgeMessage(FederationProtocol.KindAnnounce)
                 .Set(BridgeProtocol.KeyVersion, FederationProtocol.ProtocolVersion)
                 .Set(FederationProtocol.KeyPbId, pbId)
-                .Set(FederationProtocol.KeySignature, signature.ToString(CultureInfo.InvariantCulture))
+                .Set(FederationProtocol.KeySignature, signature.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 .Set(FederationProtocol.KeyGrids, sb.ToString());
         }
 
@@ -203,7 +202,7 @@ namespace IngameScript
 
             ulong signature;
             if (!ulong.TryParse(msg.GetString(FederationProtocol.KeySignature, string.Empty),
-                NumberStyles.Integer, CultureInfo.InvariantCulture, out signature))
+                System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out signature))
             {
                 return;
             }
@@ -233,7 +232,7 @@ namespace IngameScript
             for (int i = 0; i < parts.Length; i++)
             {
                 long id;
-                if (long.TryParse(parts[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out id) && id != 0)
+                if (long.TryParse(parts[i], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out id) && id != 0)
                 {
                     output.Add(id);
                 }
