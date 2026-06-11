@@ -120,6 +120,57 @@ namespace IngameScript
         private string _lastSeenCustomData = null;
 
         /// <summary>Reparses PB CustomData into <see cref="_config"/> when it has changed or a rescan was requested.</summary>
+        /// <summary>INI section name for all Goose PB config keys.</summary>
+        private const string IniSection = "Goose";
+
+        /// <summary>Config key definitions: name, default value (string/int/bool), help comment.</summary>
+        private static readonly object[][] ConfigKeyDefs =
+        {
+            new object[] { "reactorUraniumIngotsPer1000L", 0, "Uranium ingots per 1000L of reactor inventory (e.g. 10); 0 disables. Per-block: [Balance=N] or [NoBalance]." },
+            new object[] { "gasIceFillPercent", 0, "Percent (0-100) of each gas/irrigation block to fill with Ice; 0 disables." },
+            new object[] { "weaponAmmoFillPercent", 0, "Percent (0-100) of each weapon to fill with ammo; 0 disables." },
+            new object[] { "blockGroup", "", "Optional group name; when set Goose manages only that group (ignores [Federate]/traversal). Empty = grid scope. Run 'rescan' after editing." },
+            new object[] { "enableSameRoleBalancing", false, "When true, evens each item across [P:NN] tiers in non-Stock category containers (higher tiers fill first). Default false." },
+            new object[] { "enableBridge", true, "Master kill-switch for the Goose-Crane bridge; false fully disables it." },
+            new object[] { "bridgeChannelTag", BridgeProtocol.DefaultChannelTag, "IGC tag for the bridge. Change if running multiple Goose/Crane pairs on one grid." },
+            new object[] { "bridgeHeartbeatTicks", 6, "Heartbeat cadence in ticks (default 6 ~ 10s); also drives hello resend." },
+            new object[] { "bridgeMaxHoldsTracked", 64, "Max concurrent assembler holds tracked; oldest evicted FIFO." },
+            new object[] { "enableMultiGooseArbitration", true, "Multi-Goose coordination. true: two Geese on one grid both halt; federation needs [Federate] on both connectors. [Federate P:n], lower n = higher priority; a higher-priority docked Goose makes others stand down." },
+            new object[] { "federationChannelTag", FederationProtocol.DefaultChannelTag, "IGC tag for the Goose-to-Goose presence beacon; coordinating Geese must share it." },
+            new object[] { "federationHeartbeatTicks", 6, "Presence-announce cadence in ticks (default 6 ~ 10s); min 6." },
+        };
+
+        /// <summary>Writes any missing config keys from <see cref="ConfigKeyDefs"/> into the INI.</summary>
+        /// <returns>True if any key was added.</returns>
+        private bool EnsureKeyDefs()
+        {
+            bool changed = false;
+            foreach (object[] def in ConfigKeyDefs)
+            {
+                string key = (string)def[0];
+                if (_ini.ContainsKey(IniSection, key))
+                {
+                    continue;
+                }
+                object v = def[1];
+                if (v is bool)
+                {
+                    _ini.Set(IniSection, key, (bool)v);
+                }
+                else if (v is int)
+                {
+                    _ini.Set(IniSection, key, (int)v);
+                }
+                else
+                {
+                    _ini.Set(IniSection, key, (string)v);
+                }
+                _ini.SetComment(IniSection, key, (string)def[2]);
+                changed = true;
+            }
+            return changed;
+        }
+
         private IEnumerator<YieldReason> StepParseConfigIfDirty()
         {
             if (Me.CustomData != _lastSeenCustomData)
@@ -140,26 +191,26 @@ namespace IngameScript
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            _config.RescanIntervalTicks = _ini.Get("Goose", "rescanIntervalTicks").ToInt32(60);
-            _config.BudgetFraction = (float)_ini.Get("Goose", "budgetFraction").ToDouble(0.8);
-            _config.DebugLogging = _ini.Get("Goose", "debugLogging").ToBoolean(false);
-            _config.MaxActionLogEntries = _ini.Get("Goose", "maxActionLogEntries").ToInt32(48);
-            _config.MaxWarningEntries = _ini.Get("Goose", "maxWarningEntries").ToInt32(32);
-            _config.EnableConnectorFederation = _ini.Get("Goose", "enableConnectorFederation").ToBoolean(true);
-            _config.BlockGroup = (_ini.Get("Goose", "blockGroup").ToString("") ?? "").Trim();
-            _config.EnableSameRoleBalancing = _ini.Get("Goose", "enableSameRoleBalancing").ToBoolean(false);
-            _config.EnableBridge = _ini.Get("Goose", "enableBridge").ToBoolean(true);
-            _config.BridgeChannelTag = _ini.Get("Goose", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
-            int bridgeHbRaw = _ini.Get("Goose", "bridgeHeartbeatTicks").ToInt32(6);
+            _config.RescanIntervalTicks = _ini.Get(IniSection, "rescanIntervalTicks").ToInt32(60);
+            _config.BudgetFraction = (float)_ini.Get(IniSection, "budgetFraction").ToDouble(0.8);
+            _config.DebugLogging = _ini.Get(IniSection, "debugLogging").ToBoolean(false);
+            _config.MaxActionLogEntries = _ini.Get(IniSection, "maxActionLogEntries").ToInt32(48);
+            _config.MaxWarningEntries = _ini.Get(IniSection, "maxWarningEntries").ToInt32(32);
+            _config.EnableConnectorFederation = _ini.Get(IniSection, "enableConnectorFederation").ToBoolean(true);
+            _config.BlockGroup = (_ini.Get(IniSection, "blockGroup").ToString("") ?? "").Trim();
+            _config.EnableSameRoleBalancing = _ini.Get(IniSection, "enableSameRoleBalancing").ToBoolean(false);
+            _config.EnableBridge = _ini.Get(IniSection, "enableBridge").ToBoolean(true);
+            _config.BridgeChannelTag = _ini.Get(IniSection, "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
+            int bridgeHbRaw = _ini.Get(IniSection, "bridgeHeartbeatTicks").ToInt32(6);
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
-            int bridgeMaxRaw = _ini.Get("Goose", "bridgeMaxHoldsTracked").ToInt32(64);
+            int bridgeMaxRaw = _ini.Get(IniSection, "bridgeMaxHoldsTracked").ToInt32(64);
             _config.BridgeMaxHoldsTracked = bridgeMaxRaw < 1 ? 1 : bridgeMaxRaw;
-            _config.EnableMultiGooseArbitration = _ini.Get("Goose", "enableMultiGooseArbitration").ToBoolean(true);
-            _config.FederationChannelTag = _ini.Get("Goose", "federationChannelTag").ToString(FederationProtocol.DefaultChannelTag);
-            int fedHbRaw = _ini.Get("Goose", "federationHeartbeatTicks").ToInt32(6);
+            _config.EnableMultiGooseArbitration = _ini.Get(IniSection, "enableMultiGooseArbitration").ToBoolean(true);
+            _config.FederationChannelTag = _ini.Get(IniSection, "federationChannelTag").ToString(FederationProtocol.DefaultChannelTag);
+            int fedHbRaw = _ini.Get(IniSection, "federationHeartbeatTicks").ToInt32(6);
             _config.FederationHeartbeatTicks = fedHbRaw < 6 ? 6 : fedHbRaw;
 
-            int reactorRaw = _ini.Get("Goose", "reactorUraniumIngotsPer1000L").ToInt32(0);
+            int reactorRaw = _ini.Get(IniSection, "reactorUraniumIngotsPer1000L").ToInt32(0);
             int reactorClamped = reactorRaw < 0 ? 0 : reactorRaw;
             if (reactorRaw != reactorClamped)
             {
@@ -168,13 +219,13 @@ namespace IngameScript
             }
             _config.ReactorUraniumIngotsPer1000L = reactorClamped;
 
-            if (_ini.ContainsKey("Goose", "reactorUraniumFillPercent"))
+            if (_ini.ContainsKey(IniSection, "reactorUraniumFillPercent"))
             {
                 LogWarningOnce("balancer:deprecated:reactorUraniumFillPercent",
                     "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 10). You can delete the old key from CustomData.");
             }
 
-            int gasRaw = _ini.Get("Goose", "gasIceFillPercent").ToInt32(0);
+            int gasRaw = _ini.Get(IniSection, "gasIceFillPercent").ToInt32(0);
             int gasClamped = ClampPercent(gasRaw);
             if (gasRaw != gasClamped)
             {
@@ -183,7 +234,7 @@ namespace IngameScript
             }
             _config.GasIceFillPercent = gasClamped;
 
-            int weaponRaw = _ini.Get("Goose", "weaponAmmoFillPercent").ToInt32(0);
+            int weaponRaw = _ini.Get(IniSection, "weaponAmmoFillPercent").ToInt32(0);
             int weaponClamped = ClampPercent(weaponRaw);
             if (weaponRaw != weaponClamped)
             {
@@ -194,7 +245,7 @@ namespace IngameScript
 
             _categoryOverrides.Clear();
             var keys = new List<MyIniKey>();
-            _ini.GetKeys("Goose", keys);
+            _ini.GetKeys(IniSection, keys);
             for (int i = 0; i < keys.Count; i++)
             {
                 string name = keys[i].Name;
@@ -371,75 +422,12 @@ namespace IngameScript
         /// <summary>Live-merges the balancer-related keys into the PB CustomData when they are missing. Existing keys and user comments are preserved; only the absent keys are added with their default value and a one-line hint. Writes back to <see cref="MyGridProgram.Me"/>'s CustomData and updates <see cref="_lastSeenCustomData"/> only when something changed, to avoid retriggering a parse on the next cycle.</summary>
         private void EnsureBalancerKeysPopulated()
         {
-            bool changed = false;
-            changed |= EnsureKey("reactorUraniumIngotsPer1000L", 0,
-                "Uranium ingots per 1000L of reactor inventory (e.g. 10); 0 disables. Per-block: [Balance=N] or [NoBalance].");
-            changed |= EnsureKey("gasIceFillPercent", 0,
-                "Percent (0-100) of each gas/irrigation block to fill with Ice; 0 disables.");
-            changed |= EnsureKey("weaponAmmoFillPercent", 0,
-                "Percent (0-100) of each weapon to fill with ammo; 0 disables.");
-            changed |= EnsureKey("blockGroup", "",
-                "Optional group name; when set Goose manages only that group (ignores [Federate]/traversal). Empty = grid scope. Run 'rescan' after editing.");
-            changed |= EnsureKey("enableSameRoleBalancing", false,
-                "When true, evens each item across [P:NN] tiers in non-Stock category containers (higher tiers fill first). Default false.");
-            changed |= EnsureKey("enableBridge", true,
-                "Master kill-switch for the Goose-Crane bridge; false fully disables it.");
-            changed |= EnsureKey("bridgeChannelTag", BridgeProtocol.DefaultChannelTag,
-                "IGC tag for the bridge. Change if running multiple Goose/Crane pairs on one grid.");
-            changed |= EnsureKey("bridgeHeartbeatTicks", 6,
-                "Heartbeat cadence in ticks (default 6 ~ 10s); also drives hello resend.");
-            changed |= EnsureKey("bridgeMaxHoldsTracked", 64,
-                "Max concurrent assembler holds tracked; oldest evicted FIFO.");
-            changed |= EnsureKey("enableMultiGooseArbitration", true,
-                "Multi-Goose coordination. true: two Geese on one grid both halt; federation needs [Federate] on both connectors. [Federate P:n], lower n = higher priority; a higher-priority docked Goose makes others stand down.");
-            changed |= EnsureKey("federationChannelTag", FederationProtocol.DefaultChannelTag,
-                "IGC tag for the Goose-to-Goose presence beacon; coordinating Geese must share it.");
-            changed |= EnsureKey("federationHeartbeatTicks", 6,
-                "Presence-announce cadence in ticks (default 6 ~ 10s); min 6.");
-            if (changed)
+            if (EnsureKeyDefs())
             {
                 Me.CustomData = _ini.ToString();
                 _lastSeenCustomData = Me.CustomData;
             }
         }
 
-        /// <summary>Populates a string config key with its comment if absent.</summary>
-        /// <returns>True if the key was added.</returns>
-        private bool EnsureKey(string key, string value, string comment)
-        {
-            if (_ini.ContainsKey("Goose", key))
-            {
-                return false;
-            }
-            _ini.Set("Goose", key, value);
-            _ini.SetComment("Goose", key, comment);
-            return true;
-        }
-
-        /// <summary>Populates an integer config key with its comment if absent.</summary>
-        /// <returns>True if the key was added.</returns>
-        private bool EnsureKey(string key, int value, string comment)
-        {
-            if (_ini.ContainsKey("Goose", key))
-            {
-                return false;
-            }
-            _ini.Set("Goose", key, value);
-            _ini.SetComment("Goose", key, comment);
-            return true;
-        }
-
-        /// <summary>Populates a boolean config key with its comment if absent.</summary>
-        /// <returns>True if the key was added.</returns>
-        private bool EnsureKey(string key, bool value, string comment)
-        {
-            if (_ini.ContainsKey("Goose", key))
-            {
-                return false;
-            }
-            _ini.Set("Goose", key, value);
-            _ini.SetComment("Goose", key, comment);
-            return true;
-        }
     }
 }

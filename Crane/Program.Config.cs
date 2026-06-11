@@ -76,6 +76,93 @@ namespace IngameScript
         private string _lastSeenCustomData = null;
 
         /// <summary>Parses the PB CustomData into <see cref="_config"/> when it has changed or a rescan was requested.</summary>
+        /// <summary>INI section name for all Crane PB config keys.</summary>
+        private const string IniSection = "Crane";
+
+        /// <summary>Config key definitions: name, default value (string/int/float/bool), help comment.</summary>
+        private static readonly object[][] ConfigKeyDefs =
+        {
+            new object[] { "enableAutocraft", true, "Master autocraft kill-switch." },
+            new object[] { "enableConnectorFederation", true, "When true, [Federate]-tagged connectors on this grid admit the docked remote grid into Crane's management scope." },
+            new object[]
+            {
+                "blockGroup", "",
+                "Optional terminal-group name. When set, Crane manages ONLY blocks in this group; " +
+                "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
+                "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes."
+            },
+            new object[] { "autocraftMaxQueueDepth", 100, "Maximum total queue depth Crane will maintain per (assembler, blueprint) pair." },
+            new object[] { "assemblerIngotKeep", 50f, "Per-ingot floor the feeder maintains in each assembler's input inventory while it has assembly work queued." },
+            new object[]
+            {
+                "enableBridge", true,
+                "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
+                "ignores incoming traffic, and behaves identically to a script without the bridge."
+            },
+            new object[] { "bridgeChannelTag", BridgeProtocol.DefaultChannelTag, "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid." },
+            new object[]
+            {
+                "bridgeHeartbeatTicks", 6,
+                "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
+                "Also drives hello resend while no peer is linked."
+            },
+            new object[]
+            {
+                "assemblerHoldTtlTicks", 30,
+                "TTL on assembler-hold announcements (in main-loop ticks). " +
+                "Default 30 ~ 5s: long enough for one Goose balance cycle, short enough to self-heal on Crane crash."
+            },
+            new object[]
+            {
+                "enableRefineryBalancing", true,
+                "Master kill-switch for refinery balancing. When true, Crane takes over each in-scope " +
+                "refinery's input (turns off its conveyor system) and feeds it ore per the [CRefine] order."
+            },
+            new object[] { "refineryTargetFillPercent", 50, "Target fill level (percent of input capacity) Crane tops each managed refinery's input toward." },
+            new object[]
+            {
+                "refineDefaultIngotMin", 500,
+                "Default low watermark for ingots with no explicit [CRefine] threshold: below this, the ore becomes " +
+                "high priority. It stays high until the ingot reaches refineDefaultIngotMax (hysteresis). 0 disables."
+            },
+            new object[] { "refineDefaultIngotMax", 1000, "Default high watermark: a high-priority ingot reverts to normal priority once it reaches this. 0 disables." },
+        };
+
+        /// <summary>Writes any missing config keys from <see cref="ConfigKeyDefs"/> into the INI.</summary>
+        /// <returns>True if any key was added.</returns>
+        private bool EnsureKeyDefs()
+        {
+            bool changed = false;
+            foreach (object[] def in ConfigKeyDefs)
+            {
+                string key = (string)def[0];
+                if (_ini.ContainsKey(IniSection, key))
+                {
+                    continue;
+                }
+                object v = def[1];
+                if (v is bool)
+                {
+                    _ini.Set(IniSection, key, (bool)v);
+                }
+                else if (v is int)
+                {
+                    _ini.Set(IniSection, key, (int)v);
+                }
+                else if (v is float)
+                {
+                    _ini.Set(IniSection, key, (float)v);
+                }
+                else
+                {
+                    _ini.Set(IniSection, key, (string)v);
+                }
+                _ini.SetComment(IniSection, key, (string)def[2]);
+                changed = true;
+            }
+            return changed;
+        }
+
         private IEnumerator<YieldReason> StepParseConfigIfDirty()
         {
             if (Me.CustomData != _lastSeenCustomData)
@@ -96,28 +183,28 @@ namespace IngameScript
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            _config.EnableAutocraft = MyIniHelpers.GetBool(_ini, "Crane", "enableAutocraft", true);
-            _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, "Crane", "enableConnectorFederation", true);
-            _config.BlockGroup = (_ini.Get("Crane", "blockGroup").ToString("") ?? "").Trim();
-            _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, "Crane", "autocraftMaxQueueDepth", 100);
-            _config.AssemblerIngotKeep = MyIniHelpers.GetFloat(_ini, "Crane", "assemblerIngotKeep", 50f);
-            _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, "Crane", "rescanIntervalTicks", 60);
-            _config.BudgetFraction = MyIniHelpers.GetFloat(_ini, "Crane", "budgetFraction", 0.8f);
-            _config.DebugLogging = MyIniHelpers.GetBool(_ini, "Crane", "debugLogging", false);
-            _config.MaxActionLogEntries = MyIniHelpers.GetInt(_ini, "Crane", "maxActionLogEntries", 48);
-            _config.MaxWarningEntries = MyIniHelpers.GetInt(_ini, "Crane", "maxWarningEntries", 32);
-            _config.EnableBridge = MyIniHelpers.GetBool(_ini, "Crane", "enableBridge", true);
-            _config.BridgeChannelTag = _ini.Get("Crane", "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
-            int bridgeHbRaw = MyIniHelpers.GetInt(_ini, "Crane", "bridgeHeartbeatTicks", 6);
+            _config.EnableAutocraft = MyIniHelpers.GetBool(_ini, IniSection, "enableAutocraft", true);
+            _config.EnableConnectorFederation = MyIniHelpers.GetBool(_ini, IniSection, "enableConnectorFederation", true);
+            _config.BlockGroup = (_ini.Get(IniSection, "blockGroup").ToString("") ?? "").Trim();
+            _config.AutocraftMaxQueueDepth = MyIniHelpers.GetInt(_ini, IniSection, "autocraftMaxQueueDepth", 100);
+            _config.AssemblerIngotKeep = MyIniHelpers.GetFloat(_ini, IniSection, "assemblerIngotKeep", 50f);
+            _config.RescanIntervalTicks = MyIniHelpers.GetInt(_ini, IniSection, "rescanIntervalTicks", 60);
+            _config.BudgetFraction = MyIniHelpers.GetFloat(_ini, IniSection, "budgetFraction", 0.8f);
+            _config.DebugLogging = MyIniHelpers.GetBool(_ini, IniSection, "debugLogging", false);
+            _config.MaxActionLogEntries = MyIniHelpers.GetInt(_ini, IniSection, "maxActionLogEntries", 48);
+            _config.MaxWarningEntries = MyIniHelpers.GetInt(_ini, IniSection, "maxWarningEntries", 32);
+            _config.EnableBridge = MyIniHelpers.GetBool(_ini, IniSection, "enableBridge", true);
+            _config.BridgeChannelTag = _ini.Get(IniSection, "bridgeChannelTag").ToString(BridgeProtocol.DefaultChannelTag);
+            int bridgeHbRaw = MyIniHelpers.GetInt(_ini, IniSection, "bridgeHeartbeatTicks", 6);
             _config.BridgeHeartbeatTicks = bridgeHbRaw < 6 ? 6 : bridgeHbRaw;
-            int holdTtlRaw = MyIniHelpers.GetInt(_ini, "Crane", "assemblerHoldTtlTicks", 30);
+            int holdTtlRaw = MyIniHelpers.GetInt(_ini, IniSection, "assemblerHoldTtlTicks", 30);
             _config.AssemblerHoldTtlTicks = holdTtlRaw < 1 ? 1 : holdTtlRaw;
-            _config.EnableRefineryBalancing = MyIniHelpers.GetBool(_ini, "Crane", "enableRefineryBalancing", true);
-            int fillRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineryTargetFillPercent", 50);
+            _config.EnableRefineryBalancing = MyIniHelpers.GetBool(_ini, IniSection, "enableRefineryBalancing", true);
+            int fillRaw = MyIniHelpers.GetInt(_ini, IniSection, "refineryTargetFillPercent", 50);
             _config.RefineryTargetFillPercent = fillRaw < 0 ? 0 : (fillRaw > 100 ? 100 : fillRaw);
-            int defMinRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineDefaultIngotMin", 500);
+            int defMinRaw = MyIniHelpers.GetInt(_ini, IniSection, "refineDefaultIngotMin", 500);
             _config.RefineDefaultIngotMin = defMinRaw < 0 ? 0 : defMinRaw;
-            int defMaxRaw = MyIniHelpers.GetInt(_ini, "Crane", "refineDefaultIngotMax", 1000);
+            int defMaxRaw = MyIniHelpers.GetInt(_ini, IniSection, "refineDefaultIngotMax", 1000);
             _config.RefineDefaultIngotMax = defMaxRaw < 0 ? 0 : defMaxRaw;
             LoadRefineConfig();
 
@@ -134,104 +221,7 @@ namespace IngameScript
         /// <summary>Live-merges the recognised keys into the PB CustomData when they are missing. Existing keys and user comments are preserved.</summary>
         private void EnsureConfigKeysPopulated()
         {
-            bool changed = false;
-            if (!_ini.ContainsKey("Crane", "enableAutocraft"))
-            {
-                _ini.Set("Crane", "enableAutocraft", true);
-                _ini.SetComment("Crane", "enableAutocraft", "Master autocraft kill-switch.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "enableConnectorFederation"))
-            {
-                _ini.Set("Crane", "enableConnectorFederation", true);
-                _ini.SetComment("Crane", "enableConnectorFederation",
-                    "When true, [Federate]-tagged connectors on this grid admit the docked remote grid into Crane's management scope.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "blockGroup"))
-            {
-                _ini.Set("Crane", "blockGroup", "");
-                _ini.SetComment("Crane", "blockGroup",
-                    "Optional terminal-group name. When set, Crane manages ONLY blocks in this group; " +
-                    "[Federate] connectors and grid traversal are ignored. Empty (default) uses grid-based scope. " +
-                    "Edit then run 'rescan', or wait for the next automatic rescan, to pick up group membership changes.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "autocraftMaxQueueDepth"))
-            {
-                _ini.Set("Crane", "autocraftMaxQueueDepth", 100);
-                _ini.SetComment("Crane", "autocraftMaxQueueDepth",
-                    "Maximum total queue depth Crane will maintain per (assembler, blueprint) pair.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "assemblerIngotKeep"))
-            {
-                _ini.Set("Crane", "assemblerIngotKeep", 50f);
-                _ini.SetComment("Crane", "assemblerIngotKeep",
-                    "Per-ingot floor the feeder maintains in each assembler's input inventory while it has assembly work queued.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "enableBridge"))
-            {
-                _ini.Set("Crane", "enableBridge", true);
-                _ini.SetComment("Crane", "enableBridge",
-                    "Master kill-switch for the Goose-Crane bridge. When false, the bridge sends nothing, " +
-                    "ignores incoming traffic, and behaves identically to a script without the bridge.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "bridgeChannelTag"))
-            {
-                _ini.Set("Crane", "bridgeChannelTag", BridgeProtocol.DefaultChannelTag);
-                _ini.SetComment("Crane", "bridgeChannelTag",
-                    "IGC broadcast tag used by the bridge. Use a custom value if you run multiple Goose/Crane pairs on one grid.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "bridgeHeartbeatTicks"))
-            {
-                _ini.Set("Crane", "bridgeHeartbeatTicks", 6);
-                _ini.SetComment("Crane", "bridgeHeartbeatTicks",
-                    "Heartbeat cadence in main-loop ticks (Update100 ~ 0.6 runs/sec; default 6 ~ 10s). " +
-                    "Also drives hello resend while no peer is linked.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "assemblerHoldTtlTicks"))
-            {
-                _ini.Set("Crane", "assemblerHoldTtlTicks", 30);
-                _ini.SetComment("Crane", "assemblerHoldTtlTicks",
-                    "TTL on assembler-hold announcements (in main-loop ticks). " +
-                    "Default 30 ~ 5s: long enough for one Goose balance cycle, short enough to self-heal on Crane crash.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "enableRefineryBalancing"))
-            {
-                _ini.Set("Crane", "enableRefineryBalancing", true);
-                _ini.SetComment("Crane", "enableRefineryBalancing",
-                    "Master kill-switch for refinery balancing. When true, Crane takes over each in-scope " +
-                    "refinery's input (turns off its conveyor system) and feeds it ore per the [CRefine] order.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "refineryTargetFillPercent"))
-            {
-                _ini.Set("Crane", "refineryTargetFillPercent", 50);
-                _ini.SetComment("Crane", "refineryTargetFillPercent",
-                    "Target fill level (percent of input capacity) Crane tops each managed refinery's input toward.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "refineDefaultIngotMin"))
-            {
-                _ini.Set("Crane", "refineDefaultIngotMin", 500);
-                _ini.SetComment("Crane", "refineDefaultIngotMin",
-                    "Default low watermark for ingots with no explicit [CRefine] threshold: below this, the ore becomes " +
-                    "high priority. It stays high until the ingot reaches refineDefaultIngotMax (hysteresis). 0 disables.");
-                changed = true;
-            }
-            if (!_ini.ContainsKey("Crane", "refineDefaultIngotMax"))
-            {
-                _ini.Set("Crane", "refineDefaultIngotMax", 1000);
-                _ini.SetComment("Crane", "refineDefaultIngotMax",
-                    "Default high watermark: a high-priority ingot reverts to normal priority once it reaches this. 0 disables.");
-                changed = true;
-            }
+            bool changed = EnsureKeyDefs();
             if (!_ini.ContainsSection("CRefine"))
             {
                 _ini.Set("CRefine", "order", DefaultRefineOrder);
