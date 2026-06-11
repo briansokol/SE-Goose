@@ -165,6 +165,47 @@ namespace IngameScript
             return after - before;
         }
 
+        /// <summary>Checks that a container entry's block is alive and it exposes an inventory.</summary>
+        private bool ValidEntry(ContainerEntry e)
+        {
+            return e != null && ValidateBlock(e.Block) && e.Inventory != null;
+        }
+
+        /// <summary>Moves up to <paramref name="amount"/> of an item between <paramref name="self"/> and each route entry.</summary>
+        /// <param name="pull">True to pull from routes into self; false to push from self into routes.</param>
+        /// <returns>The amount left unmoved.</returns>
+        private long MoveOverRoutes(ContainerEntry self, List<ContainerEntry> routes, MyItemType type, long amount, string label, bool pull)
+        {
+            long remaining = amount;
+            for (int i = 0; i < routes.Count && remaining > 0; i++)
+            {
+                ContainerEntry other = routes[i];
+                if (other == self || other.IsStock)
+                {
+                    continue;
+                }
+
+                if (!ValidEntry(other))
+                {
+                    continue;
+                }
+
+                IMyInventory srcInv = pull ? other.Inventory : self.Inventory;
+                IMyInventory dstInv = pull ? self.Inventory : other.Inventory;
+                if (!srcInv.CanTransferItemTo(dstInv, type))
+                {
+                    continue;
+                }
+
+                remaining -= TryMove(srcInv, dstInv, type, remaining, label);
+                if (BudgetExceeded())
+                {
+                    break;
+                }
+            }
+            return remaining;
+        }
+
         /// <summary>
         /// Walks every <c>[Stock]</c> container and reconciles each item's actual quantity
         /// against its <see cref="StockQuota"/>, pulling in shortfalls and pushing out excess.
@@ -174,7 +215,7 @@ namespace IngameScript
             for (int s = 0; s < _stockContainers.Count; s++)
             {
                 ContainerEntry dst = _stockContainers[s];
-                if (!ValidateBlock(dst.Block) || dst.Inventory == null)
+                if (!ValidEntry(dst))
                 {
                     continue;
                 }
@@ -285,7 +326,7 @@ namespace IngameScript
                     continue;
                 }
 
-                if (!ValidateBlock(src.Block) || src.Inventory == null)
+                if (!ValidEntry(src))
                 {
                     continue;
                 }
@@ -328,29 +369,10 @@ namespace IngameScript
             List<ContainerEntry> routes;
             if (remaining > 0 && _containersByCategory.TryGetValue(cat, out routes))
             {
-                for (int i = 0; i < routes.Count && remaining > 0; i++)
+                remaining = MoveOverRoutes(dst, routes, type, remaining, "stock<-cat", true);
+                if (BudgetExceeded())
                 {
-                    ContainerEntry src = routes[i];
-                    if (src == dst || src.IsStock)
-                    {
-                        continue;
-                    }
-
-                    if (!ValidateBlock(src.Block) || src.Inventory == null)
-                    {
-                        continue;
-                    }
-
-                    if (!src.Inventory.CanTransferItemTo(dst.Inventory, type))
-                    {
-                        continue;
-                    }
-
-                    remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock<-cat");
-                    if (BudgetExceeded())
-                    {
-                        return need - remaining;
-                    }
+                    return need - remaining;
                 }
             }
 
@@ -415,32 +437,7 @@ namespace IngameScript
                 LogWarningOnce("noroute:" + cat, "[Goose] Excess " + type.SubtypeId + " has no [" + cat + "] route");
                 return 0;
             }
-            long remaining = excess;
-            for (int i = 0; i < routes.Count && remaining > 0; i++)
-            {
-                ContainerEntry dst = routes[i];
-                if (dst == src || dst.IsStock)
-                {
-                    continue;
-                }
-
-                if (!ValidateBlock(dst.Block) || dst.Inventory == null)
-                {
-                    continue;
-                }
-
-                if (!src.Inventory.CanTransferItemTo(dst.Inventory, type))
-                {
-                    continue;
-                }
-
-                remaining -= TryMove(src.Inventory, dst.Inventory, type, remaining, "stock->cat");
-                if (BudgetExceeded())
-                {
-                    return excess - remaining;
-                }
-            }
-
+            long remaining = MoveOverRoutes(src, routes, type, excess, "stock->cat", false);
             return excess - remaining;
         }
 
@@ -517,7 +514,7 @@ namespace IngameScript
                             continue;
                         }
 
-                        if (!ValidateBlock(dst.Block) || dst.Inventory == null)
+                        if (!ValidEntry(dst))
                         {
                             continue;
                         }
