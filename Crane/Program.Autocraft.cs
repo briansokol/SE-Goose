@@ -309,6 +309,30 @@ namespace IngameScript
         }
 
         /// <summary>Returns the contents of <paramref name="sectionHeader"/> (header line plus body lines up to the next section header) verbatim from <paramref name="customData"/>, or empty when the section is absent.</summary>
+        /// <summary>Finds the line range [start, end) of an INI section header within pre-split lines.</summary>
+        private static bool TryFindSectionBounds(string[] lines, string sectionHeader, out int start, out int end)
+        {
+            start = -1;
+            end = lines.Length;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].TrimEnd('\r').Trim();
+                if (start < 0)
+                {
+                    if (trimmed.Equals(sectionHeader, StringComparison.Ordinal))
+                    {
+                        start = i;
+                    }
+                }
+                else if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+                {
+                    end = i;
+                    break;
+                }
+            }
+            return start >= 0;
+        }
+
         private static string ExtractSectionVerbatim(string customData, string sectionHeader)
         {
             if (string.IsNullOrEmpty(customData) || string.IsNullOrEmpty(sectionHeader))
@@ -317,29 +341,15 @@ namespace IngameScript
             }
 
             string[] lines = customData.Split('\n');
-            int start = -1;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (trimmed.Equals(sectionHeader, StringComparison.Ordinal))
-                {
-                    start = i;
-                    break;
-                }
-            }
-            if (start < 0)
+            int start, end;
+            if (!TryFindSectionBounds(lines, sectionHeader, out start, out end))
             {
                 return string.Empty;
             }
 
             var sb = new StringBuilder();
-            for (int i = start; i < lines.Length; i++)
+            for (int i = start; i < end; i++)
             {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (i > start && trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
-                {
-                    break;
-                }
                 sb.Append(lines[i].TrimEnd('\r')).Append('\n');
             }
             return sb.ToString();

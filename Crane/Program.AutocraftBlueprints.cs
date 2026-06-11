@@ -19,6 +19,25 @@ namespace IngameScript
         /// <param name="asm">Assembler used as the probe target. Must support <c>CanUseBlueprint</c>.</param>
         /// <param name="t">Quota line being resolved.</param>
         /// <returns>Resolved blueprint definition id, or <c>null</c> when the blueprint cannot be determined.</returns>
+        /// <summary>Probes whether the assembler accepts a blueprint for the subtype; caches and returns it on success.</summary>
+        private MyDefinitionId? ProbeBlueprint(IMyAssembler asm, string key, string subtype)
+        {
+            MyDefinitionId? bp = TryMakeBlueprintId(subtype);
+            if (bp.HasValue && asm != null)
+            {
+                try
+                {
+                    if (asm.CanUseBlueprint(bp.Value))
+                    {
+                        _blueprintMap[key] = subtype;
+                        return bp;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
         private MyDefinitionId? ResolveBlueprintForTarget(IMyAssembler asm, AutocraftTarget t)
         {
             string cached;
@@ -30,32 +49,16 @@ namespace IngameScript
             string curated;
             if (BlueprintMisses.CuratedMap.TryGetValue(itemSubtype, out curated))
             {
-                MyDefinitionId? bp = TryMakeBlueprintId(curated);
-                if (bp.HasValue && asm != null)
+                MyDefinitionId? bp = ProbeBlueprint(asm, t.Key, curated);
+                if (bp.HasValue)
                 {
-                    try
-                    {
-                        if (asm.CanUseBlueprint(bp.Value))
-                        {
-                            _blueprintMap[t.Key] = curated;
-                            return bp;
-                        }
-                    }
-                    catch { }
+                    return bp;
                 }
             }
-            MyDefinitionId? direct = TryMakeBlueprintId(itemSubtype);
-            if (direct.HasValue && asm != null)
+            MyDefinitionId? direct = ProbeBlueprint(asm, t.Key, itemSubtype);
+            if (direct.HasValue)
             {
-                try
-                {
-                    if (asm.CanUseBlueprint(direct.Value))
-                    {
-                        _blueprintMap[t.Key] = itemSubtype;
-                        return direct;
-                    }
-                }
-                catch { }
+                return direct;
             }
             if (_needsLearn.Add(t.Key))
             {
@@ -382,31 +385,12 @@ namespace IngameScript
             }
 
             string[] lines = customData.Split('\n');
-            int start = -1;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (trimmed.Equals(sectionHeader, StringComparison.Ordinal))
-                {
-                    start = i;
-                    break;
-                }
-            }
-            if (start < 0)
+            int start, end;
+            if (!TryFindSectionBounds(lines, sectionHeader, out start, out end))
             {
                 return customData;
             }
 
-            int end = lines.Length;
-            for (int i = start + 1; i < lines.Length; i++)
-            {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
-                {
-                    end = i;
-                    break;
-                }
-            }
             var sb = new StringBuilder();
             for (int i = 0; i < start; i++)
             {
