@@ -166,6 +166,19 @@ dotnet test SE-Goose.sln
 
 **Always build after code changes** to verify the scripts compile cleanly. A change to `Shared/` affects both Goose and Crane, so always build the full solution after touching Shared. Build errors mean the script won't load in-game.
 
+### Script Size Budget
+
+Space Engineers rejects Programmable Block scripts over **100,000 characters**. Both scripts pack with `minify=full`, and packed size is the binding constraint on new features.
+
+**After completing each new feature, measure the minified output and report the remaining headroom for both scripts.** Building the solution packs each script to `<output>/<ScriptName>/script.cs`, where `<output>` comes from the `output` key in each project's `mdk.local.ini`:
+
+```bash
+dotnet build SE-Goose.sln -c Release
+wc -c <output>/Goose/script.cs <output>/Crane/script.cs
+```
+
+Report the character count and headroom (100,000 minus count) per script, e.g. "Goose: 65,389 (34,611 headroom); Crane: 55,187 (44,813 headroom)". If a feature pushes either script near the limit, see `.specs/2026-06-11-script-size-reduction.md` for which size optimizations actually pay off under full minification (string literals and un-renamable API spellings matter; statement-count dedup and `var` do not).
+
 ## MDK2 Configuration
 
 Build behavior is controlled by:
