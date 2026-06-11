@@ -366,6 +366,9 @@ namespace IngameScript
         /// <see cref="long.MaxValue"/> when even <see cref="RoleBalanceProbeMax"/> fits (treated
         /// as "unbounded"); returns 0 when even a single unit is rejected. At most six probe calls.
         /// </summary>
+        /// <summary>Probe steps for <see cref="ProbeAdditionalCapacity"/>, largest first.</summary>
+        private static readonly double[] ProbeSteps = { 10000000.0, 100000.0, 1000.0, 10.0, 1.0 };
+
         private long ProbeAdditionalCapacity(IMyInventory inv, MyItemType type)
         {
             if (inv == null)
@@ -378,29 +381,12 @@ namespace IngameScript
                 return long.MaxValue;
             }
 
-            if (inv.CanItemsBeAdded((MyFixedPoint)10000000.0, type))
+            for (int i = 0; i < ProbeSteps.Length; i++)
             {
-                return 10000000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)100000.0, type))
-            {
-                return 100000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)1000.0, type))
-            {
-                return 1000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)10.0, type))
-            {
-                return 10L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)1.0, type))
-            {
-                return 1L;
+                if (inv.CanItemsBeAdded((MyFixedPoint)ProbeSteps[i], type))
+                {
+                    return (long)ProbeSteps[i];
+                }
             }
 
             return 0;
