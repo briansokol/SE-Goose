@@ -325,7 +325,7 @@ namespace IngameScript
                 return;
             }
 
-            IEnumerable<string> keys = SafeLocalCatalogKeys();
+            IEnumerable<string> keys = SafeCall.Run<IEnumerable<string>>(_getLocalCatalogKeys, null, "getLocalCatalogKeys", Warn);
             if (keys == null)
             {
                 return;
@@ -405,39 +405,9 @@ namespace IngameScript
             }
         }
 
-        private int SafeLocalCatalogCount()
-        {
-            if (_getLocalCatalogCount == null)
-            {
-                return 0;
-            }
-            try
-            {
-                return _getLocalCatalogCount();
-            }
-            catch (Exception ex)
-            {
-                Warn("getLocalCatalogCount: " + ex.Message);
-                return 0;
-            }
-        }
+        private int SafeLocalCatalogCount() => SafeCall.Run(_getLocalCatalogCount, 0, "getLocalCatalogCount", Warn);
 
-        private IEnumerable<string> SafeLocalCatalogKeys()
-        {
-            if (_getLocalCatalogKeys == null)
-            {
-                return null;
-            }
-            try
-            {
-                return _getLocalCatalogKeys();
-            }
-            catch (Exception ex)
-            {
-                Warn("getLocalCatalogKeys: " + ex.Message);
-                return null;
-            }
-        }
+
 
         private void TrySend(BridgeMessage msg)
         {

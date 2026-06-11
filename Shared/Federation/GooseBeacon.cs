@@ -149,8 +149,8 @@ namespace IngameScript
 
         private void EmitAnnounce()
         {
-            ulong sig = SafeSignature();
-            IEnumerable<long> grids = SafeConstructGrids();
+            ulong sig = SafeCall.Run<ulong>(_getSignature, 0, "getSignature", Warn);
+            IEnumerable<long> grids = SafeCall.Run<IEnumerable<long>>(_getConstructGrids, null, "getConstructGrids", Warn);
             TrySend(Announce(_myPbId, sig, grids));
         }
 
@@ -262,39 +262,9 @@ namespace IngameScript
             }
         }
 
-        private ulong SafeSignature()
-        {
-            if (_getSignature == null)
-            {
-                return 0;
-            }
-            try
-            {
-                return _getSignature();
-            }
-            catch (Exception ex)
-            {
-                Warn("getSignature: " + ex.Message);
-                return 0;
-            }
-        }
 
-        private IEnumerable<long> SafeConstructGrids()
-        {
-            if (_getConstructGrids == null)
-            {
-                return null;
-            }
-            try
-            {
-                return _getConstructGrids();
-            }
-            catch (Exception ex)
-            {
-                Warn("getConstructGrids: " + ex.Message);
-                return null;
-            }
-        }
+
+
 
         private void TrySend(BridgeMessage msg)
         {
