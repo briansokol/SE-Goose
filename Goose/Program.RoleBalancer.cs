@@ -24,16 +24,16 @@ namespace IngameScript
     {
 
         /// <summary>Reused candidate buffer for the same-role balancer; cleared at the top of each category.</summary>
-        private readonly List<ContainerEntry> _roleBalanceCandidates = new List<ContainerEntry>();
+        private readonly ContainerList _roleBalanceCandidates = new ContainerList();
 
         /// <summary>Reused per-tier holdings dictionary; doubles as a "type seen" set during the pull-up phase (values null) and as <c>per-container counts</c> during the within-tier split phase.</summary>
         private readonly Dictionary<MyItemType, long[]> _roleBalanceHoldings = new Dictionary<MyItemType, long[]>();
 
         /// <summary>Reused list of containers in the currently-processing tier.</summary>
-        private readonly List<ContainerEntry> _roleBalanceTier = new List<ContainerEntry>();
+        private readonly ContainerList _roleBalanceTier = new ContainerList();
 
         /// <summary>Reused flattening of all tiers below the currently-processing one (drain sources for pull-up).</summary>
-        private readonly List<ContainerEntry> _roleBalanceLowerTiers = new List<ContainerEntry>();
+        private readonly ContainerList _roleBalanceLowerTiers = new ContainerList();
 
         /// <summary>Largest amount probed by <see cref="ProbeAdditionalCapacity"/>; one billion is well beyond any plausible real stack so a successful probe at this size is treated as "unbounded."</summary>
         private const long RoleBalanceProbeMax = 1000000000L;
@@ -51,9 +51,9 @@ namespace IngameScript
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
-            foreach (KeyValuePair<ItemCategory, List<ContainerEntry>> kv in _containersByCategory)
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
             {
-                List<ContainerEntry> routes = kv.Value;
+                ContainerList routes = kv.Value;
                 if (routes == null || routes.Count < 2)
                 {
                     continue;
@@ -114,7 +114,7 @@ namespace IngameScript
         /// tier at a time. For each tier, first pulls items up from all lower tiers, then equalises
         /// holdings within the tier. Yields between tiers and on budget hits.
         /// </summary>
-        private IEnumerator<YieldReason> BalanceCategoryByTier(ItemCategory category, List<ContainerEntry> candidates)
+        private IEnumerator<YieldReason> BalanceCategoryByTier(ItemCategory category, ContainerList candidates)
         {
             int n = candidates.Count;
             int i = 0;
@@ -175,7 +175,7 @@ namespace IngameScript
         /// step doesn't fight us by routing them straight back. Order is upper-by-position then
         /// lower-by-position; <see cref="MoveAllOfType"/>'s capacity clamping handles partial fits.
         /// </summary>
-        private IEnumerator<YieldReason> PullUpIntoTier(ItemCategory category, List<ContainerEntry> upperTier, List<ContainerEntry> lowerTiers)
+        private IEnumerator<YieldReason> PullUpIntoTier(ItemCategory category, ContainerList upperTier, ContainerList lowerTiers)
         {
             // Collect distinct item types observed in any lower-tier container, filtered to
             // types that classify into the current category. This prevents a multi-tag container
@@ -257,7 +257,7 @@ namespace IngameScript
         /// <see cref="ComputeEqualSplitTargets"/> then applies them with a single pass of
         /// pair-wise transfers from over-target sources to under-target destinations.
         /// </summary>
-        private IEnumerator<YieldReason> BalanceWithinTier(ItemCategory category, List<ContainerEntry> tier)
+        private IEnumerator<YieldReason> BalanceWithinTier(ItemCategory category, ContainerList tier)
         {
             BuildTierHoldings(category, tier, _roleBalanceHoldings);
             foreach (KeyValuePair<MyItemType, long[]> kv in _roleBalanceHoldings)
@@ -324,7 +324,7 @@ namespace IngameScript
         /// <paramref name="category"/>. The output dictionary is cleared on entry; each value
         /// is a fresh <c>long[]</c> sized to the tier's container count, indexed by tier position.
         /// </summary>
-        private void BuildTierHoldings(ItemCategory category, List<ContainerEntry> tier, Dictionary<MyItemType, long[]> outHoldings)
+        private void BuildTierHoldings(ItemCategory category, ContainerList tier, Dictionary<MyItemType, long[]> outHoldings)
         {
             outHoldings.Clear();
             int n = tier.Count;
@@ -366,6 +366,9 @@ namespace IngameScript
         /// <see cref="long.MaxValue"/> when even <see cref="RoleBalanceProbeMax"/> fits (treated
         /// as "unbounded"); returns 0 when even a single unit is rejected. At most six probe calls.
         /// </summary>
+        /// <summary>Probe steps for <see cref="ProbeAdditionalCapacity"/>, largest first.</summary>
+        private static readonly double[] ProbeSteps = { 10000000.0, 100000.0, 1000.0, 10.0, 1.0 };
+
         private long ProbeAdditionalCapacity(IMyInventory inv, MyItemType type)
         {
             if (inv == null)
@@ -378,29 +381,12 @@ namespace IngameScript
                 return long.MaxValue;
             }
 
-            if (inv.CanItemsBeAdded((MyFixedPoint)10000000.0, type))
+            for (int i = 0; i < ProbeSteps.Length; i++)
             {
-                return 10000000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)100000.0, type))
-            {
-                return 100000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)1000.0, type))
-            {
-                return 1000L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)10.0, type))
-            {
-                return 10L;
-            }
-
-            if (inv.CanItemsBeAdded((MyFixedPoint)1.0, type))
-            {
-                return 1L;
+                if (inv.CanItemsBeAdded((MyFixedPoint)ProbeSteps[i], type))
+                {
+                    return (long)ProbeSteps[i];
+                }
             }
 
             return 0;

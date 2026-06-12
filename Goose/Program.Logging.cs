@@ -29,16 +29,16 @@ namespace IngameScript
         private string _lastRescanSummary = "";
 
         /// <summary>Insertion order of <see cref="_warnings"/> keys for FIFO eviction.</summary>
-        private readonly List<string> _warningOrder = new List<string>();
+        private readonly StringList _warningOrder = new StringList();
 
         /// <summary>Active warning messages mapped to occurrence count.</summary>
-        private readonly Dictionary<string, int> _warnings = new Dictionary<string, int>();
+        private readonly IntByString _warnings = new IntByString();
 
         /// <summary>Keys for one-shot warnings already logged this cycle.</summary>
-        private readonly HashSet<string> _oneShotWarnedKeys = new HashSet<string>();
+        private readonly StringSet _oneShotWarnedKeys = new StringSet();
 
         /// <summary>Messages logged via <see cref="LogWarningOnce"/> this cycle, used for cleanup.</summary>
-        private readonly List<string> _oneShotWarnedMessages = new List<string>();
+        private readonly StringList _oneShotWarnedMessages = new StringList();
 
         /// <summary>Appends an action message to the rolling action log.</summary>
         private void LogAction(string msg)
@@ -95,7 +95,7 @@ namespace IngameScript
         }
 
         /// <summary>Keys for action messages already emitted via <see cref="LogActionOnce"/>. Persists across cycles so the same routine state is not re-logged.</summary>
-        private readonly HashSet<string> _actionOnceKeys = new HashSet<string>();
+        private readonly StringSet _actionOnceKeys = new StringSet();
 
         /// <summary>
         /// Clears once-per-cycle warning state and removes their messages from the warning list,
@@ -128,6 +128,10 @@ namespace IngameScript
         private void RenderEchoStatus()
         {
             _echoBuffer.Clear();
+            if (ManagementSuspended)
+            {
+                _echoBuffer.Append("** ").Append(_haltMessage).Append(" **\n");
+            }
             _echoBuffer.Append("Goose v1 ");
             _echoBuffer.Append(_paused ? "[PAUSED] " : "");
             _echoBuffer.Append("step ").Append(_stepIndex).Append('.').Append(_subStep)

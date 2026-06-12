@@ -10,7 +10,7 @@ namespace IngameScript
         /// <param name="block">Candidate block.</param>
         /// <param name="scopeGrids">EntityIds of grids currently in management scope.</param>
         /// <param name="me">The running programmable block, excluded from the result.</param>
-        public static bool IsScannableInventoryBlock(IMyTerminalBlock block, HashSet<long> scopeGrids, IMyTerminalBlock me)
+        public static bool IsScannableInventoryBlock(IMyTerminalBlock block, LongSet scopeGrids, IMyTerminalBlock me)
         {
             return block != null
                 && !block.Closed

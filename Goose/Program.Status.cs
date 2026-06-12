@@ -84,8 +84,9 @@ namespace IngameScript
             {
                 if (!CategoryHasContainers(category))
                 {
+                    string name = CategoryName(category);
                     LogWarningOnce("status:no-container:" + category,
-                        $"[Goose] {category} present but no container tagged. Tag a container [{category}].");
+                        $"[Goose] {name} present but no container tagged. Tag a container [{name}].");
                 }
             }
         }
@@ -93,7 +94,7 @@ namespace IngameScript
         /// <summary>True when at least one container is tagged for the given category.</summary>
         private bool CategoryHasContainers(ItemCategory category)
         {
-            List<ContainerEntry> entries;
+            ContainerList entries;
             return _containersByCategory.TryGetValue(category, out entries) && entries.Count > 0;
         }
 
@@ -129,7 +130,8 @@ namespace IngameScript
             var measurer = new SurfaceMeasurer(surface);
             DisplayViewport vp = SurfaceRenderer.CreateViewport(surface);
 
-            int rowCount = 1 + Math.Max(1, _warnings.Count);
+            int haltRows = ManagementSuspended ? 1 : 0;
+            int rowCount = 1 + haltRows + Math.Max(1, _warnings.Count);
             float lineHeight = measurer.Measure("Ag", StatusFont, 1f).Height;
             float scale = LayoutScaler.FitScale(vp.Size.Y, rowCount, lineHeight, StatusLineSpacing, StatusMinScale, StatusMaxScale);
             float rowHeight = LayoutScaler.RowHeight(lineHeight, scale, StatusLineSpacing);
@@ -138,6 +140,12 @@ namespace IngameScript
             builder.AddText("Goose Errors", vp.Size.X / 2f, 0f, DrawAlign.Center, StatusFont, scale, StatusTitleColor);
 
             int row = 1;
+            if (ManagementSuspended)
+            {
+                builder.AddText(_haltMessage, 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusWarningColor);
+                row++;
+            }
+
             if (_warnings.Count == 0)
             {
                 builder.AddText("(no errors)", 0f, ColumnLayout.RowY(0f, rowHeight, row), DrawAlign.Left, StatusFont, scale, StatusLabelColor);
@@ -224,7 +232,7 @@ namespace IngameScript
         /// <summary>Sums a category's container volumes and returns the combined fill percentage.</summary>
         private int ComputeCategoryFillPercent(ItemCategory category)
         {
-            List<ContainerEntry> entries;
+            ContainerList entries;
             if (!_containersByCategory.TryGetValue(category, out entries))
             {
                 return 0;
@@ -270,16 +278,30 @@ namespace IngameScript
         {
             switch (category)
             {
+                case ItemCategory.Ingots:
+                    return "Ingots";
+                case ItemCategory.Ores:
+                    return "Ores";
                 case ItemCategory.Components:
                     return "Comps";
                 case ItemCategory.Prototech:
                     return "Proto";
+                case ItemCategory.Tools:
+                    return "Tools";
+                case ItemCategory.Weapons:
+                    return "Weapons";
+                case ItemCategory.Ammo:
+                    return "Ammo";
                 case ItemCategory.Consumables:
                     return "Consum";
                 case ItemCategory.Ingredients:
                     return "Ingred";
+                case ItemCategory.Meals:
+                    return "Meals";
+                case ItemCategory.Seeds:
+                    return "Seeds";
                 default:
-                    return category.ToString();
+                    return "Misc";
             }
         }
     }

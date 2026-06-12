@@ -20,9 +20,9 @@ namespace IngameScript
         /// <param name="onNewCatalogKey">Optional callback invoked once per genuinely new catalog key (<see cref="ItemCatalog.RecordItem"/> returned <c>true</c>). Used by the Goose-Crane bridge to announce local catalog growth to the peer.</param>
         public static IEnumerable<YieldReason> BuildItemTotals(
             IEnumerable<IMyTerminalBlock> blocks,
-            Dictionary<MyItemType, long> totals,
+            LongByItemType totals,
             ItemCatalog catalog,
-            List<MyInventoryItem> buffer,
+            InvItemList buffer,
             Func<bool> budgetExceeded,
             Action<MyItemType> onNewCatalogKey = null)
         {

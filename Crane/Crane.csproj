@@ -28,6 +28,7 @@
     <AdditionalFiles Include="thumb.png" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Collections.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\Ini\**\*.cs" LinkBase="Shared\Ini" />
     <Compile Include="..\Shared\Blocks\**\*.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\Shared\Scope\**\*.cs" LinkBase="Shared\Scope" />

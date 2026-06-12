@@ -10,15 +10,34 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>Resolved blueprint subtype map keyed by catalog key (un-prefixed <c>Type/Subtype</c>). Survives recompile via the <c>[CCraftBlueprints]</c> section.</summary>
-        private readonly Dictionary<string, string> _blueprintMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly StringMap _blueprintMap = new StringMap(StringComparer.Ordinal);
 
         /// <summary>Catalog keys flagged as needing operator-driven manual seeding.</summary>
-        private readonly HashSet<string> _needsLearn = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _needsLearn = new StringSet(StringComparer.Ordinal);
 
         /// <summary>3-tier blueprint resolver. Cache → curated → direct probe → NeedsLearn.</summary>
         /// <param name="asm">Assembler used as the probe target. Must support <c>CanUseBlueprint</c>.</param>
         /// <param name="t">Quota line being resolved.</param>
         /// <returns>Resolved blueprint definition id, or <c>null</c> when the blueprint cannot be determined.</returns>
+        /// <summary>Probes whether the assembler accepts a blueprint for the subtype; caches and returns it on success.</summary>
+        private MyDefinitionId? ProbeBlueprint(IMyAssembler asm, string key, string subtype)
+        {
+            MyDefinitionId? bp = TryMakeBlueprintId(subtype);
+            if (bp.HasValue && asm != null)
+            {
+                try
+                {
+                    if (asm.CanUseBlueprint(bp.Value))
+                    {
+                        _blueprintMap[key] = subtype;
+                        return bp;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
         private MyDefinitionId? ResolveBlueprintForTarget(IMyAssembler asm, AutocraftTarget t)
         {
             string cached;
@@ -30,32 +49,16 @@ namespace IngameScript
             string curated;
             if (BlueprintMisses.CuratedMap.TryGetValue(itemSubtype, out curated))
             {
-                MyDefinitionId? bp = TryMakeBlueprintId(curated);
-                if (bp.HasValue && asm != null)
+                MyDefinitionId? bp = ProbeBlueprint(asm, t.Key, curated);
+                if (bp.HasValue)
                 {
-                    try
-                    {
-                        if (asm.CanUseBlueprint(bp.Value))
-                        {
-                            _blueprintMap[t.Key] = curated;
-                            return bp;
-                        }
-                    }
-                    catch { }
+                    return bp;
                 }
             }
-            MyDefinitionId? direct = TryMakeBlueprintId(itemSubtype);
-            if (direct.HasValue && asm != null)
+            MyDefinitionId? direct = ProbeBlueprint(asm, t.Key, itemSubtype);
+            if (direct.HasValue)
             {
-                try
-                {
-                    if (asm.CanUseBlueprint(direct.Value))
-                    {
-                        _blueprintMap[t.Key] = itemSubtype;
-                        return direct;
-                    }
-                }
-                catch { }
+                return direct;
             }
             if (_needsLearn.Add(t.Key))
             {
@@ -133,14 +136,14 @@ namespace IngameScript
                     }
                 }
             }
-            List<string> learned = null;
+            StringList learned = null;
             foreach (string key in _needsLearn)
             {
                 if (_blueprintMap.ContainsKey(key))
                 {
                     if (learned == null)
                     {
-                        learned = new List<string>();
+                        learned = new StringList();
                     }
 
                     learned.Add(key);
@@ -288,7 +291,7 @@ namespace IngameScript
 
             var sb = new StringBuilder();
             sb.Append("[CCraftBlueprints]\n");
-            var keys = new List<string>();
+            var keys = new StringList();
             foreach (KeyValuePair<string, string> kv in _blueprintMap)
             {
                 keys.Add(kv.Key);
@@ -382,31 +385,12 @@ namespace IngameScript
             }
 
             string[] lines = customData.Split('\n');
-            int start = -1;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (trimmed.Equals(sectionHeader, StringComparison.Ordinal))
-                {
-                    start = i;
-                    break;
-                }
-            }
-            if (start < 0)
+            int start, end;
+            if (!TryFindSectionBounds(lines, sectionHeader, out start, out end))
             {
                 return customData;
             }
 
-            int end = lines.Length;
-            for (int i = start + 1; i < lines.Length; i++)
-            {
-                string trimmed = lines[i].TrimEnd('\r').Trim();
-                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
-                {
-                    end = i;
-                    break;
-                }
-            }
             var sb = new StringBuilder();
             for (int i = 0; i < start; i++)
             {

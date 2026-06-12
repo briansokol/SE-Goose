@@ -47,6 +47,10 @@ This list will grow as additional features are planned; more documents will be a
 
 **Keeping the docs in sync:** If a decision made during implementation contradicts any of these documents, update the corresponding wiki document so it reflects the new decision. If the contradiction is significant or the right path forward is unclear, surface it to the user before proceeding rather than silently diverging from the documented design.
 
+## Plans
+
+**All implementation plans must be written into the `.specs` folder** at the repository root. When you produce a plan for a multi-step task, save it as a file under `.specs/` rather than leaving it only in the conversation. Create the folder if it does not yet exist.
+
 ## Technology Stack
 
 - **Framework**: .NET Framework 4.8 (C# 6.0)
@@ -162,6 +166,19 @@ dotnet test SE-Goose.sln
 
 **Always build after code changes** to verify the scripts compile cleanly. A change to `Shared/` affects both Goose and Crane, so always build the full solution after touching Shared. Build errors mean the script won't load in-game.
 
+### Script Size Budget
+
+Space Engineers rejects Programmable Block scripts over **100,000 characters**. Both scripts pack with `minify=full`, and packed size is the binding constraint on new features.
+
+**After completing each new feature, measure the minified output and report the remaining headroom for both scripts.** Building the solution packs each script to `<output>/<ScriptName>/script.cs`, where `<output>` comes from the `output` key in each project's `mdk.local.ini`:
+
+```bash
+dotnet build SE-Goose.sln -c Release
+wc -c <output>/Goose/script.cs <output>/Crane/script.cs
+```
+
+Report the character count and headroom (100,000 minus count) per script, e.g. "Goose: 65,389 (34,611 headroom); Crane: 55,187 (44,813 headroom)". If a feature pushes either script near the limit, see `.specs/2026-06-11-script-size-reduction.md` for which size optimizations actually pay off under full minification (string literals and un-renamable API spellings matter; statement-count dedup and `var` do not).
+
 ## MDK2 Configuration
 
 Build behavior is controlled by:
@@ -175,6 +192,13 @@ Configured in `mdk.ini`:
 
 - `minify=none`: No optimization (default for development)
 - Other options: `trim`, `stripcomments`, `lite`, `full`
+
+#### Minification Safety (full minify)
+
+Both scripts pack with `minify=full`, which **renames identifiers** (types, members, locals, enum members) and **strips all `using` directives**. Code that compiles fine under `dotnet build` can still fail or misbehave in-game because of this. Two rules:
+
+- **Never derive a user-visible string or a tag-match key from an identifier name.** `enumValue.ToString()`, `nameof(...)`, and string interpolation of an enum (`$"{category}"`) all resolve to the renamed single-character name in the packed script. Back every label, log message, and tag comparison with an explicit string literal instead (e.g. route categories through `CategoryName(ItemCategory)` / the `CategoryTags` array). Enum values are still fine as dictionary keys or dedup keys, since those are never displayed.
+- **Fully qualify any type from a namespace the in-game compiler does not auto-import.** Space Engineers injects a fixed set of `using`s (it does **not** include `System.Globalization`), and full minify removes the directives the source relied on. So write `System.Globalization.CultureInfo` / `System.Globalization.NumberStyles` (and similar) inline rather than depending on a `using`.
 
 ### File Exclusions
 

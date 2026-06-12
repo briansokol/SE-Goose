@@ -60,12 +60,10 @@ namespace IngameScript
         }
 
         /// <summary>Per-item-type totals from the most recent inventory scan over Crane's scope.</summary>
-        private readonly Dictionary<VRage.Game.ModAPI.Ingame.MyItemType, long> _itemTotals =
-            new Dictionary<VRage.Game.ModAPI.Ingame.MyItemType, long>();
+        private readonly LongByItemType _itemTotals = new LongByItemType();
 
         /// <summary>Reusable inventory item scratch buffer.</summary>
-        private readonly List<VRage.Game.ModAPI.Ingame.MyInventoryItem> _itemBuffer =
-            new List<VRage.Game.ModAPI.Ingame.MyInventoryItem>();
+        private readonly InvItemList _itemBuffer = new InvItemList();
 
         /// <summary>Builds <see cref="_itemTotals"/> via shared <see cref="ItemTotalsBuilder"/>. Records new types in <see cref="_catalog"/>.</summary>
         /// <summary>Builds <see cref="_itemTotals"/> via shared <see cref="ItemTotalsBuilder"/>, draining its coroutine so per-block <see cref="YieldReason.ChunkBoundary"/> / <see cref="YieldReason.BudgetHit"/> yields propagate up to the dispatcher pump. Records new types in <see cref="_catalog"/>.</summary>

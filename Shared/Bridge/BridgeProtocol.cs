@@ -98,7 +98,7 @@ namespace IngameScript
         void Send(string payload);
 
         /// <summary>Appends all pending inbound payloads to <paramref name="outBuf"/> and clears the underlying inbox.</summary>
-        void DrainInbox(List<string> outBuf);
+        void DrainInbox(StringList outBuf);
     }
 
     /// <summary>Snapshot of the local peer's status, returned by <see cref="Bridge.PeerStatus"/>.</summary>

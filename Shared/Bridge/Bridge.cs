@@ -19,7 +19,7 @@ namespace IngameScript
         private readonly Func<IEnumerable<string>> _getLocalCatalogKeys;
         private readonly Action<string> _logWarning;
 
-        private readonly List<string> _inboxBuf = new List<string>();
+        private readonly StringList _inboxBuf = new StringList();
         private readonly Dictionary<long, BridgeHoldHint> _holds = new Dictionary<long, BridgeHoldHint>();
         private readonly Queue<long> _holdInsertOrder = new Queue<long>();
         private readonly List<long> _holdSweepBuf = new List<long>();
@@ -325,7 +325,7 @@ namespace IngameScript
                 return;
             }
 
-            IEnumerable<string> keys = SafeLocalCatalogKeys();
+            IEnumerable<string> keys = SafeCall.Run<IEnumerable<string>>(_getLocalCatalogKeys, null, "getLocalCatalogKeys", Warn);
             if (keys == null)
             {
                 return;
@@ -405,39 +405,9 @@ namespace IngameScript
             }
         }
 
-        private int SafeLocalCatalogCount()
-        {
-            if (_getLocalCatalogCount == null)
-            {
-                return 0;
-            }
-            try
-            {
-                return _getLocalCatalogCount();
-            }
-            catch (Exception ex)
-            {
-                Warn("getLocalCatalogCount: " + ex.Message);
-                return 0;
-            }
-        }
+        private int SafeLocalCatalogCount() => SafeCall.Run(_getLocalCatalogCount, 0, "getLocalCatalogCount", Warn);
 
-        private IEnumerable<string> SafeLocalCatalogKeys()
-        {
-            if (_getLocalCatalogKeys == null)
-            {
-                return null;
-            }
-            try
-            {
-                return _getLocalCatalogKeys();
-            }
-            catch (Exception ex)
-            {
-                Warn("getLocalCatalogKeys: " + ex.Message);
-                return null;
-            }
-        }
+
 
         private void TrySend(BridgeMessage msg)
         {
@@ -494,7 +464,7 @@ namespace IngameScript
         }
 
         /// <summary>Pulls every pending broadcast into <paramref name="outBuf"/>. Non-string payloads are silently dropped.</summary>
-        public void DrainInbox(List<string> outBuf)
+        public void DrainInbox(StringList outBuf)
         {
             while (_listener.HasPendingMessage)
             {

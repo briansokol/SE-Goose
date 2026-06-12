@@ -11,5 +11,11 @@ namespace IngameScript
         public bool Connected;
         /// <summary>True when the local connector carries the <c>[Federate]</c> opt-in tag.</summary>
         public bool FederateTag;
+        /// <summary>True when the remote (docked) connector also carries a federate tag. Federation requires mutual consent.</summary>
+        public bool OtherFederateTag;
+        /// <summary>Federation priority parsed from the local connector (lower wins; 0 for a bare <c>[Federate]</c>, -1 when untagged).</summary>
+        public int LocalPriority;
+        /// <summary>Federation priority parsed from the remote connector (lower wins; 0 for a bare <c>[Federate]</c>, -1 when untagged).</summary>
+        public int OtherPriority;
     }
 }

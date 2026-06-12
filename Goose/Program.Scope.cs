@@ -8,28 +8,28 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>EntityIds of grids currently in management scope. Recomputed by <see cref="StepRebuildScopeIfDue"/>; consulted by <see cref="IsManaged"/> and <see cref="ValidateBlock"/>.</summary>
-        private readonly HashSet<long> _scopeGrids = new HashSet<long>();
+        private readonly LongSet _scopeGrids = new LongSet();
 
         /// <summary>Reusable buffer for raw mechanical-connection block enumeration during scope rebuilds and drift checks.</summary>
-        private readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
+        private readonly MechBlockList _scopeMechRaw = new MechBlockList();
 
         /// <summary>Reusable buffer for raw connector enumeration during scope rebuilds and drift checks. Holds every <see cref="IMyShipConnector"/> visible to GTS, not just in-scope ones; federation is what brings new connectors into scope.</summary>
-        private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
+        private readonly ConnectorList _scopeConnRaw = new ConnectorList();
 
         /// <summary>Reusable buffer for projected mechanical edges fed to <see cref="ScopeBuilder.BuildScope"/>.</summary>
-        private readonly List<MechanicalEdge> _scopeMechBuf = new List<MechanicalEdge>();
+        private readonly MechanicalEdgeList _scopeMechBuf = new MechanicalEdgeList();
 
         /// <summary>Reusable buffer for projected connector edges fed to <see cref="ScopeBuilder.BuildScope"/>.</summary>
-        private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
+        private readonly ConnectorEdgeList _scopeConnBuf = new ConnectorEdgeList();
 
         /// <summary>Rolling hash of (mechanical attach state + connector dock state + scope-affecting tags). Differs across ticks when scope inputs change; equal otherwise.</summary>
         private ulong _scopeDriftHash;
 
         /// <summary>EntityIds of the configured block group's member blocks. Empty unless <see cref="_groupModeActive"/> is true; populated during <see cref="RebuildScope"/>.</summary>
-        private readonly HashSet<long> _groupBlockIds = new HashSet<long>();
+        private readonly LongSet _groupBlockIds = new LongSet();
 
         /// <summary>Reusable buffer for group-member enumeration during scope rebuilds.</summary>
-        private readonly List<IMyTerminalBlock> _groupBlockScratch = new List<IMyTerminalBlock>();
+        private readonly BlockList _groupBlockScratch = new BlockList();
 
         /// <summary>True when <see cref="GooseConfig.BlockGroup"/> is non-empty. When true, <see cref="_groupBlockIds"/> is the sole authority for membership (an empty set means nothing is managed).</summary>
         private bool _groupModeActive = false;
@@ -58,7 +58,14 @@ namespace IngameScript
         {
             ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _scopeMechRaw, _scopeConnRaw, _scopeMechBuf, _scopeConnBuf);
 
-            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
+            if (_federationArbitrationActive)
+            {
+                ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _approvedFederateGrids, _scopeGrids);
+            }
+            else
+            {
+                ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _scopeMechBuf, _scopeConnBuf, _config.EnableConnectorFederation, _scopeGrids);
+            }
 
             _groupBlockIds.Clear();
             _groupModeActive = false;

@@ -6,7 +6,7 @@ namespace IngameScript
     /// <summary>Parsed bridge envelope: a string of <c>k=v</c> pairs separated by <see cref="BridgeProtocol.FieldSeparator"/>. Values containing the separator are not supported (the only multi-valued fields use inner delimiters).</summary>
     public class BridgeMessage
     {
-        private readonly Dictionary<string, string> _fields = new Dictionary<string, string>();
+        private readonly StringMap _fields = new StringMap();
 
         /// <summary>Initializes an empty message with the given <c>kind</c> field.</summary>
         public BridgeMessage(string kind)

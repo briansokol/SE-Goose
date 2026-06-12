@@ -28,10 +28,12 @@
     <AdditionalFiles Include="thumb.png" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Collections.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\Scope\**\*.cs" LinkBase="Shared\Scope" />
     <Compile Include="..\Shared\Blocks\**\*.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\Shared\Display\**\*.cs" LinkBase="Shared\Display" />
     <Compile Include="..\Shared\Bridge\**\*.cs" LinkBase="Shared\Bridge" />
+    <Compile Include="..\Shared\Federation\**\*.cs" LinkBase="Shared\Federation" />
     <Compile Include="..\Shared\Dispatcher\YieldReason.cs" LinkBase="Shared\Dispatcher" />
   </ItemGroup>
 </Project>

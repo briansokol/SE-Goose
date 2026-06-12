@@ -16,10 +16,10 @@ namespace IngameScript
         /// <param name="connOut">Output edges, one per raw connector. Cleared first.</param>
         public static void EnumerateLiveEdges(
             IMyGridTerminalSystem gts,
-            List<IMyMechanicalConnectionBlock> mechRawScratch,
-            List<IMyShipConnector> connRawScratch,
-            List<MechanicalEdge> mechOut,
-            List<ConnectorEdge> connOut)
+            MechBlockList mechRawScratch,
+            ConnectorList connRawScratch,
+            MechanicalEdgeList mechOut,
+            ConnectorEdgeList connOut)
         {
             mechRawScratch.Clear();
             gts.GetBlocksOfType(mechRawScratch, m => !m.Closed);
@@ -45,8 +45,12 @@ namespace IngameScript
                 edge.OwnerGridId = c.CubeGrid != null ? c.CubeGrid.EntityId : 0;
                 IMyShipConnector other = c.OtherConnector;
                 edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
+                string otherName = other != null ? other.CustomName : null;
                 edge.Connected = c.Status == MyShipConnectorStatus.Connected;
-                edge.FederateTag = BlockNameTags.NameHasTag(c.CustomName, BlockNameTags.FederateTag);
+                edge.FederateTag = BlockNameTags.HasFederateTag(c.CustomName);
+                edge.OtherFederateTag = BlockNameTags.HasFederateTag(otherName);
+                edge.LocalPriority = BlockNameTags.ParseFederatePriority(c.CustomName);
+                edge.OtherPriority = BlockNameTags.ParseFederatePriority(otherName);
                 connOut.Add(edge);
             }
         }

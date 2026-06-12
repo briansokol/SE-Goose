@@ -8,40 +8,40 @@ namespace IngameScript
     public partial class Program : MyGridProgram
     {
         /// <summary>EntityIds of grids currently in management scope.</summary>
-        private readonly HashSet<long> _scopeGrids = new HashSet<long>();
+        private readonly LongSet _scopeGrids = new LongSet();
 
         /// <summary>All blocks discovered within Crane's management scope that are eligible for management.</summary>
-        private readonly List<IMyTerminalBlock> _allManagedBlocks = new List<IMyTerminalBlock>();
+        private readonly BlockList _allManagedBlocks = new BlockList();
 
         /// <summary>Every inventory-bearing block in scope, scanned to build grid-wide item totals the same way Goose does. Kept separate from <see cref="_allManagedBlocks"/> (which means "blocks Crane manages"): Crane only acts on assemblers and refineries, but it counts items everywhere so quota decisions reflect the whole grid.</summary>
-        private readonly List<IMyTerminalBlock> _allInventoryBlocks = new List<IMyTerminalBlock>();
+        private readonly BlockList _allInventoryBlocks = new BlockList();
 
         /// <summary>Assemblers in the managed group (filtered to non-survival-kit assemblers via interface).</summary>
-        private readonly List<IMyAssembler> _assemblers = new List<IMyAssembler>();
+        private readonly AssemblerList _assemblers = new AssemblerList();
 
         /// <summary>Cargo containers in scope. Used by the feeder as both sources (when pulling
         /// ingots/components into assembler inventories) and sinks (when draining mismatched
         /// items out). Populated alongside <see cref="_assemblers"/> during rescan; not added
         /// to <see cref="_allManagedBlocks"/> because Crane doesn't otherwise manage them.</summary>
-        private readonly List<IMyCargoContainer> _cargoContainers = new List<IMyCargoContainer>();
+        private readonly CargoList _cargoContainers = new CargoList();
 
         /// <summary>LCDs tagged <c>[CCraft]</c> — host quota config (CustomData) and render the status surface.</summary>
-        private readonly List<IMyTextSurface> _ccraftLcds = new List<IMyTextSurface>();
+        private readonly SurfaceList _ccraftLcds = new SurfaceList();
 
         /// <summary>LCDs tagged <c>[CError]</c> — render the warning log surface.</summary>
-        private readonly List<IMyTextSurface> _cerrorLcds = new List<IMyTextSurface>();
+        private readonly SurfaceList _cerrorLcds = new SurfaceList();
 
         /// <summary>Reusable mechanical-edge buffer fed to <see cref="ScopeBuilder.BuildScope"/>.</summary>
-        private readonly List<MechanicalEdge> _scopeMechBuf = new List<MechanicalEdge>();
+        private readonly MechanicalEdgeList _scopeMechBuf = new MechanicalEdgeList();
 
         /// <summary>Reusable raw mechanical block buffer.</summary>
-        private readonly List<IMyMechanicalConnectionBlock> _scopeMechRaw = new List<IMyMechanicalConnectionBlock>();
+        private readonly MechBlockList _scopeMechRaw = new MechBlockList();
 
         /// <summary>Reusable raw connector block buffer (mirror of <see cref="_scopeMechRaw"/>).</summary>
-        private readonly List<IMyShipConnector> _scopeConnRaw = new List<IMyShipConnector>();
+        private readonly ConnectorList _scopeConnRaw = new ConnectorList();
 
         /// <summary>Connector edges fed to <see cref="ScopeBuilder.BuildScope"/> for [Federate]-tagged docking admission.</summary>
-        private readonly List<ConnectorEdge> _scopeConnBuf = new List<ConnectorEdge>();
+        private readonly ConnectorEdgeList _scopeConnBuf = new ConnectorEdgeList();
 
         /// <summary>Rolling hash of the scope inputs.</summary>
         private ulong _scopeDriftHash;
@@ -56,10 +56,10 @@ namespace IngameScript
         private readonly List<IMyTextSurfaceProvider> _surfaceProviderScratch = new List<IMyTextSurfaceProvider>();
 
         /// <summary>EntityIds of the configured block group's member blocks. Empty unless <see cref="_groupModeActive"/> is true; populated during <see cref="RebuildScope"/>.</summary>
-        private readonly HashSet<long> _groupBlockIds = new HashSet<long>();
+        private readonly LongSet _groupBlockIds = new LongSet();
 
         /// <summary>Reusable buffer for group-member enumeration during scope rebuilds.</summary>
-        private readonly List<IMyTerminalBlock> _groupBlockScratch = new List<IMyTerminalBlock>();
+        private readonly BlockList _groupBlockScratch = new BlockList();
 
         /// <summary>True when <see cref="CraneConfig.BlockGroup"/> is non-empty. When true, <see cref="_groupBlockIds"/> is the sole authority for membership (an empty set means nothing is managed).</summary>
         private bool _groupModeActive = false;

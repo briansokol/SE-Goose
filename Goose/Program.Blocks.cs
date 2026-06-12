@@ -35,6 +35,12 @@ namespace IngameScript
             "Ammo", "Consumables", "Ingredients", "Meals", "Seeds", "Misc"
         };
 
+        /// <summary>Returns the literal tag token for a category; safe under full minification, unlike <c>ToString()</c>.</summary>
+        internal static string CategoryName(ItemCategory category)
+        {
+            return CategoryTags[(int)category];
+        }
+
         /// <summary>Cached metadata for a single managed inventory block.</summary>
         public class ContainerEntry
         {
@@ -60,18 +66,21 @@ namespace IngameScript
             public ConsumerKind ConsumerKind = ConsumerKind.None;
 
             /// <summary>Cached list of <see cref="MyItemType"/> ammo magazines this block accepts; <c>null</c> unless <see cref="ConsumerKind"/> is <see cref="ConsumerKind.Weapon"/>.</summary>
-            public List<MyItemType> AcceptedAmmo;
+            public ItemTypeList AcceptedAmmo;
 
             /// <summary>Per-block unit-count override parsed from the <c>[Balance=N]</c> name tag; <c>-1</c> means "no tag, use the class percent target." Only meaningful when <see cref="ConsumerKind"/> is non-None.</summary>
             public long BalanceTagCount = -1;
         }
 
+        /// <summary>List of container entries (named: shorter post-minification).</summary>
+        public class ContainerList : List<ContainerEntry> { }
+
         /// <summary>Routing buckets keyed by category, sorted by ascending priority.</summary>
-        private readonly Dictionary<ItemCategory, List<ContainerEntry>> _containersByCategory =
-            new Dictionary<ItemCategory, List<ContainerEntry>>();
+        private readonly Dictionary<ItemCategory, ContainerList> _containersByCategory =
+            new Dictionary<ItemCategory, ContainerList>();
 
         /// <summary>All <c>[Stock]</c>-tagged containers, sorted by ascending priority.</summary>
-        private readonly List<ContainerEntry> _stockContainers = new List<ContainerEntry>();
+        private readonly ContainerList _stockContainers = new ContainerList();
 
         /// <summary>Reverse lookup from a block to its cached <see cref="ContainerEntry"/>.</summary>
         private readonly Dictionary<IMyTerminalBlock, ContainerEntry> _entryByBlock =
@@ -86,25 +95,25 @@ namespace IngameScript
         private readonly Dictionary<IMyTerminalBlock, int> _stockTemplateVersion = new Dictionary<IMyTerminalBlock, int>();
 
         /// <summary>Total quantity of each item type observed during the most recent scan.</summary>
-        private readonly Dictionary<MyItemType, long> _itemTotals = new Dictionary<MyItemType, long>();
+        private readonly LongByItemType _itemTotals = new LongByItemType();
 
         /// <summary>Scratch buffer reused by inventory enumeration to avoid per-call allocations.</summary>
-        private readonly List<MyInventoryItem> _itemBuffer = new List<MyInventoryItem>();
+        private readonly InvItemList _itemBuffer = new InvItemList();
 
         /// <summary>Reused per-type quantity snapshot of a single stock container, built once per container in <see cref="StepFulfillStockQuotas"/> to avoid re-scanning the inventory for every quota.</summary>
-        private readonly Dictionary<MyItemType, long> _quotaSnapshot = new Dictionary<MyItemType, long>();
+        private readonly LongByItemType _quotaSnapshot = new LongByItemType();
 
         /// <summary>Reused active-quota map for <see cref="SyncStockTemplate"/>; key = quota key, value = full <c>key=value</c> line.</summary>
-        private readonly Dictionary<string, string> _stockActiveQuotas = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly StringMap _stockActiveQuotas = new StringMap(StringComparer.Ordinal);
 
         /// <summary>Reused builder for the <c>[Goose]</c> stock-template body.</summary>
         private readonly StringBuilder _stockTemplateSB = new StringBuilder(1024);
 
         /// <summary>Reused merged-key set (catalog ∪ active) for the stock template.</summary>
-        private readonly HashSet<string> _stockMergedKeys = new HashSet<string>(StringComparer.Ordinal);
+        private readonly StringSet _stockMergedKeys = new StringSet(StringComparer.Ordinal);
 
         /// <summary>Reused sorted-key list for the stock template render order.</summary>
-        private readonly List<string> _stockSortedKeys = new List<string>();
+        private readonly StringList _stockSortedKeys = new StringList();
 
         /// <summary>Extracts the priority value from a <c>[P:&lt;n&gt;]</c> tag in a block name.</summary>
         /// <returns>The parsed priority, or 100 when no tag is present.</returns>
@@ -181,7 +190,7 @@ namespace IngameScript
         /// </summary>
         private IEnumerator<YieldReason> StepCategorizeContainers()
         {
-            foreach (KeyValuePair<ItemCategory, List<ContainerEntry>> kv in _containersByCategory)
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
             {
                 kv.Value.Clear();
             }
@@ -219,10 +228,10 @@ namespace IngameScript
                         {
                             var cat = (ItemCategory)c;
                             entry.Categories.Add(cat);
-                            List<ContainerEntry> bucket;
+                            ContainerList bucket;
                             if (!_containersByCategory.TryGetValue(cat, out bucket))
                             {
-                                bucket = new List<ContainerEntry>();
+                                bucket = new ContainerList();
                                 _containersByCategory[cat] = bucket;
                             }
                             bucket.Add(entry);
@@ -262,7 +271,7 @@ namespace IngameScript
                 }
             }
 
-            foreach (KeyValuePair<ItemCategory, List<ContainerEntry>> kv in _containersByCategory)
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
             {
                 kv.Value.Sort((a, b) => a.Priority.CompareTo(b.Priority));
             }
@@ -335,7 +344,7 @@ namespace IngameScript
         /// <param name="typeResolver">Maps a fully-qualified <c>Type/Subtype</c> string to a
         /// <see cref="MyItemType"/>, returning <c>null</c> on resolution failure.</param>
         /// <returns>List of malformed or unresolvable token strings, or <c>null</c> when all tokens parsed cleanly.</returns>
-        internal static List<string> ExtractNameTagQuotas(
+        internal static StringList ExtractNameTagQuotas(
             string name,
             Dictionary<MyItemType, StockQuota> destination,
             Func<string, MyItemType?> typeResolver)
@@ -345,7 +354,7 @@ namespace IngameScript
                 return null;
             }
 
-            List<string> malformed = null;
+            StringList malformed = null;
             int pos = 0;
             while (pos < name.Length)
             {
@@ -375,7 +384,7 @@ namespace IngameScript
                 {
                     if (malformed == null)
                     {
-                        malformed = new List<string>();
+                        malformed = new StringList();
                     }
 
                     malformed.Add(token);
@@ -386,7 +395,7 @@ namespace IngameScript
                 {
                     if (malformed == null)
                     {
-                        malformed = new List<string>();
+                        malformed = new StringList();
                     }
 
                     malformed.Add(token);
@@ -408,7 +417,7 @@ namespace IngameScript
                 return;
             }
 
-            List<string> malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
+            StringList malformed = ExtractNameTagQuotas(entry.Block.CustomName, entry.Quotas, ResolveItemTypeViaParse);
             if (malformed == null)
             {
                 return;
@@ -508,20 +517,8 @@ namespace IngameScript
             StringBuilder sb = _stockTemplateSB;
             sb.Length = 0;
             sb.Append("[Goose]\n");
-            sb.Append(";Stock container quotas.\n");
-            sb.Append(";Uncomment a line to enable management of an item (remove the ; at the start of the line)\n");
-            sb.Append(";Format: <Type>/<Subtype>=<value>\n");
-            sb.Append(";Suffixes:\n");
-            sb.Append(";  M=minimum (pull-only)\n");
-            sb.Append(";  L=limiter (push-only)\n");
-            sb.Append(";  no suffix=exact (pull/push)\n");
-            sb.Append(";  All=uncapped pull\n\n");
-            sb.Append(";Examples:\n");
-            sb.Append(";  Component/SteelPlate=100\n");
-            sb.Append(";  Ingot/Iron=500M\n");
-            sb.Append(";  Ore/Stone=1000L\n");
-            sb.Append(";  Component/Construction=All\n");
-
+            sb.Append(";Stock quotas. Uncomment a line to manage an item. Format: <Type>/<Subtype>=<value>[suffix]\n");
+            sb.Append(";Suffix M=min/pull-only, L=limit/push-only, none=exact, All=uncapped pull. E.g. Ingot/Iron=500M\n");
             sb.Append("\n; --- Manage Items Below ---\n");
 
             _stockMergedKeys.Clear();
@@ -608,7 +605,7 @@ namespace IngameScript
         }
 
         /// <summary>Known component subtype IDs that route to <see cref="ItemCategory.Prototech"/>.</summary>
-        private static readonly HashSet<string> PrototechSubtypes = new HashSet<string> {
+        private static readonly StringSet PrototechSubtypes = new StringSet {
             "PrototechCapacitor", "PrototechCircuitry", "PrototechCoolingUnit",
             "PrototechFrame", "PrototechMachinery", "PrototechPanel",
             "PrototechPropulsionUnit", "PrototechScanner"
@@ -686,60 +683,18 @@ namespace IngameScript
 
             if (typeId == "MyObjectBuilder_PhysicalGunObject")
             {
-                if (subId.IndexOf("Welder", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (subId.IndexOf("Welder", StringComparison.OrdinalIgnoreCase) >= 0
+                    || subId.IndexOf("Grinder", StringComparison.OrdinalIgnoreCase) >= 0
+                    || subId.IndexOf("Drill", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Grinder", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Drill", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("HandDrill", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Tools;
-                }
-
-                if (subId.IndexOf("Pistol", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Rifle", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Launcher", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("FireArm", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
-                }
-
-                if (subId.IndexOf("Goggles", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return ItemCategory.Weapons;
                 }
 
                 return ItemCategory.Weapons;
             }
 
-            if (typeId == "MyObjectBuilder_OxygenContainerObject")
-            {
-                return ItemCategory.Tools;
-            }
-
-            if (typeId == "MyObjectBuilder_GasContainerObject")
+            if (typeId == "MyObjectBuilder_OxygenContainerObject"
+                || typeId == "MyObjectBuilder_GasContainerObject")
             {
                 return ItemCategory.Tools;
             }
@@ -759,11 +714,6 @@ namespace IngameScript
                 }
 
                 return ItemCategory.Consumables;
-            }
-
-            if (typeId == "MyObjectBuilder_PhysicalObject")
-            {
-                return ItemCategory.Misc;
             }
 
             return ItemCategory.Misc;
