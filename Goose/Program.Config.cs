@@ -72,6 +72,12 @@ namespace IngameScript
             /// <summary>Per-weapon target fill as a percent (0-100) of the weapon's inventory volume; <c>0</c> disables.</summary>
             public int WeaponAmmoFillPercent = 0;
 
+            /// <summary>Master switch for Goose refinery feeding; auto-disabled when Crane is detected over the bridge.</summary>
+            public bool EnableRefineryManagement = true;
+
+            /// <summary>Target fill percent (0-100) for a managed refinery's input; <c>0</c> disables feeding.</summary>
+            public int RefineryInputFillPercent = 50;
+
             /// <summary>Master kill-switch for connector federation. When false, <c>[Federate]</c>-tagged connectors are ignored.</summary>
             public bool EnableConnectorFederation = true;
 
@@ -129,6 +135,8 @@ namespace IngameScript
             new object[] { "reactorUraniumIngotsPer1000L", 0, "Uranium ingots per 1000L of reactor inventory (e.g. 10); 0 disables. Per-block: [Balance=N] or [NoBalance]." },
             new object[] { "gasIceFillPercent", 0, "Percent (0-100) of each gas/irrigation block to fill with Ice; 0 disables." },
             new object[] { "weaponAmmoFillPercent", 0, "Percent (0-100) of each weapon to fill with ammo; 0 disables." },
+            new object[] { "enableRefineryManagement", true, "Master switch for Goose refinery feeding; auto-disabled when Crane is detected over the bridge. Uncomment ores in a refinery's [Goose] data to manage it." },
+            new object[] { "refineryInputFillPercent", 50, "Percent (0-100) of each managed refinery's input to keep filled with priority ore; 0 disables feeding." },
             new object[] { "blockGroup", "", "Optional group name; when set Goose manages only that group (ignores [Federate]/traversal). Empty = grid scope. Run 'rescan' after editing." },
             new object[] { "enableSameRoleBalancing", false, "When true, evens each item across [P:NN] tiers in non-Stock category containers (higher tiers fill first). Default false." },
             new object[] { "enableBridge", true, "Master kill-switch for the Goose-Crane bridge; false fully disables it." },
@@ -242,6 +250,16 @@ namespace IngameScript
                     "[Goose] weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
             }
             _config.WeaponAmmoFillPercent = weaponClamped;
+
+            _config.EnableRefineryManagement = _ini.Get(IniSection, "enableRefineryManagement").ToBoolean(true);
+            int refineRaw = _ini.Get(IniSection, "refineryInputFillPercent").ToInt32(50);
+            int refineClamped = ClampPercent(refineRaw);
+            if (refineRaw != refineClamped)
+            {
+                LogWarningOnce("balancer:bad-percent:refineryInputFillPercent",
+                    "[Goose] refineryInputFillPercent must be 0-100; clamped to " + refineClamped + " (was " + refineRaw + ")");
+            }
+            _config.RefineryInputFillPercent = refineClamped;
 
             _categoryOverrides.Clear();
             var keys = new List<MyIniKey>();
