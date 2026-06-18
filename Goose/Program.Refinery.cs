@@ -6,6 +6,12 @@ namespace IngameScript
 {
     public partial class Program
     {
+        /// <summary>Refineries in scope, refreshed each rescan.</summary>
+        private readonly List<Sandbox.ModAPI.Ingame.IMyRefinery> _refineries = new List<Sandbox.ModAPI.Ingame.IMyRefinery>();
+
+        /// <summary>Scratch list for a refinery's active ore order; reused per refinery to avoid GC.</summary>
+        private readonly List<string> _refineryOrderScratch = new List<string>();
+
         /// <summary>Vanilla ores in default refinery feed priority (highest first).</summary>
         internal static readonly string[] DefaultRefineryOres =
         {
