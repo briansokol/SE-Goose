@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Sandbox.ModAPI.Ingame;
+using VRage;
+using VRage.Game;
+using VRage.Game.ModAPI.Ingame;
 
 namespace IngameScript
 {
@@ -113,6 +117,224 @@ namespace IngameScript
                 sb.Append('\n');
             }
             return sb.ToString();
+        }
+
+        /// <summary>Determines whether Crane is live on the Goose-Crane bridge.</summary>
+        /// <returns><c>true</c> when a linked Crane peer is present, so Goose stands down on refineries.</returns>
+        private bool CraneDetected()
+        {
+            return _bridge != null && _bridge.Enabled && _bridge.PeerStatus.Linked;
+        }
+
+        /// <summary>Injects the ore-priority template, then (for activated refineries) disables the
+        /// conveyor, evacuates unlisted ore, and tops up the input with priority ore. No-op when the
+        /// feature is disabled or Crane is present.</summary>
+        private IEnumerator<YieldReason> StepManageRefineries()
+        {
+            if (!_config.EnableRefineryManagement || CraneDetected())
+            {
+                yield break;
+            }
+
+            for (int b = 0; b < _refineries.Count; b++)
+            {
+                IMyRefinery r = _refineries[b];
+                if (r == null || r.Closed)
+                {
+                    continue;
+                }
+
+                string cd = r.CustomData ?? string.Empty;
+                if (NeedsRefineryTemplate(cd))
+                {
+                    cd = BuildRefineryTemplate(cd);
+                    r.CustomData = cd;
+                }
+
+                ParseRefineryOrder(cd, _refineryOrderScratch);
+                if (_refineryOrderScratch.Count == 0)
+                {
+                    continue;
+                }
+
+                if (r.UseConveyorSystem)
+                {
+                    r.UseConveyorSystem = false;
+                }
+
+                IMyInventory input = r.InputInventory;
+                if (input == null)
+                {
+                    continue;
+                }
+
+                EvacuateUnlistedOre(input, _refineryOrderScratch);
+                if (BudgetExceeded())
+                {
+                    yield return YieldReason.BudgetHit;
+                }
+
+                FeedRefinery(input, _refineryOrderScratch);
+                if (BudgetExceeded())
+                {
+                    yield return YieldReason.BudgetHit;
+                }
+
+                yield return YieldReason.ChunkBoundary;
+            }
+        }
+
+        /// <summary>Fills <paramref name="input"/> toward the configured percent of its max volume,
+        /// feeding ores in priority order: each ore fills as much as it can before the next is tried.</summary>
+        /// <param name="input">The refinery's input inventory.</param>
+        /// <param name="order">Active ore subtypes in priority order.</param>
+        private void FeedRefinery(IMyInventory input, List<string> order)
+        {
+            double maxVol = (double)input.MaxVolume;
+            double target = maxVol * _config.RefineryInputFillPercent / 100.0;
+            if (target <= 0.0)
+            {
+                return;
+            }
+            for (int o = 0; o < order.Count; o++)
+            {
+                if ((double)input.CurrentVolume >= target)
+                {
+                    return;
+                }
+                var type = MyItemType.MakeOre(order[o]);
+                PullOreInto(input, type, target);
+                if (BudgetExceeded())
+                {
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Pulls the given ore from every in-scope inventory except refineries into
+        /// <paramref name="input"/>, stopping when the input reaches <paramref name="target"/> volume
+        /// or the grid runs out.</summary>
+        /// <param name="input">Destination refinery input inventory.</param>
+        /// <param name="type">Ore item type to pull.</param>
+        /// <param name="target">Volume at which to stop filling.</param>
+        private void PullOreInto(IMyInventory input, MyItemType type, double target)
+        {
+            for (int b = 0; b < _allInventoryBlocks.Count; b++)
+            {
+                if ((double)input.CurrentVolume >= target)
+                {
+                    return;
+                }
+                IMyTerminalBlock block = _allInventoryBlocks[b];
+                if (block == null || block.Closed || block is IMyRefinery)
+                {
+                    continue;
+                }
+                IMyInventory src = block.GetInventory(0);
+                if (src == null || src == input)
+                {
+                    continue;
+                }
+                bool canTransfer;
+                try
+                { canTransfer = src.CanTransferItemTo(input, type); }
+                catch { continue; }
+                if (!canTransfer)
+                {
+                    continue;
+                }
+                _itemBuffer.Clear();
+                try
+                { src.GetItems(_itemBuffer); }
+                catch { continue; }
+                for (int i = _itemBuffer.Count - 1; i >= 0; i--)
+                {
+                    MyInventoryItem item = _itemBuffer[i];
+                    if (item.Type != type)
+                    {
+                        continue;
+                    }
+                    MyFixedPoint amt = item.Amount;
+                    bool canAdd;
+                    try
+                    { canAdd = input.CanItemsBeAdded(amt, type); }
+                    catch { canAdd = false; }
+                    if (!canAdd)
+                    {
+                        break;
+                    }
+                    try
+                    {
+                        if (src.TransferItemTo(input, i, null, true, amt) && (double)input.CurrentVolume >= target)
+                        {
+                            return;
+                        }
+                    }
+                    catch { }
+                    if (BudgetExceeded())
+                    {
+                        return;
+                    }
+                }
+                if (BudgetExceeded())
+                {
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Moves any ore in <paramref name="input"/> whose subtype is not in <paramref name="order"/>
+        /// back to <c>[Ores]</c> storage. Handles both off-list ores and ores the user just removed.</summary>
+        /// <param name="input">The refinery's input inventory.</param>
+        /// <param name="order">Active ore subtypes that should remain.</param>
+        private void EvacuateUnlistedOre(IMyInventory input, List<string> order)
+        {
+            ContainerList routes;
+            if (!_containersByCategory.TryGetValue(ItemCategory.Ores, out routes) || routes.Count == 0)
+            {
+                LogWarningOnce("norefore", "[Goose] No [Ores] container to return de-prioritized refinery ore.");
+                return;
+            }
+            _itemBuffer.Clear();
+            try
+            { input.GetItems(_itemBuffer); }
+            catch { return; }
+            for (int i = _itemBuffer.Count - 1; i >= 0; i--)
+            {
+                MyInventoryItem item = _itemBuffer[i];
+                if (!string.Equals(item.Type.TypeId, OreTypeId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (order.Contains(item.Type.SubtypeId))
+                {
+                    continue;
+                }
+                for (int rIdx = 0; rIdx < routes.Count; rIdx++)
+                {
+                    ContainerEntry dst = routes[rIdx];
+                    if (!ValidEntry(dst) || dst.Inventory == input)
+                    {
+                        continue;
+                    }
+                    if (!input.CanTransferItemTo(dst.Inventory, item.Type))
+                    {
+                        continue;
+                    }
+                    if (!dst.Inventory.CanItemsBeAdded(item.Amount, item.Type))
+                    {
+                        continue;
+                    }
+                    if (input.TransferItemTo(dst.Inventory, i, null, true, item.Amount))
+                    {
+                        break;
+                    }
+                }
+                if (BudgetExceeded())
+                {
+                    return;
+                }
+            }
         }
     }
 }
