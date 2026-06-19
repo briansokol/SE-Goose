@@ -36,7 +36,7 @@ namespace IngameScript
             "RebuildScope", "RescanIfDue", "ParseConfigIfDirty", "CategorizeContainers",
             "CategorizeConsumers", "ScanInventories", "FulfillStockQuotas",
             "SortGenericCargo", "BalanceConsumers", "BalanceSameRoleContainers",
-            "RenderStatus"
+            "ManageRefineries", "RenderStatus"
         };
 
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
@@ -76,7 +76,7 @@ namespace IngameScript
         /// <summary>Returns the iterator for the step at index <paramref name="i"/>. While management is suspended (duplicate or deferral), the four inventory-mutating steps (6-9) are skipped so the script moves nothing; discovery, scan, and status rendering still run so displays stay live.</summary>
         private IEnumerator<YieldReason> StepFor(int i)
         {
-            if (ManagementSuspended && i >= 6 && i <= 9)
+            if (ManagementSuspended && i >= 6 && i <= 10)
             {
                 return NoOpStep();
             }
@@ -104,6 +104,8 @@ namespace IngameScript
                 case 9:
                     return StepBalanceSameRoleContainers();
                 case 10:
+                    return StepManageRefineries();
+                case 11:
                     return StepRenderStatus();
                 default:
                     return NoOpStep();

@@ -129,6 +129,10 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(_productionBlocks, b => !b.Closed && IsInScope(b));
             yield return YieldReason.ChunkBoundary;
 
+            _refineries.Clear();
+            GridTerminalSystem.GetBlocksOfType(_refineries, b => !b.Closed && IsInScope(b));
+            yield return YieldReason.ChunkBoundary;
+
             _gerrorLcds.Clear();
             _gstatusLcds.Clear();
             _surfaceProviderScratch.Clear();
@@ -156,6 +160,7 @@ namespace IngameScript
             _lastRescanSummary = "Rescan: " + _allInventoryBlocks.Count + " inv, "
                 + _cargoContainers.Count + " cargo, "
                 + _productionBlocks.Count + " prod, "
+                + _refineries.Count + " refn, "
                 + _gstatusLcds.Count + " [GStatus], "
                 + _gerrorLcds.Count + " [GError]";
         }
