@@ -195,7 +195,7 @@ namespace IngameScript
             MyIniParseResult result;
             if (!_ini.TryParse(Me.CustomData, out result))
             {
-                LogWarning("[Goose] CustomData parse failed: " + result.ToString());
+                LogWarning("CustomData parse failed: " + result.ToString());
                 yield return YieldReason.ChunkBoundary;
                 yield break;
             }
@@ -223,14 +223,14 @@ namespace IngameScript
             if (reactorRaw != reactorClamped)
             {
                 LogWarningOnce("balancer:bad-ratio:reactorUraniumIngotsPer1000L",
-                    "[Goose] reactorUraniumIngotsPer1000L must be >= 0; clamped to 0 (was " + reactorRaw + ")");
+                    "reactorUraniumIngotsPer1000L must be >= 0; clamped to 0 (was " + reactorRaw + ")");
             }
             _config.ReactorUraniumIngotsPer1000L = reactorClamped;
 
             if (_ini.ContainsKey(IniSection, "reactorUraniumFillPercent"))
             {
                 LogWarningOnce("balancer:deprecated:reactorUraniumFillPercent",
-                    "[Goose] reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 10). You can delete the old key from CustomData.");
+                    "reactorUraniumFillPercent is deprecated and ignored. Use reactorUraniumIngotsPer1000L instead (suggested value: 10). You can delete the old key from CustomData.");
             }
 
             int gasRaw = _ini.Get(IniSection, "gasIceFillPercent").ToInt32(0);
@@ -238,7 +238,7 @@ namespace IngameScript
             if (gasRaw != gasClamped)
             {
                 LogWarningOnce("balancer:bad-percent:gasIceFillPercent",
-                    "[Goose] gasIceFillPercent must be 0-100; clamped to " + gasClamped + " (was " + gasRaw + ")");
+                    "gasIceFillPercent must be 0-100; clamped to " + gasClamped + " (was " + gasRaw + ")");
             }
             _config.GasIceFillPercent = gasClamped;
 
@@ -247,7 +247,7 @@ namespace IngameScript
             if (weaponRaw != weaponClamped)
             {
                 LogWarningOnce("balancer:bad-percent:weaponAmmoFillPercent",
-                    "[Goose] weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
+                    "weaponAmmoFillPercent must be 0-100; clamped to " + weaponClamped + " (was " + weaponRaw + ")");
             }
             _config.WeaponAmmoFillPercent = weaponClamped;
 
@@ -257,7 +257,7 @@ namespace IngameScript
             if (refineRaw != refineClamped)
             {
                 LogWarningOnce("balancer:bad-percent:refineryInputFillPercent",
-                    "[Goose] refineryInputFillPercent must be 0-100; clamped to " + refineClamped + " (was " + refineRaw + ")");
+                    "refineryInputFillPercent must be 0-100; clamped to " + refineClamped + " (was " + refineRaw + ")");
             }
             _config.RefineryInputFillPercent = refineClamped;
 
@@ -281,7 +281,7 @@ namespace IngameScript
                 }
                 else
                 {
-                    LogWarning("[Goose] Unknown category '" + val + "' for override " + name);
+                    LogWarning("Unknown category '" + val + "' for override " + name);
                 }
             }
 
@@ -412,7 +412,7 @@ namespace IngameScript
             if (!TryParseQuotaKeyShape(key, out typeIdWithPrefix, out subtypeId))
             {
                 LogWarningOnce("stockq:legacy:" + key,
-                    "[Goose] Stock quota key '" + key + "' must be fully qualified as Type/Subtype (e.g. Component/SteelPlate). Skipped.");
+                    "Stock quota key '" + key + "' must be fully qualified as Type/Subtype (e.g. Component/SteelPlate). Skipped.");
                 return false;
             }
 
@@ -420,7 +420,7 @@ namespace IngameScript
             if (!resolved.HasValue)
             {
                 LogWarningOnce("stockq:parse:" + key,
-                    "[Goose] Stock quota key '" + key + "' did not resolve to a valid item type.");
+                    "Stock quota key '" + key + "' did not resolve to a valid item type.");
                 return false;
             }
             type = resolved.Value;

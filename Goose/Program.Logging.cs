@@ -118,7 +118,7 @@ namespace IngameScript
         /// <summary>Records a caught exception as a warning tagged with the originating context.</summary>
         private void LogError(string context, Exception ex)
         {
-            LogWarning("[" + context + "] " + ex.GetType().Name + ": " + ex.Message);
+            LogWarning(context + ": " + ex.GetType().Name + ": " + ex.Message);
         }
 
         /// <summary>Reusable buffer for <see cref="RenderEchoStatus"/> to avoid per-tick allocations.</summary>
@@ -133,7 +133,7 @@ namespace IngameScript
                 _echoBuffer.Append("** ").Append(_haltMessage).Append(" **\n");
             }
             _echoBuffer.Append("Goose v1 ");
-            _echoBuffer.Append(_paused ? "[PAUSED] " : "");
+            _echoBuffer.Append(_paused ? "PAUSED " : "");
             _echoBuffer.Append("step ").Append(_stepIndex).Append('.').Append(_subStep)
                 .Append(' ').Append(_stepLabel).Append('\n');
             _echoBuffer.Append("Instr: ").Append(Runtime.CurrentInstructionCount)

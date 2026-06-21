@@ -86,7 +86,7 @@ namespace IngameScript
                 {
                     string name = CategoryName(category);
                     LogWarningOnce("status:no-container:" + category,
-                        $"[Goose] {name} present but no container tagged. Tag a container [{name}].");
+                        $"{name} present but no container tagged. Tag a container with the {name} tag.");
                 }
             }
         }

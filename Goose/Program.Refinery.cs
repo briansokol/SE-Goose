@@ -292,7 +292,7 @@ namespace IngameScript
             ContainerList routes;
             if (!_containersByCategory.TryGetValue(ItemCategory.Ores, out routes) || routes.Count == 0)
             {
-                LogWarningOnce("norefore", "[Goose] No [Ores] container to return de-prioritized refinery ore.");
+                LogWarningOnce("norefore", "No container with the Ores tag to return de-prioritized refinery ore.");
                 return;
             }
             _itemBuffer.Clear();
