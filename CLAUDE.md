@@ -271,6 +271,25 @@ chore: update MDK2 to latest version
 - Use an imperative, present-tense verb ("add", "fix", "update" — not "added", "fixes").
 - Add a body when the "why" needs explanation; leave it out when the subject line is sufficient.
 
+## Versioning
+
+Goose is versioned (Crane is not yet). The single source of truth is the
+`Version X.Y.Z` line in `Goose/Instructions.readme`. It follows semantic
+versioning, and while Goose is pre-1.0 (`0.x.y`) the bump rule is:
+
+| Change to Goose | Version bump | Example |
+| --------------- | ------------ | ------- |
+| Breaking change | minor (`Y`)  | `0.30.0` -> `0.31.0` |
+| `feat`          | minor (`Y`)  | `0.30.0` -> `0.31.0` |
+| `fix` / `perf`  | patch (`Z`)  | `0.30.0` -> `0.30.1` |
+| `docs` / `chore` / `style` / `test` / `refactor` | no bump | `0.30.0` (unchanged) |
+
+**When a change affects Goose, bump the `Version` line in the same commit**
+that makes the change, according to the table above. Bump only once per
+commit even if the diff touches several files. Changes that do not affect
+Goose (Crane-only work, shared-library work that Goose does not consume,
+pure tooling) do not bump the Goose version.
+
 ## Communication
 
 - Be clear about what you're doing and why.
