@@ -72,10 +72,10 @@ namespace IngameScript
         /// <summary>Surfaces bridge-internal warnings through the standard one-shot warning channel.</summary>
         private void BridgeLogWarning(string message)
         {
-            LogWarningOnce("bridge", "[Goose] bridge: " + message);
+            LogWarningOnce("bridge", "bridge: " + message);
         }
 
-        /// <summary>Appends a peer-status line to <paramref name="sb"/> for the Echo display. Idempotent; appends nothing when the bridge is disabled or absent.</summary>
+        /// <summary>Appends a peer-status line to <paramref name="sb"/> for the Echo display. Idempotent; appends nothing when the bridge is disabled, absent, or the peer has never been seen.</summary>
         private void AppendBridgeEchoLine(StringBuilder sb)
         {
             if (_bridge == null || !_bridge.Enabled)
@@ -84,12 +84,13 @@ namespace IngameScript
             }
 
             BridgePeerStatus status = _bridge.PeerStatus;
-            sb.Append("Crane: ");
             if (status.LastSeenTick < 0)
             {
-                sb.Append("not seen");
+                return;
             }
-            else if (status.Linked)
+
+            sb.Append("Crane: ");
+            if (status.Linked)
             {
                 long ageTicks = _mainTickCount - status.LastSeenTick;
                 if (ageTicks < 0)

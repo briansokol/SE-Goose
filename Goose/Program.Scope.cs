@@ -77,7 +77,7 @@ namespace IngameScript
                 if (group == null)
                 {
                     LogWarningOnce("scope:group-missing:" + groupName,
-                        "[Goose] Block group '" + groupName + "' not found. Managing nothing until it exists. Check the blockGroup name in CustomData.");
+                        "Block group '" + groupName + "' not found. Managing nothing until it exists. Check the blockGroup name in CustomData.");
                 }
                 else
                 {

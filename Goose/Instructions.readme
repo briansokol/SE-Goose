@@ -2,11 +2,10 @@ GOOSE
 Organizes Objects & Sorts Everything
 
 Created by Duke Skyloafer
-Version 0.30.0
+Version 0.30.1
 
-Goose is a Space Engineers Programmable Block script that sorts items
-between containers, keeps stock containers topped up, and feeds reactors,
-gas generators, and weapons.
+Goose sorts items between containers, keeps stock containers topped up,
+and feeds reactors, gas generators, and weapons.
 
 Full setup and usage guide:
 https://github.com/briansokol/SE-Goose/wiki/Goose-Setup-and-Configuration

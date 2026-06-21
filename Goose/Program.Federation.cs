@@ -164,7 +164,7 @@ namespace IngameScript
         /// <summary>Surfaces beacon-internal warnings through the one-shot warning channel.</summary>
         private void FederationLogWarning(string message)
         {
-            LogWarningOnce("federation", "[Goose] federation: " + message);
+            LogWarningOnce("federation", "federation: " + message);
         }
 
         /// <summary>Returns the user-facing banner for a halt reason.</summary>

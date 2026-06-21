@@ -427,7 +427,7 @@ namespace IngameScript
             {
                 string token = malformed[i];
                 LogWarningOnce("nametag:parse:" + entry.Block.CustomName + ":" + token,
-                    "[Goose] Stock container '" + entry.Block.CustomName + "' name tag '[" + token + "]' did not parse as a quota override. Skipped.");
+                    "Stock container '" + entry.Block.CustomName + "' name tag '" + token + "' did not parse as a quota override. Skipped.");
             }
         }
 
@@ -440,7 +440,7 @@ namespace IngameScript
             MyIniParseResult res;
             if (!_ini.TryParse(block.CustomData, out res))
             {
-                LogWarning("[Goose] Stock CustomData parse failed on '" + block.CustomName + "': " + res.ToString());
+                LogWarning("Stock CustomData parse failed on '" + block.CustomName + "': " + res.ToString());
                 return;
             }
             var keys = new List<MyIniKey>();
@@ -630,7 +630,7 @@ namespace IngameScript
                 && typeId != "MyObjectBuilder_Datapad"
                 && typeId != "MyObjectBuilder_PhysicalObject")
             {
-                LogWarningOnce("unkType:" + typeId, "[Goose] Unknown TypeId '" + typeId + "' classified as Misc");
+                LogWarningOnce("unkType:" + typeId, "Unknown TypeId '" + typeId + "' classified as Misc");
             }
             return result;
         }

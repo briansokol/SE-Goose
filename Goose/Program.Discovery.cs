@@ -161,8 +161,8 @@ namespace IngameScript
                 + _cargoContainers.Count + " cargo, "
                 + _productionBlocks.Count + " prod, "
                 + _refineries.Count + " refn, "
-                + _gstatusLcds.Count + " [GStatus], "
-                + _gerrorLcds.Count + " [GError]";
+                + _gstatusLcds.Count + " GStatus, "
+                + _gerrorLcds.Count + " GError";
         }
     }
 }
