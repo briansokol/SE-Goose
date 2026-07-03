@@ -2,7 +2,7 @@ GOOSE
 Organizes Objects & Sorts Everything
 
 Created by Duke Skyloafer
-Version 0.31.0
+Version 0.32.0
 
 Goose sorts items between containers, keeps stock containers topped up,
 and feeds reactors, gas generators, and weapons.

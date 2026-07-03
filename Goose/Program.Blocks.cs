@@ -521,8 +521,8 @@ namespace IngameScript
             StringBuilder sb = _stockTemplateSB;
             sb.Length = 0;
             sb.Append("[Goose]\n");
-            sb.Append(";Stock quotas. Uncomment a line to manage an item. Format: <Type>/<Subtype>=<value>[suffix]\n");
-            sb.Append(";Suffix M=min/pull-only, L=limit/push-only, none=exact, All=uncapped pull. E.g. Ingot/Iron=500M\n");
+            sb.Append(";Stock quotas. Replace x with a number to manage an item; leave x to ignore it.\n");
+            sb.Append(";Format: <Type>/<Subtype>=<value>[suffix]. M=min/pull-only, L=limit/push-only, none=exact, All=uncapped pull. E.g. Ingot/Iron=500M\n");
             sb.Append("\n; --- Manage Items Below ---\n");
 
             _stockMergedKeys.Clear();
@@ -554,9 +554,8 @@ namespace IngameScript
                     }
                     else
                     {
-                        sb.Append("; ");
                         sb.Append(mergedKey);
-                        sb.Append("=0\n");
+                        sb.Append("=x\n");
                     }
                 }
             }
