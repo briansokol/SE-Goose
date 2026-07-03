@@ -314,6 +314,31 @@ namespace IngameScript
         /// generic uncategorized inventories.
         /// </summary>
         /// <returns>The number of units actually moved into <paramref name="dst"/>.</returns>
+        /// <summary>Decides whether a container may serve as a generic (pass-3) pull source for an
+        /// item of the given category. Stock containers are handled by the stock-excess pass, and
+        /// containers tagged for the item's own category by the category-routes pass; containers
+        /// tagged only for OTHER categories still count as generic sources, so foreign items placed
+        /// in them can be pulled to stock containers.</summary>
+        public static bool IsGenericPullSource(ContainerEntry entry, ItemCategory cat)
+        {
+            if (entry == null)
+            {
+                return true;
+            }
+            if (entry.IsStock)
+            {
+                return false;
+            }
+            for (int c = 0; c < entry.Categories.Count; c++)
+            {
+                if (entry.Categories[c] == cat)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         private long PullItemFromSources(ContainerEntry dst, MyItemType type, long need)
         {
             long remaining = need;
@@ -390,17 +415,10 @@ namespace IngameScript
                 }
 
                 ContainerEntry srcEntry;
-                if (_entryByBlock.TryGetValue(block, out srcEntry))
+                _entryByBlock.TryGetValue(block, out srcEntry);
+                if (!IsGenericPullSource(srcEntry, cat))
                 {
-                    if (srcEntry.IsStock)
-                    {
-                        continue;
-                    }
-                    // Already covered by the category-routes pass above.
-                    if (srcEntry.Categories.Count > 0)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
                 IMyInventory srcInv = GetSortableInventory(block);
                 if (srcInv == null)
