@@ -19,7 +19,7 @@ namespace IngameScript
         /// <summary>Vanilla ores in default refinery feed priority (highest first).</summary>
         internal static readonly string[] DefaultRefineryOres =
         {
-            "Stone", "Platinum", "Uranium", "Gold", "Silver",
+            "Scrap", "Stone", "Platinum", "Uranium", "Gold", "Silver",
             "Magnesium", "Cobalt", "Silicon", "Nickel", "Iron"
         };
 

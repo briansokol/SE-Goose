@@ -87,5 +87,15 @@ namespace Goose.Tests
                 result.Should().Contain("[Goose]");
             }
         }
+
+        /// <summary>Tests for the contents of the default ore priority list.</summary>
+        public class DefaultRefineryOres_Tests
+        {
+            [Fact]
+            public void Scrap_is_highest_priority_default_ore()
+            {
+                Program.DefaultRefineryOres[0].Should().Be("Scrap");
+            }
+        }
     }
 }
