@@ -449,6 +449,10 @@ namespace IngameScript
             {
                 string key = keys[i].Name;
                 string raw = _ini.Get(keys[i]).ToString();
+                if (raw.Equals("x", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 MyItemType type;
                 StockQuota quota;
                 if (TryReadStockQuota(key, raw, out type, out quota))

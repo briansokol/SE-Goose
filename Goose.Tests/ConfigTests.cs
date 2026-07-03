@@ -69,6 +69,8 @@ namespace Goose.Tests
             [InlineData("L")]
             [InlineData("100x")]
             [InlineData("1.5")]
+            [InlineData("x")]
+            [InlineData("X")]
             public void Returns_false_for_malformed_values(string raw)
             {
                 long amount;
