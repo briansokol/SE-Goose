@@ -169,6 +169,22 @@ namespace IngameScript
         private float _gridAmmoVolume;
 
         /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
+        /// <summary>Catalog version the ammo candidate list was last built from; -1 means never built.</summary>
+        private int _ammoCandidatesVersion = -1;
+
+        /// <summary>Rebuilds the ammo candidate list only when the catalog has changed since the last build.</summary>
+        /// <returns>True when the list was rebuilt, meaning cached consumer probes are now stale.</returns>
+        private bool RebuildAmmoCandidateListIfStale()
+        {
+            if (_ammoCandidatesVersion == _catalogVersion)
+            {
+                return false;
+            }
+            RebuildAmmoCandidateList();
+            _ammoCandidatesVersion = _catalogVersion;
+            return true;
+        }
+
         private void RebuildAmmoCandidateList()
         {
             _ammoCandidates.Clear();
@@ -193,7 +209,7 @@ namespace IngameScript
         /// <summary>Walks every managed block, applies the <c>[NoBalance]</c> exclusion gate, then probes acceptance of <see cref="IngotUranium"/>, <see cref="OreIce"/>, and known ammo magazines to assign a <see cref="ConsumerKind"/> to each entry. Caches accepted ammo magazines on weapon entries so the balance step does not re-probe.</summary>
         private IEnumerator<YieldReason> StepCategorizeConsumers()
         {
-            RebuildAmmoCandidateList();
+            RebuildAmmoCandidateListIfStale();
 
             int counter = 0;
             foreach (KeyValuePair<IMyTerminalBlock, ContainerEntry> kv in _entryByBlock)
