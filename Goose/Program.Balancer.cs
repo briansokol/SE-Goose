@@ -257,8 +257,12 @@ namespace IngameScript
                     {
                         ProbeConsumerKind(entry, inv);
                         // A full inventory rejects every probe item, so a None result taken from
-                        // one is not a settled classification -- re-probe once it drains.
-                        if (entry.ConsumerKind == ConsumerKind.None && inv.CurrentVolume >= inv.MaxVolume)
+                        // one is not settled -- re-probe once it drains. Cargo containers are
+                        // exempt: they are None whether full or empty, so skipping their re-arm
+                        // cannot resurrect the stale-cache bug this guard exists for.
+                        if (entry.ConsumerKind == ConsumerKind.None
+                            && !(entry.Block is IMyCargoContainer)
+                            && inv.CurrentVolume >= inv.MaxVolume)
                         {
                             entry.NeedsProbe = true;
                         }
