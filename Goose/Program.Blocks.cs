@@ -231,6 +231,12 @@ namespace IngameScript
                     entry.Inventory = block.GetInventory(0);
                     _entryByBlock[block] = entry;
                 }
+                else if (entry.Inventory == null)
+                {
+                    // A block that had no inventory when first seen (e.g. not yet built out)
+                    // can gain one later; a cleared entry must not stay inventory-less forever.
+                    entry.Inventory = block.GetInventory(0);
+                }
 
                 if (EntryNeedsRederive(entry.CachedName, name))
                 {
