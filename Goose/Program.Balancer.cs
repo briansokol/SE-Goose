@@ -210,7 +210,17 @@ namespace IngameScript
         /// <summary>Walks every managed block, applies the <c>[NoBalance]</c> exclusion gate, then probes acceptance of <see cref="IngotUranium"/>, <see cref="OreIce"/>, and known ammo magazines to assign a <see cref="ConsumerKind"/> to each entry. Caches accepted ammo magazines on weapon entries so the balance step does not re-probe.</summary>
         private IEnumerator<YieldReason> StepCategorizeConsumers()
         {
-            RebuildAmmoCandidateListIfStale();
+            // A changed candidate list invalidates every cached probe result.
+            if (RebuildAmmoCandidateListIfStale())
+            {
+                foreach (KeyValuePair<IMyTerminalBlock, ContainerEntry> kv in _entryByBlock)
+                {
+                    if (kv.Value != null)
+                    {
+                        kv.Value.NeedsProbe = true;
+                    }
+                }
+            }
 
             int counter = 0;
             foreach (KeyValuePair<IMyTerminalBlock, ContainerEntry> kv in _entryByBlock)
@@ -227,26 +237,31 @@ namespace IngameScript
                     continue;
                 }
 
-                IMyInventory inv = entry.Inventory;
-                entry.BalanceTagCount = ParseBalanceTagCount(block.CustomName);
-                if (inv == null)
+                if (entry.NeedsProbe)
                 {
-                    entry.ConsumerKind = ConsumerKind.None;
-                    entry.AcceptedAmmo = null;
-                }
-                else if (BlockNameTags.NameHasTag(block.CustomName, "[NoBalance]"))
-                {
-                    entry.ConsumerKind = ConsumerKind.None;
-                    entry.AcceptedAmmo = null;
-                }
-                else
-                {
-                    ProbeConsumerKind(entry, inv);
-                }
+                    entry.NeedsProbe = false;
 
-                if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind)))
-                {
-                    DisableUseConveyor(block);
+                    IMyInventory inv = entry.Inventory;
+                    entry.BalanceTagCount = ParseBalanceTagCount(block.CustomName);
+                    if (inv == null)
+                    {
+                        entry.ConsumerKind = ConsumerKind.None;
+                        entry.AcceptedAmmo = null;
+                    }
+                    else if (BlockNameTags.NameHasTag(block.CustomName, "[NoBalance]"))
+                    {
+                        entry.ConsumerKind = ConsumerKind.None;
+                        entry.AcceptedAmmo = null;
+                    }
+                    else
+                    {
+                        ProbeConsumerKind(entry, inv);
+                    }
+
+                    if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind)))
+                    {
+                        DisableUseConveyor(block);
+                    }
                 }
 
                 counter++;
