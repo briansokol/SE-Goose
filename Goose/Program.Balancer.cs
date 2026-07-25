@@ -185,7 +185,6 @@ namespace IngameScript
         }
 
         /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
-
         private void RebuildAmmoCandidateList()
         {
             _ammoCandidates.Clear();
