@@ -195,6 +195,8 @@ namespace IngameScript
                 yield break;
             }
             _lastSeenCustomData = Me.CustomData;
+            _entryByBlock.Clear();
+            _categorizationDirty = true;
             MyIniParseResult result;
             if (!_ini.TryParse(Me.CustomData, out result))
             {
