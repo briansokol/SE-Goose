@@ -204,10 +204,7 @@ namespace IngameScript
             return !string.Equals(cachedName, currentName, StringComparison.Ordinal);
         }
 
-        /// <summary>
-        /// Rebuilds <see cref="_containersByCategory"/>, <see cref="_stockContainers"/>, and
-        /// <see cref="_entryByBlock"/> from name tags and CustomData on every managed block.
-        /// </summary>
+        /// <summary>Caches <see cref="_entryByBlock"/> entries and only re-derives them, and rebuilds <see cref="_containersByCategory"/> and <see cref="_stockContainers"/>, when something actually changed.</summary>
         private IEnumerator<YieldReason> StepCategorizeContainers()
         {
             bool dirty = false;
@@ -218,6 +215,10 @@ namespace IngameScript
                 IMyTerminalBlock block = _allInventoryBlocks[b];
                 if (!ValidateBlock(block))
                 {
+                    if (_entryByBlock.Remove(block))
+                    {
+                        dirty = true;
+                    }
                     continue;
                 }
 
