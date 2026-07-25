@@ -168,7 +168,6 @@ namespace IngameScript
         /// <summary>Total ammo-magazine volume across <see cref="_entryByBlock"/>, accumulated during <see cref="StepScanInventories"/>. Only items whose volume-per-unit has been measured into <see cref="_balanceVolumeCache"/> contribute.</summary>
         private float _gridAmmoVolume;
 
-        /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
         /// <summary>Catalog version the ammo candidate list was last built from; -1 means never built.</summary>
         private int _ammoCandidatesVersion = -1;
 
@@ -184,6 +183,8 @@ namespace IngameScript
             _ammoCandidatesVersion = _catalogVersion;
             return true;
         }
+
+        /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
 
         private void RebuildAmmoCandidateList()
         {
