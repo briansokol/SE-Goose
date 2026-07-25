@@ -59,10 +59,31 @@ namespace IngameScript
         /// <summary>Hash of the last federation decision (halt reason + approved grids); a change triggers a scope rescan even without physical scope drift.</summary>
         private ulong _federationDecisionHash;
 
+        /// <summary>True once the federation edge buffers have been populated at least once.</summary>
+        private bool _fedEdgesEnumerated;
+
         /// <summary>True while the script is standing down (duplicate or deferral); inventory steps and the bridge are suspended.</summary>
         private bool ManagementSuspended
         {
             get { return _haltReason != HaltReason.None; }
+        }
+
+        /// <summary>
+        /// Decides whether this tick must re-enumerate live grid edges. Enumeration costs two full
+        /// grid sweeps, and the result is only consumed at announce time and when scope is rebuilt,
+        /// so between heartbeats the cached edge buffers are reused.
+        /// </summary>
+        /// <param name="tick">Current main tick counter.</param>
+        /// <param name="heartbeatTicks">Announce cadence; values &lt;= 0 mean enumerate every tick.</param>
+        /// <param name="rescanRequested">True when a scope rebuild is already pending.</param>
+        /// <param name="everEnumerated">False until the buffers have been populated at least once.</param>
+        public static bool ShouldEnumerateFederationEdges(long tick, int heartbeatTicks, bool rescanRequested, bool everEnumerated)
+        {
+            if (!everEnumerated || rescanRequested || heartbeatTicks <= 0)
+            {
+                return true;
+            }
+            return tick % heartbeatTicks == 0;
         }
 
         /// <summary>Drives the presence beacon and multi-Goose arbitration. Runs every tick (even while halted) so duplicate/standby states recover once peers leave. Sets <see cref="_haltReason"/> and <see cref="_approvedFederateGrids"/>.</summary>
@@ -85,9 +106,13 @@ namespace IngameScript
                 return;
             }
 
-            ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _fedMechRaw, _fedConnRaw, _fedMechBuf, _fedConnBuf);
-            ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _fedMechBuf, (LongSet)null, _constructGrids);
-            _constructSignature = ScopeBuilder.ComputeConstructSignature(_constructGrids);
+            if (ShouldEnumerateFederationEdges(tick, _config.FederationHeartbeatTicks, _rescanRequested, _fedEdgesEnumerated))
+            {
+                ScopeEdgeEnumerator.EnumerateLiveEdges(GridTerminalSystem, _fedMechRaw, _fedConnRaw, _fedMechBuf, _fedConnBuf);
+                ScopeBuilder.BuildScope(Me.CubeGrid.EntityId, _fedMechBuf, (LongSet)null, _constructGrids);
+                _constructSignature = ScopeBuilder.ComputeConstructSignature(_constructGrids);
+                _fedEdgesEnumerated = true;
+            }
 
             if (_beacon == null)
             {

@@ -64,5 +64,39 @@ namespace Goose.Tests
                     .Should().BeApproximately(0.8f, 0.0001f);
             }
         }
+
+
+        public class ShouldEnumerateFederationEdges_Tests
+        {
+            [Fact]
+            public void Always_enumerates_on_the_first_call()
+            {
+                Program.ShouldEnumerateFederationEdges(3, 6, false, false).Should().BeTrue();
+            }
+
+            [Fact]
+            public void Enumerates_on_the_heartbeat_boundary()
+            {
+                Program.ShouldEnumerateFederationEdges(12, 6, false, true).Should().BeTrue();
+            }
+
+            [Fact]
+            public void Skips_between_heartbeats()
+            {
+                Program.ShouldEnumerateFederationEdges(13, 6, false, true).Should().BeFalse();
+            }
+
+            [Fact]
+            public void Enumerates_when_a_rescan_is_pending()
+            {
+                Program.ShouldEnumerateFederationEdges(13, 6, true, true).Should().BeTrue();
+            }
+
+            [Fact]
+            public void Treats_a_nonpositive_heartbeat_as_every_tick()
+            {
+                Program.ShouldEnumerateFederationEdges(13, 0, false, true).Should().BeTrue();
+            }
+        }
     }
 }
