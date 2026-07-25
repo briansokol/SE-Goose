@@ -115,19 +115,10 @@ namespace IngameScript
         }
 
         /// <summary>Returns the total quantity of <paramref name="type"/> currently held in <paramref name="inv"/>.</summary>
+        /// <summary>Total amount of <paramref name="type"/> currently held in <paramref name="inv"/>.</summary>
         private long GetCurrentAmount(IMyInventory inv, MyItemType type)
         {
-            _itemBuffer.Clear();
-            inv.GetItems(_itemBuffer);
-            long total = 0;
-            for (int i = 0; i < _itemBuffer.Count; i++)
-            {
-                if (_itemBuffer[i].Type == type)
-                {
-                    total += (long)_itemBuffer[i].Amount;
-                }
-            }
-            return total;
+            return (long)inv.GetItemAmount(type);
         }
 
         /// <summary>Fills <see cref="_quotaSnapshot"/> with the per-type quantity totals of <paramref name="inv"/> in a single pass, so quota fulfillment can read current amounts without re-scanning the inventory for every quota.</summary>
