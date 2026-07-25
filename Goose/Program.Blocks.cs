@@ -70,6 +70,15 @@ namespace IngameScript
 
             /// <summary>Per-block unit-count override parsed from the <c>[Balance=N]</c> name tag; <c>-1</c> means "no tag, use the class percent target." Only meaningful when <see cref="ConsumerKind"/> is non-None.</summary>
             public long BalanceTagCount = -1;
+
+            /// <summary>CustomName captured when the name-derived fields were last recomputed.</summary>
+            public string CachedName;
+
+            /// <summary>CustomData captured when <see cref="Quotas"/> was last parsed; only used when <see cref="IsStock"/>.</summary>
+            public string CachedCustomData;
+
+            /// <summary>True when the balancer must re-probe this block's consumer class.</summary>
+            public bool NeedsProbe = true;
         }
 
         /// <summary>List of container entries (named: shorter post-minification).</summary>
@@ -85,6 +94,9 @@ namespace IngameScript
         /// <summary>Reverse lookup from a block to its cached <see cref="ContainerEntry"/>.</summary>
         private readonly Dictionary<IMyTerminalBlock, ContainerEntry> _entryByBlock =
             new Dictionary<IMyTerminalBlock, ContainerEntry>();
+
+        /// <summary>Forces the next categorize pass to rebuild the category buckets and stock list.</summary>
+        private bool _categorizationDirty = true;
 
         /// <summary>Manual classification overrides keyed by <c>TypeId/SubtypeId</c>.</summary>
         private readonly Dictionary<string, ItemCategory> _categoryOverrides = new Dictionary<string, ItemCategory>();
@@ -184,58 +196,78 @@ namespace IngameScript
             return v;
         }
 
-        /// <summary>
-        /// Rebuilds <see cref="_containersByCategory"/>, <see cref="_stockContainers"/>, and
-        /// <see cref="_entryByBlock"/> from name tags and CustomData on every managed block.
-        /// </summary>
+        /// <summary>True when a container entry must have its name-derived fields recomputed.</summary>
+        /// <param name="cachedName">CustomName captured on the last derivation, or null for a new entry.</param>
+        /// <param name="currentName">The block's current CustomName.</param>
+        public static bool EntryNeedsRederive(string cachedName, string currentName)
+        {
+            return !string.Equals(cachedName, currentName, StringComparison.Ordinal);
+        }
+
+        /// <summary>Caches <see cref="_entryByBlock"/> entries and only re-derives them, and rebuilds <see cref="_containersByCategory"/> and <see cref="_stockContainers"/>, when something actually changed.</summary>
         private IEnumerator<YieldReason> StepCategorizeContainers()
         {
-            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
-            {
-                kv.Value.Clear();
-            }
-
-            _stockContainers.Clear();
-            _entryByBlock.Clear();
-
+            bool dirty = false;
             int counter = 0;
+
             for (int b = 0; b < _allInventoryBlocks.Count; b++)
             {
                 IMyTerminalBlock block = _allInventoryBlocks[b];
                 if (!ValidateBlock(block))
                 {
+                    if (_entryByBlock.Remove(block))
+                    {
+                        dirty = true;
+                    }
                     continue;
                 }
 
-                // The group (when configured) limits valid managed destinations only. Out-of-group
-                // blocks get a plain entry (no categories, not stock) so they remain grid-wide sources
-                // that are drained into in-group targets, but are never written into.
-                bool isTarget = IsInGroup(block);
-
-                var entry = new ContainerEntry
+                string name = block.CustomName;
+                ContainerEntry entry;
+                if (!_entryByBlock.TryGetValue(block, out entry))
                 {
-                    Block = block,
-                    Inventory = block.GetInventory(0),
-                    Priority = ParsePriorityFromName(block.CustomName),
-                    IsStock = isTarget && BlockNameTags.NameHasTag(block.CustomName, "[Stock]")
-                };
-
-                if (isTarget)
+                    entry = new ContainerEntry();
+                    entry.Block = block;
+                    entry.Inventory = block.GetInventory(0);
+                    _entryByBlock[block] = entry;
+                }
+                else if (entry.Inventory == null)
                 {
-                    for (int c = 0; c < CategoryTags.Length; c++)
+                    // A block that had no inventory when first seen (e.g. not yet built out)
+                    // can gain one later; a cleared entry must not stay inventory-less forever.
+                    entry.Inventory = block.GetInventory(0);
+                }
+
+                if (EntryNeedsRederive(entry.CachedName, name))
+                {
+                    dirty = true;
+                    entry.CachedName = name;
+                    entry.NeedsProbe = true;
+
+                    // The group (when configured) limits valid managed destinations only. Out-of-group
+                    // blocks get a plain entry (no categories, not stock) so they remain grid-wide sources
+                    // that are drained into in-group targets, but are never written into.
+                    bool isTarget = IsInGroup(block);
+
+                    entry.Priority = ParsePriorityFromName(name);
+                    entry.IsStock = isTarget && BlockNameTags.NameHasTag(name, "[Stock]");
+                    entry.Categories.Clear();
+                    if (isTarget)
                     {
-                        if (BlockNameTags.NameHasTag(block.CustomName, CategoryTags[c]))
+                        for (int c = 0; c < CategoryTags.Length; c++)
                         {
-                            var cat = (ItemCategory)c;
-                            entry.Categories.Add(cat);
-                            ContainerList bucket;
-                            if (!_containersByCategory.TryGetValue(cat, out bucket))
+                            if (BlockNameTags.NameHasTag(name, CategoryTags[c]))
                             {
-                                bucket = new ContainerList();
-                                _containersByCategory[cat] = bucket;
+                                entry.Categories.Add((ItemCategory)c);
                             }
-                            bucket.Add(entry);
                         }
+                    }
+
+                    if (!entry.IsStock)
+                    {
+                        entry.Quotas = null;
+                        entry.CachedCustomData = null;
+                        _stockTemplateVersion.Remove(block);
                     }
                 }
 
@@ -246,18 +278,19 @@ namespace IngameScript
                     {
                         SyncStockTemplate(block);
                         _stockTemplateVersion[block] = _catalogVersion;
+                        entry.CachedCustomData = null;
                     }
-                    entry.Quotas = new Dictionary<MyItemType, StockQuota>();
-                    ParseStockQuotas(block, entry);
-                    ParseNameTagQuotas(entry);
-                    _stockContainers.Add(entry);
-                }
-                else
-                {
-                    _stockTemplateVersion.Remove(block);
-                }
 
-                _entryByBlock[block] = entry;
+                    string customData = block.CustomData;
+                    if (entry.Quotas == null || !string.Equals(entry.CachedCustomData, customData, StringComparison.Ordinal))
+                    {
+                        dirty = true;
+                        entry.CachedCustomData = customData;
+                        entry.Quotas = new Dictionary<MyItemType, StockQuota>();
+                        ParseStockQuotas(block, entry);
+                        ParseNameTagQuotas(entry);
+                    }
+                }
 
                 counter++;
                 if (counter % 25 == 0)
@@ -268,6 +301,44 @@ namespace IngameScript
                 if (BudgetExceeded())
                 {
                     yield return YieldReason.BudgetHit;
+                }
+            }
+
+            if (!dirty && !_categorizationDirty)
+            {
+                yield break;
+            }
+            _categorizationDirty = false;
+
+            foreach (KeyValuePair<ItemCategory, ContainerList> kv in _containersByCategory)
+            {
+                kv.Value.Clear();
+            }
+            _stockContainers.Clear();
+
+            for (int b = 0; b < _allInventoryBlocks.Count; b++)
+            {
+                ContainerEntry entry;
+                if (!_entryByBlock.TryGetValue(_allInventoryBlocks[b], out entry))
+                {
+                    continue;
+                }
+
+                for (int c = 0; c < entry.Categories.Count; c++)
+                {
+                    ItemCategory cat = entry.Categories[c];
+                    ContainerList bucket;
+                    if (!_containersByCategory.TryGetValue(cat, out bucket))
+                    {
+                        bucket = new ContainerList();
+                        _containersByCategory[cat] = bucket;
+                    }
+                    bucket.Add(entry);
+                }
+
+                if (entry.IsStock)
+                {
+                    _stockContainers.Add(entry);
                 }
             }
 

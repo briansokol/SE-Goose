@@ -108,6 +108,8 @@ namespace IngameScript
             _rescanRequested = false;
             _ticksSinceRescan = 0;
             _configDirty = true;
+            _entryByBlock.Clear();
+            _categorizationDirty = true;
 
             _allInventoryBlocks.Clear();
             GridTerminalSystem.GetBlocksOfType(_allInventoryBlocks, IsManaged);

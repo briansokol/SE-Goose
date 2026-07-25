@@ -168,6 +168,22 @@ namespace IngameScript
         /// <summary>Total ammo-magazine volume across <see cref="_entryByBlock"/>, accumulated during <see cref="StepScanInventories"/>. Only items whose volume-per-unit has been measured into <see cref="_balanceVolumeCache"/> contribute.</summary>
         private float _gridAmmoVolume;
 
+        /// <summary>Catalog version the ammo candidate list was last built from; -1 means never built.</summary>
+        private int _ammoCandidatesVersion = -1;
+
+        /// <summary>Rebuilds the ammo candidate list only when the catalog has changed since the last build.</summary>
+        /// <returns>True when the list was rebuilt, meaning cached consumer probes are now stale.</returns>
+        private bool RebuildAmmoCandidateListIfStale()
+        {
+            if (_ammoCandidatesVersion == _catalogVersion)
+            {
+                return false;
+            }
+            RebuildAmmoCandidateList();
+            _ammoCandidatesVersion = _catalogVersion;
+            return true;
+        }
+
         /// <summary>Refreshes <see cref="_ammoCandidates"/> with the vanilla seed list plus every <c>AmmoMagazine/*</c> entry currently in the catalog.</summary>
         private void RebuildAmmoCandidateList()
         {
@@ -193,7 +209,17 @@ namespace IngameScript
         /// <summary>Walks every managed block, applies the <c>[NoBalance]</c> exclusion gate, then probes acceptance of <see cref="IngotUranium"/>, <see cref="OreIce"/>, and known ammo magazines to assign a <see cref="ConsumerKind"/> to each entry. Caches accepted ammo magazines on weapon entries so the balance step does not re-probe.</summary>
         private IEnumerator<YieldReason> StepCategorizeConsumers()
         {
-            RebuildAmmoCandidateList();
+            // A changed candidate list invalidates every cached probe result.
+            if (RebuildAmmoCandidateListIfStale())
+            {
+                foreach (KeyValuePair<IMyTerminalBlock, ContainerEntry> kv in _entryByBlock)
+                {
+                    if (kv.Value != null)
+                    {
+                        kv.Value.NeedsProbe = true;
+                    }
+                }
+            }
 
             int counter = 0;
             foreach (KeyValuePair<IMyTerminalBlock, ContainerEntry> kv in _entryByBlock)
@@ -210,26 +236,41 @@ namespace IngameScript
                     continue;
                 }
 
-                IMyInventory inv = entry.Inventory;
-                entry.BalanceTagCount = ParseBalanceTagCount(block.CustomName);
-                if (inv == null)
+                if (entry.NeedsProbe)
                 {
-                    entry.ConsumerKind = ConsumerKind.None;
-                    entry.AcceptedAmmo = null;
-                }
-                else if (BlockNameTags.NameHasTag(block.CustomName, "[NoBalance]"))
-                {
-                    entry.ConsumerKind = ConsumerKind.None;
-                    entry.AcceptedAmmo = null;
-                }
-                else
-                {
-                    ProbeConsumerKind(entry, inv);
-                }
+                    entry.NeedsProbe = false;
 
-                if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind)))
-                {
-                    DisableUseConveyor(block);
+                    IMyInventory inv = entry.Inventory;
+                    entry.BalanceTagCount = ParseBalanceTagCount(block.CustomName);
+                    if (inv == null)
+                    {
+                        entry.ConsumerKind = ConsumerKind.None;
+                        entry.AcceptedAmmo = null;
+                    }
+                    else if (BlockNameTags.NameHasTag(block.CustomName, "[NoBalance]"))
+                    {
+                        entry.ConsumerKind = ConsumerKind.None;
+                        entry.AcceptedAmmo = null;
+                    }
+                    else
+                    {
+                        ProbeConsumerKind(entry, inv);
+                        // A full inventory rejects every probe item, so a None result taken from
+                        // one is not settled -- re-probe once it drains. Cargo containers are
+                        // exempt: they are None whether full or empty, so skipping their re-arm
+                        // cannot resurrect the stale-cache bug this guard exists for.
+                        if (entry.ConsumerKind == ConsumerKind.None
+                            && !(entry.Block is IMyCargoContainer)
+                            && inv.CurrentVolume >= inv.MaxVolume)
+                        {
+                            entry.NeedsProbe = true;
+                        }
+                    }
+
+                    if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind)))
+                    {
+                        DisableUseConveyor(block);
+                    }
                 }
 
                 counter++;

@@ -42,11 +42,54 @@ namespace IngameScript
         /// <summary>The active root iterator that <see cref="RunOneTick"/> pumps.</summary>
         private IEnumerator<YieldReason> _workIterator;
 
-        /// <summary>Returns true when consumed instructions exceed the configured per-tick budget.</summary>
+        /// <summary>Lowest effective budget fraction the adaptive controller may select.</summary>
+        private const float MinBudgetFraction = 0.1f;
+
+        /// <summary>Budget fraction actually in force, adapted each tick from the previous run's duration.</summary>
+        private float _effectiveBudgetFraction = 0.8f;
+
+        /// <summary>
+        /// Picks the next budget fraction from the previous run's wall-clock duration. Instruction
+        /// count is a poor proxy for run time because the costly grid API calls barely advance it,
+        /// so the fraction is trimmed whenever a run overruns and recovered once runs are cheap again.
+        /// </summary>
+        /// <param name="lastRunTimeMs">Duration of the previous run, in milliseconds.</param>
+        /// <param name="targetRunTimeMs">Desired ceiling; values &lt;= 0 disable adaptation.</param>
+        /// <param name="current">Fraction currently in force.</param>
+        /// <param name="ceiling">Upper bound, taken from the configured budget fraction.</param>
+        public static float AdjustBudgetFraction(double lastRunTimeMs, double targetRunTimeMs, float current, float ceiling)
+        {
+            if (targetRunTimeMs <= 0.0)
+            {
+                return ceiling;
+            }
+
+            float next = current;
+            if (lastRunTimeMs > targetRunTimeMs)
+            {
+                next = current * 0.75f;
+            }
+            else if (lastRunTimeMs < targetRunTimeMs * 0.5)
+            {
+                next = current * 1.1f;
+            }
+
+            if (next > ceiling)
+            {
+                next = ceiling;
+            }
+            if (next < MinBudgetFraction)
+            {
+                next = MinBudgetFraction;
+            }
+            return next;
+        }
+
+        /// <summary>Returns true when consumed instructions exceed the adapted per-tick budget.</summary>
         private bool BudgetExceeded()
         {
             return Runtime.CurrentInstructionCount >
-                   Runtime.MaxInstructionCount * _config.BudgetFraction;
+                   Runtime.MaxInstructionCount * _effectiveBudgetFraction;
         }
 
         /// <summary>Top-level work loop iterating over each pipeline step indefinitely.</summary>

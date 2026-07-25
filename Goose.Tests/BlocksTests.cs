@@ -449,6 +449,40 @@ namespace Goose.Tests
         }
 
 
+        public class EntryNeedsRederive_Tests
+        {
+            [Fact]
+            public void True_when_no_entry_was_cached_yet()
+            {
+                Program.EntryNeedsRederive(null, "Cargo [Ore]").Should().BeTrue();
+            }
+
+            [Fact]
+            public void False_when_the_name_is_unchanged()
+            {
+                Program.EntryNeedsRederive("Cargo [Ore]", "Cargo [Ore]").Should().BeFalse();
+            }
+
+            [Fact]
+            public void True_when_the_name_changed()
+            {
+                Program.EntryNeedsRederive("Cargo [Ore]", "Cargo [Ingot]").Should().BeTrue();
+            }
+
+            [Fact]
+            public void Comparison_is_case_sensitive_because_tags_are()
+            {
+                Program.EntryNeedsRederive("Cargo [Ore]", "Cargo [ore]").Should().BeTrue();
+            }
+
+            [Fact]
+            public void True_when_the_block_name_became_null()
+            {
+                Program.EntryNeedsRederive("Cargo [Ore]", null).Should().BeTrue();
+            }
+        }
+
+
 
     }
 }

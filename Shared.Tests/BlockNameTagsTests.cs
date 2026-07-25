@@ -35,22 +35,6 @@ namespace Shared.Tests
             }
         }
 
-        public class HasFederateTag_Tests
-        {
-            [Theory]
-            [InlineData("Connector [Federate]", true)]
-            [InlineData("Connector [Federate P:0]", true)]
-            [InlineData("Connector [Federate P:3]", true)]
-            [InlineData("Connector", false)]
-            [InlineData("Connector [Federated]", false)]
-            [InlineData("", false)]
-            [InlineData(null, false)]
-            public void Detects_federate_with_or_without_priority(string name, bool expected)
-            {
-                BlockNameTags.HasFederateTag(name).Should().Be(expected);
-            }
-        }
-
         public class ParseFederatePriority_Tests
         {
             [Theory]

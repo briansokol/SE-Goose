@@ -47,10 +47,12 @@ namespace IngameScript
                 edge.OtherGridId = (other != null && other.CubeGrid != null) ? other.CubeGrid.EntityId : 0;
                 string otherName = other != null ? other.CustomName : null;
                 edge.Connected = c.Status == MyShipConnectorStatus.Connected;
-                edge.FederateTag = BlockNameTags.HasFederateTag(c.CustomName);
-                edge.OtherFederateTag = BlockNameTags.HasFederateTag(otherName);
-                edge.LocalPriority = BlockNameTags.ParseFederatePriority(c.CustomName);
-                edge.OtherPriority = BlockNameTags.ParseFederatePriority(otherName);
+                int localPriority = BlockNameTags.ParseFederatePriority(c.CustomName);
+                int otherPriority = BlockNameTags.ParseFederatePriority(otherName);
+                edge.FederateTag = localPriority >= 0;
+                edge.OtherFederateTag = otherPriority >= 0;
+                edge.LocalPriority = localPriority;
+                edge.OtherPriority = otherPriority;
                 connOut.Add(edge);
             }
         }

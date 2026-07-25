@@ -42,12 +42,6 @@ namespace IngameScript
                 || name.IndexOf(LockedTag, StringComparison.Ordinal) >= 0;
         }
 
-        /// <summary>Returns true when <paramref name="name"/> carries a federate tag in either the bare <c>[Federate]</c> or prioritized <c>[Federate P:n]</c> form.</summary>
-        public static bool HasFederateTag(string name)
-        {
-            return ParseFederatePriority(name) >= 0;
-        }
-
         /// <summary>Parses the federation priority from a connector name. Lower numbers win; a bare <c>[Federate]</c> means the highest priority (<c>0</c>).</summary>
         /// <param name="name">Connector CustomName to inspect.</param>
         /// <returns>The parsed priority, <c>0</c> for a bare <c>[Federate]</c>, or <c>-1</c> when no federate tag is present.</returns>

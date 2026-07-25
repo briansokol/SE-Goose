@@ -238,10 +238,12 @@ namespace IngameScript
                     h ^= (ulong)ownerId;
                     h ^= ((ulong)otherId) << 1;
                     h ^= c.Status == MyShipConnectorStatus.Connected ? 0x4UL : 0x0UL;
-                    h ^= BlockNameTags.HasFederateTag(c.CustomName) ? 0x8UL : 0x0UL;
-                    h ^= BlockNameTags.HasFederateTag(otherName) ? 0x10UL : 0x0UL;
-                    h ^= ((ulong)(uint)BlockNameTags.ParseFederatePriority(c.CustomName)) << 16;
-                    h ^= ((ulong)(uint)BlockNameTags.ParseFederatePriority(otherName)) << 24;
+                    int localPriority = BlockNameTags.ParseFederatePriority(c.CustomName);
+                    int otherPriority = BlockNameTags.ParseFederatePriority(otherName);
+                    h ^= localPriority >= 0 ? 0x8UL : 0x0UL;
+                    h ^= otherPriority >= 0 ? 0x10UL : 0x0UL;
+                    h ^= ((ulong)(uint)localPriority) << 16;
+                    h ^= ((ulong)(uint)otherPriority) << 24;
                     h *= 1099511628211UL;
                 }
             }
