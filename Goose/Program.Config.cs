@@ -54,6 +54,9 @@ namespace IngameScript
             /// <summary>Fraction of the per-tick instruction budget the script may consume before yielding.</summary>
             public float BudgetFraction = 0.8f;
 
+            /// <summary>Target wall-clock run time in milliseconds; the budget fraction adapts to hold this. 0 disables adaptation.</summary>
+            public double TargetRunTimeMs = 0.5;
+
             /// <summary>When true, every transfer is added to the action log.</summary>
             public bool DebugLogging = false;
 
@@ -201,6 +204,7 @@ namespace IngameScript
             }
             _config.RescanIntervalTicks = _ini.Get(IniSection, "rescanIntervalTicks").ToInt32(60);
             _config.BudgetFraction = (float)_ini.Get(IniSection, "budgetFraction").ToDouble(0.8);
+            _config.TargetRunTimeMs = _ini.Get(IniSection, "targetRunTimeMs").ToDouble(0.5);
             _config.DebugLogging = _ini.Get(IniSection, "debugLogging").ToBoolean(false);
             _config.MaxActionLogEntries = _ini.Get(IniSection, "maxActionLogEntries").ToInt32(48);
             _config.MaxWarningEntries = _ini.Get(IniSection, "maxWarningEntries").ToInt32(32);

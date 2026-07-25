@@ -64,6 +64,8 @@ namespace IngameScript
                     DispatchCommand(argument);
                 }
                 _mainTickCount++;
+                _effectiveBudgetFraction = AdjustBudgetFraction(
+                    Runtime.LastRunTimeMs, _config.TargetRunTimeMs, _effectiveBudgetFraction, _config.BudgetFraction);
                 FederationTick(_mainTickCount);
                 if (_bridge != null && !ManagementSuspended)
                 {
