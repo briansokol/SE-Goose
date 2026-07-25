@@ -114,7 +114,6 @@ namespace IngameScript
             return moved > 0;
         }
 
-        /// <summary>Returns the total quantity of <paramref name="type"/> currently held in <paramref name="inv"/>.</summary>
         /// <summary>Total amount of <paramref name="type"/> currently held in <paramref name="inv"/>.</summary>
         private long GetCurrentAmount(IMyInventory inv, MyItemType type)
         {
