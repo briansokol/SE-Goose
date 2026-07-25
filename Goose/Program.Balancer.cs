@@ -256,6 +256,12 @@ namespace IngameScript
                     else
                     {
                         ProbeConsumerKind(entry, inv);
+                        // A full inventory rejects every probe item, so a None result taken from
+                        // one is not a settled classification -- re-probe once it drains.
+                        if (entry.ConsumerKind == ConsumerKind.None && inv.CurrentVolume >= inv.MaxVolume)
+                        {
+                            entry.NeedsProbe = true;
+                        }
                     }
 
                     if (WillBlockBeBalanced(entry.ConsumerKind, entry.BalanceTagCount, ClassActivatorFor(entry.ConsumerKind)))
