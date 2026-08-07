@@ -25,14 +25,14 @@ namespace IngameScript
         /// <summary>High-level item buckets used to route inventory between containers.</summary>
         public enum ItemCategory
         {
-            Ingots, Ores, Components, Prototech, Tools, Weapons,
-            Ammo, Consumables, Ingredients, Meals, Seeds, Misc
+            Ingots, Ores, Components, Prototech, Tools,
+            Bottles, Weapons, Ammo, Consumables, Seeds, Misc
         }
 
         /// <summary>Bare tag tokens (no brackets) recognized in container names; index aligns with <see cref="ItemCategory"/>.</summary>
         private static readonly string[] CategoryTags = {
-            "Ingots", "Ores", "Components", "Prototech", "Tools", "Weapons",
-            "Ammo", "Consumables", "Ingredients", "Meals", "Seeds", "Misc"
+            "Ingots", "Ores", "Components", "Prototech", "Tools",
+            "Bottles", "Weapons", "Ammo", "Consumables", "Seeds", "Misc"
         };
 
         /// <summary>Returns the literal tag token for a category; safe under full minification, unlike <c>ToString()</c>.</summary>
@@ -770,23 +770,18 @@ namespace IngameScript
             if (typeId == "MyObjectBuilder_OxygenContainerObject"
                 || typeId == "MyObjectBuilder_GasContainerObject")
             {
-                return ItemCategory.Tools;
+                return ItemCategory.Bottles;
             }
 
             if (typeId == "MyObjectBuilder_ConsumableItem")
             {
-                if (subId.StartsWith("Ingredient_", StringComparison.OrdinalIgnoreCase)
-                    || subId.EndsWith("Ingredient", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ItemCategory.Ingredients;
-                }
+                return ItemCategory.Consumables;
+            }
 
-                if (subId.StartsWith("Meal_", StringComparison.OrdinalIgnoreCase)
-                    || subId.EndsWith("Meal", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ItemCategory.Meals;
-                }
-
+            // Algae and Grain are food ingredients but aren't edible on their own, so the
+            // game types them as plain physical objects rather than consumable items.
+            if (typeId == "MyObjectBuilder_PhysicalObject" && (subId == "Algae" || subId == "Grain"))
+            {
                 return ItemCategory.Consumables;
             }
 
