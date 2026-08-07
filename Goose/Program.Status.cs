@@ -288,16 +288,14 @@ namespace IngameScript
                     return "Proto";
                 case ItemCategory.Tools:
                     return "Tools";
+                case ItemCategory.Bottles:
+                    return "Bottles";
                 case ItemCategory.Weapons:
                     return "Weapons";
                 case ItemCategory.Ammo:
                     return "Ammo";
                 case ItemCategory.Consumables:
                     return "Consum";
-                case ItemCategory.Ingredients:
-                    return "Ingred";
-                case ItemCategory.Meals:
-                    return "Meals";
                 case ItemCategory.Seeds:
                     return "Seeds";
                 default:

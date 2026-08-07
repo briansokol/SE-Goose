@@ -159,23 +159,37 @@ namespace Goose.Tests
             }
 
             [Theory]
-            [InlineData("MyObjectBuilder_OxygenContainerObject", "OxygenBottle", Program.ItemCategory.Tools)]
-            [InlineData("MyObjectBuilder_GasContainerObject", "HydrogenBottle", Program.ItemCategory.Tools)]
+            [InlineData("MyObjectBuilder_OxygenContainerObject", "OxygenBottle", Program.ItemCategory.Bottles)]
+            [InlineData("MyObjectBuilder_GasContainerObject", "HydrogenBottle", Program.ItemCategory.Bottles)]
             public void Classifies_gas_and_oxygen_containers(string typeId, string subId, Program.ItemCategory expected)
             {
                 Program.ClassifyByTypeId(typeId, subId).Should().Be(expected);
             }
 
             [Theory]
-            [InlineData("Ingredient_Wheat", Program.ItemCategory.Ingredients)]
-            [InlineData("WheatIngredient", Program.ItemCategory.Ingredients)]
-            [InlineData("Meal_Stew", Program.ItemCategory.Meals)]
-            [InlineData("BeefMeal", Program.ItemCategory.Meals)]
-            [InlineData("MedicalDose", Program.ItemCategory.Consumables)]
-            [InlineData("RandomConsumable", Program.ItemCategory.Consumables)]
-            public void Classifies_consumable_items(string subId, Program.ItemCategory expected)
+            [InlineData("MealPack_Lasagna")]
+            [InlineData("MealPack_FrontierStew")]
+            [InlineData("Fruit")]
+            [InlineData("Vegetables")]
+            [InlineData("Mushrooms")]
+            [InlineData("MammalMeatCooked")]
+            [InlineData("InsectMeatRaw")]
+            [InlineData("ClangCola")]
+            [InlineData("Medkit")]
+            public void Classifies_consumable_items(string subId)
             {
-                Program.ClassifyByTypeId("MyObjectBuilder_ConsumableItem", subId).Should().Be(expected);
+                Program.ClassifyByTypeId("MyObjectBuilder_ConsumableItem", subId)
+                    .Should().Be(Program.ItemCategory.Consumables);
+            }
+
+            [Theory]
+            [InlineData("Algae", Program.ItemCategory.Consumables)]
+            [InlineData("Grain", Program.ItemCategory.Consumables)]
+            [InlineData("SpaceCredit", Program.ItemCategory.Misc)]
+            [InlineData("ScrapPart", Program.ItemCategory.Misc)]
+            public void Classifies_physical_objects(string subId, Program.ItemCategory expected)
+            {
+                Program.ClassifyByTypeId("MyObjectBuilder_PhysicalObject", subId).Should().Be(expected);
             }
 
             [Theory]
@@ -188,7 +202,6 @@ namespace Goose.Tests
             }
 
             [Theory]
-            [InlineData("MyObjectBuilder_PhysicalObject", "ScrapPart")]
             [InlineData("MyObjectBuilder_TotallyMadeUp", "Whatever")]
             [InlineData("", "")]
             public void Falls_back_to_misc_for_unknown_types(string typeId, string subId)

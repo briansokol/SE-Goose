@@ -48,7 +48,7 @@ namespace Goose.Tests
             [Fact]
             public void Null_entry_is_eligible()
             {
-                Program.IsGenericPullSource(null, Program.ItemCategory.Meals).Should().BeTrue();
+                Program.IsGenericPullSource(null, Program.ItemCategory.Consumables).Should().BeTrue();
             }
 
             /// <summary>Stock containers are excluded; pass 1 (stock-to-stock excess) owns them.</summary>
@@ -57,7 +57,7 @@ namespace Goose.Tests
             {
                 var entry = new Program.ContainerEntry { IsStock = true };
 
-                Program.IsGenericPullSource(entry, Program.ItemCategory.Meals).Should().BeFalse();
+                Program.IsGenericPullSource(entry, Program.ItemCategory.Consumables).Should().BeFalse();
             }
 
             /// <summary>Containers tagged for the item's own category are excluded; pass 2 (category routes) owns them.</summary>
@@ -78,7 +78,7 @@ namespace Goose.Tests
                 var entry = new Program.ContainerEntry();
                 entry.Categories.Add(Program.ItemCategory.Ammo);
 
-                Program.IsGenericPullSource(entry, Program.ItemCategory.Meals).Should().BeTrue();
+                Program.IsGenericPullSource(entry, Program.ItemCategory.Consumables).Should().BeTrue();
             }
 
             /// <summary>Untagged, non-stock entries are valid pull sources.</summary>
@@ -87,7 +87,7 @@ namespace Goose.Tests
             {
                 var entry = new Program.ContainerEntry();
 
-                Program.IsGenericPullSource(entry, Program.ItemCategory.Meals).Should().BeTrue();
+                Program.IsGenericPullSource(entry, Program.ItemCategory.Consumables).Should().BeTrue();
             }
         }
     }
